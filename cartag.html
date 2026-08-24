@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ntagz — Private Vehicle Contact Tag</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0e17;
+    --surface:#111826;
+    --surface-2:#161f2e;
+    --line:#25334a;
+    --line-soft:#1a2436;
+    --orange:#ff6a1f;
+    --orange-dim:#c2500f;
+    --text:#e9edf3;
+    --text-dim:#8b96a8;
+    --text-faint:#5b6577;
+    --privacy:#4fd1c5;
+    --privacy-dim:#2f8f86;
+    --danger:#ff5a5a;
+    --radius:2px;
+    --disp:'Space Grotesk', sans-serif;
+    --body:'IBM Plex Sans', sans-serif;
+    --mono:'IBM Plex Mono', monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html{scroll-behavior:smooth;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--body);
+    line-height:1.5;
+    overflow-x:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:0.01ms !important; animation-iteration-count:1 !important; transition-duration:0.01ms !important; scroll-behavior:auto !important;}
+  }
+  a{color:inherit;}
+  img,svg{display:block; max-width:100%;}
+  button{font-family:inherit; cursor:pointer; background:none; border:none; color:inherit; appearance:none; -webkit-appearance:none;}
+  ::selection{background:var(--orange); color:#0a0e17;}
+
+  .wrap{max-width:1120px; margin:0 auto; padding:0 24px;}
+  .eyebrow{
+    font-family:var(--mono); font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--orange); display:flex; align-items:center; gap:10px; margin-bottom:14px;
+  }
+  .eyebrow::before{content:''; width:16px; height:1px; background:var(--orange);}
+  h1,h2,h3{font-family:var(--disp); font-weight:600; letter-spacing:-0.01em; line-height:1.08;}
+  .section-title{font-size:clamp(28px,4vw,42px); margin-bottom:16px; color:var(--text);}
+  .section-sub{color:var(--text-dim); font-size:16px; max-width:520px; margin-bottom:48px;}
+  section{position:relative; padding:96px 0;}
+  .node-num{font-family:var(--mono); font-size:12px; color:var(--text-faint); letter-spacing:.1em;}
+
+  /* ===== Trace signature element ===== */
+  .trace{
+    position:fixed; left:32px; top:0; bottom:0; width:1px;
+    background:linear-gradient(to bottom, transparent, var(--line) 8%, var(--line) 92%, transparent);
+    z-index:5; display:none;
+  }
+  @media(min-width:960px){ .trace{display:block;} }
+  .trace-dot{
+    position:absolute; left:50%; transform:translateX(-50%);
+    width:7px; height:7px; border-radius:50%; background:var(--orange);
+    box-shadow:0 0 12px 2px rgba(255,106,31,.7);
+    transition:top .5s cubic-bezier(.4,0,.2,1);
+  }
+  .trace-node{
+    position:absolute; left:50%; transform:translate(-50%,-50%);
+    width:9px; height:9px; border-radius:50%; border:1px solid var(--line);
+    background:var(--bg);
+  }
+  .trace-node.active{border-color:var(--orange); background:var(--orange);}
+
+  /* ===== Nav ===== */
+  nav{
+    position:fixed; top:0; left:0; right:0; z-index:50;
+    background:rgba(10,14,23,.85); backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line-soft);
+  }
+  .navrow{display:flex; align-items:center; justify-content:space-between; padding:16px 24px; max-width:1120px; margin:0 auto;}
+  .logo{font-family:var(--disp); font-weight:700; font-size:19px; letter-spacing:-.02em; display:flex; align-items:center; gap:8px;}
+  .logo .dot{width:7px; height:7px; background:var(--orange); border-radius:50%;}
+  .nav-cta{
+    font-family:var(--mono); font-size:12px; letter-spacing:.05em; text-transform:uppercase;
+    background:transparent; border:1px solid var(--line); color:var(--text);
+    padding:9px 16px; border-radius:var(--radius); transition:border-color .2s, color .2s;
+  }
+  .nav-cta:hover{border-color:var(--orange); color:var(--orange);}
+
+  /* ===== Buttons ===== */
+  .btn{
+    display:inline-flex; align-items:center; gap:8px; font-family:var(--mono); font-size:13px;
+    letter-spacing:.04em; text-transform:uppercase; padding:14px 22px; border-radius:var(--radius);
+    background:transparent; border:1px solid transparent; transition:transform .15s, box-shadow .2s, border-color .2s, background .2s;
+  }
+  .btn-primary{background:var(--orange); color:#140a03; font-weight:600;}
+  .btn-primary:hover{box-shadow:0 0 0 1px var(--orange), 0 0 24px rgba(255,106,31,.35); transform:translateY(-1px);}
+  .btn-ghost{background:transparent; border-color:var(--line); color:var(--text);}
+  .btn-ghost:hover{background:rgba(255,255,255,.04); border-color:var(--text-dim); color:#fff;}
+
+  /* ===== Hero ===== */
+  .hero{padding:150px 0 80px; position:relative;}
+  .hero-grid{display:grid; grid-template-columns:1fr; gap:56px; align-items:start;}
+  @media(min-width:900px){ .hero-grid{grid-template-columns:.95fr 1.05fr;} }
+  .hero h1{font-size:clamp(34px,5.4vw,58px); margin-bottom:20px;}
+  .hero h1 .hl{color:var(--orange);}
+  .hero-sub{color:var(--text-dim); font-size:17px; max-width:460px; margin-bottom:32px;}
+  .hero-ctas{display:flex; gap:12px; flex-wrap:wrap; margin-bottom:8px;}
+
+  .stamp{
+    margin-top:40px; font-family:var(--mono); font-size:12px; color:var(--text-faint);
+    display:flex; align-items:center; gap:8px;
+  }
+  .stamp b{color:var(--privacy); font-weight:500;}
+
+  /* ===== Simulator card ===== */
+  .sim{
+    background:var(--surface); border:1px solid var(--line); border-radius:6px;
+    padding:22px; position:relative; overflow:hidden;
+  }
+  .sim::before{
+    content:''; position:absolute; inset:0; pointer-events:none;
+    background-image:linear-gradient(var(--line-soft) 1px, transparent 1px), linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+    background-size:22px 22px; opacity:.35;
+  }
+  .sim-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; position:relative;}
+  .sim-head .tag-id{font-family:var(--mono); font-size:11px; color:var(--text-faint);}
+  .sim-stage{position:relative; min-height:360px;}
+
+  .scene{
+    display:flex; flex-direction:column; align-items:center; gap:18px; padding:8px 4px 4px;
+  }
+  .vehicle-wrap{display:flex; align-items:center; justify-content:center; gap:18px; width:100%;}
+  .car{width:150px;}
+  .tag-chip{
+    display:flex; align-items:center; gap:6px; font-family:var(--mono); font-size:10px;
+    color:var(--orange); border:1px solid var(--orange-dim); padding:4px 8px; border-radius:20px;
+    background:rgba(255,106,31,.08); white-space:nowrap;
+  }
+  .tag-chip .pulse{width:6px; height:6px; border-radius:50%; background:var(--orange); animation:blink 1.6s infinite;}
+  @keyframes blink{0%,100%{opacity:1;} 50%{opacity:.25;}}
+
+  .phone{
+    width:220px; min-height:300px; background:#0d1421; border:1px solid var(--line);
+    border-radius:22px; padding:14px 12px; display:flex; flex-direction:column; gap:10px;
+    box-shadow:0 20px 60px -20px rgba(0,0,0,.7);
+  }
+  .phone-bar{height:3px; width:36px; background:var(--line); border-radius:2px; margin:0 auto 4px;}
+  .phone-title{font-family:var(--mono); font-size:10px; color:var(--text-faint); text-align:center; text-transform:uppercase; letter-spacing:.08em;}
+  .chat{flex:1; display:flex; flex-direction:column; gap:8px; overflow:hidden;}
+  .bubble{
+    max-width:88%; padding:9px 11px; border-radius:10px; font-size:12.5px; line-height:1.4;
+    opacity:0; transform:translateY(6px); animation:rise .4s forwards;
+  }
+  @keyframes rise{to{opacity:1; transform:translateY(0);}}
+  .bubble.in{align-self:flex-start; background:var(--surface-2); border:1px solid var(--line); border-bottom-left-radius:2px;}
+  .bubble.out{align-self:flex-end; background:var(--orange); color:#140a03; border-bottom-right-radius:2px; font-weight:500;}
+  .bubble.sys{
+    align-self:center; background:transparent; border:1px dashed var(--line); color:var(--text-faint);
+    font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:.06em; padding:6px 10px;
+  }
+  .chat-input{
+    display:flex; gap:6px; border-top:1px solid var(--line-soft); padding-top:10px;
+  }
+  .chat-input input{
+    flex:1; background:var(--surface-2); border:1px solid var(--line); color:var(--text);
+    font-family:var(--body); font-size:12px; padding:9px 10px; border-radius:8px; outline:none;
+  }
+  .chat-input input:focus{border-color:var(--orange);}
+  .chat-input button{
+    background:var(--orange); color:#140a03; border:none; border-radius:8px; padding:0 14px;
+    font-family:var(--mono); font-size:11px; font-weight:600;
+  }
+  .quick-actions{display:flex; flex-wrap:wrap; gap:8px; margin-top:14px;}
+  .qa{
+    font-family:var(--mono); font-size:11px; color:var(--text-dim); border:1px solid var(--line);
+    padding:8px 12px; border-radius:20px; background:var(--surface-2); transition:all .15s;
+  }
+  .qa:hover, .qa.active{border-color:var(--orange); color:var(--orange);}
+
+  .relay-flow{
+    display:flex; align-items:center; justify-content:space-between; gap:8px; margin:18px 0;
+    font-family:var(--mono); font-size:10px; color:var(--text-faint);
+  }
+  .relay-node{display:flex; flex-direction:column; align-items:center; gap:6px; flex:1;}
+  .relay-node .ic{
+    width:34px; height:34px; border-radius:50%; border:1px solid var(--line); display:flex;
+    align-items:center; justify-content:center; font-size:14px; background:var(--surface-2);
+  }
+  .relay-node.shield .ic{border-color:var(--privacy-dim); color:var(--privacy);}
+  .relay-line{flex:1; height:1px; background:var(--line); position:relative; overflow:hidden;}
+  .relay-line .zip{
+    position:absolute; top:-2px; width:5px; height:5px; border-radius:50%; background:var(--orange);
+    box-shadow:0 0 8px 2px rgba(255,106,31,.7); left:-10px; opacity:0;
+  }
+  .relay-line.run .zip{animation:zip 1s ease-in-out forwards;}
+  @keyframes zip{0%{left:-10px; opacity:1;} 90%{opacity:1;} 100%{left:100%; opacity:0;}}
+
+  .delivered{
+    text-align:center; font-family:var(--mono); font-size:11px; color:var(--privacy);
+    display:flex; align-items:center; justify-content:center; gap:8px; margin-top:14px;
+    opacity:0; transition:opacity .4s;
+  }
+  .delivered.show{opacity:1;}
+  .delivered .lock{font-size:13px;}
+
+  .sim-reset{
+    position:absolute; top:16px; right:16px; font-family:var(--mono); font-size:10px;
+    color:var(--text-faint); border:1px solid var(--line); border-radius:20px; padding:5px 10px;
+    background:var(--surface); z-index:2;
+  }
+  .sim-reset:hover{color:var(--orange); border-color:var(--orange-dim);}
+
+  /* ===== reveal on scroll ===== */
+  .reveal{opacity:0; transform:translateY(18px); transition:opacity .6s ease, transform .6s ease;}
+  .reveal.in{opacity:1; transform:none;}
+
+  /* ===== Problem section ===== */
+  .problem-grid{display:grid; grid-template-columns:1fr; gap:20px;}
+  @media(min-width:800px){ .problem-grid{grid-template-columns:1fr 1fr;} }
+  .panel{
+    background:var(--surface); border:1px solid var(--line); border-radius:6px; padding:24px;
+    position:relative;
+  }
+  .panel .corner{position:absolute; width:9px; height:9px; border:1px solid var(--line-soft);}
+  .panel .corner.tl{top:-1px; left:-1px; border-right:none; border-bottom:none;}
+  .panel .corner.br{bottom:-1px; right:-1px; border-left:none; border-top:none;}
+  .panel-label{font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--text-faint); margin-bottom:14px;}
+  .plate{
+    font-family:var(--mono); font-size:13px; color:var(--text-dim); border:1px solid var(--line);
+    border-radius:4px; padding:10px 12px; display:inline-block; margin-bottom:16px;
+  }
+  .risk-list{list-style:none; display:flex; flex-direction:column; gap:8px; font-size:13.5px; color:var(--text-dim);}
+  .risk-list li{display:flex; align-items:center; gap:8px;}
+  .risk-list li::before{content:'—'; color:var(--danger); font-family:var(--mono);}
+  .good-list li::before{content:'—'; color:var(--privacy);}
+
+  /* ===== How it works ===== */
+  .steps{display:grid; grid-template-columns:1fr; gap:1px; background:var(--line-soft); border:1px solid var(--line-soft); border-radius:6px; overflow:hidden;}
+  @media(min-width:800px){ .steps{grid-template-columns:repeat(4,1fr);} }
+  .step{background:var(--surface); padding:26px 22px; min-height:190px;}
+  .step .num{font-family:var(--mono); font-size:11px; color:var(--orange); margin-bottom:16px; display:block;}
+  .step h3{font-size:17px; margin-bottom:8px;}
+  .step p{font-size:13.5px; color:var(--text-dim);}
+
+  /* ===== Privacy compare ===== */
+  .toggle-row{display:flex; align-items:center; gap:14px; margin-bottom:28px; font-family:var(--mono); font-size:12px; color:var(--text-dim);}
+  .toggle{
+    position:relative; width:52px; height:28px; background:var(--surface-2); border:1px solid var(--line);
+    border-radius:20px; cursor:pointer;
+  }
+  .toggle .knob{
+    position:absolute; top:2px; left:2px; width:22px; height:22px; border-radius:50%;
+    background:var(--text-dim); transition:transform .25s, background .25s;
+  }
+  .toggle.on .knob{transform:translateX(24px); background:var(--privacy);}
+  .toggle-row .on-label{color:var(--privacy);}
+
+  .compare-box{
+    background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:32px;
+    min-height:220px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; text-align:center;
+  }
+  .compare-id{font-family:var(--mono); font-size:20px; color:var(--text); letter-spacing:.02em;}
+  .compare-id.blur{filter:blur(0px); color:var(--danger);}
+  .compare-tags{display:flex; gap:16px; flex-wrap:wrap; justify-content:center;}
+  .compare-tag{
+    font-family:var(--mono); font-size:11px; padding:6px 12px; border-radius:16px; border:1px solid;
+  }
+  .compare-tag.bad{color:var(--danger); border-color:rgba(255,90,90,.4); background:rgba(255,90,90,.06);}
+  .compare-tag.good{color:var(--privacy); border-color:rgba(79,209,197,.4); background:rgba(79,209,197,.06);}
+
+  /* ===== Use cases ===== */
+  .uc-buttons{display:flex; flex-wrap:wrap; gap:10px; margin-bottom:28px;}
+  .uc-btn{
+    font-family:var(--mono); font-size:12px; color:var(--text-dim); background:var(--surface);
+    border:1px solid var(--line); border-radius:20px; padding:10px 16px; display:flex; align-items:center; gap:8px;
+    transition:all .15s;
+  }
+  .uc-btn:hover{border-color:var(--text-dim); color:var(--text);}
+  .uc-btn.active{border-color:var(--orange); color:var(--orange); background:rgba(255,106,31,.08);}
+  .uc-display{
+    background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:28px;
+    display:flex; flex-direction:column; gap:10px;
+  }
+  .uc-display .label{font-family:var(--mono); font-size:11px; color:var(--text-faint); text-transform:uppercase; letter-spacing:.08em;}
+  .uc-display .msg{font-size:17px; color:var(--text); min-height:52px;}
+
+  /* ===== Product ===== */
+  .product-wrap{display:grid; grid-template-columns:1fr; gap:40px; align-items:center;}
+  @media(min-width:860px){ .product-wrap{grid-template-columns:1fr 1fr;} }
+  .tag-visual{
+    background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:40px;
+    display:flex; align-items:center; justify-content:center; position:relative; min-height:320px;
+  }
+  .qr{
+    width:160px; height:160px; background:#fff; border-radius:8px; padding:12px; position:relative;
+  }
+  .qr-grid{display:grid; grid-template-columns:repeat(7,1fr); grid-template-rows:repeat(7,1fr); gap:3px; width:100%; height:100%;}
+  .qr-grid div{background:#0a0e17;}
+  .hotspot{
+    position:absolute; width:16px; height:16px; border:1px solid var(--orange); border-radius:50%;
+    display:flex; align-items:center; justify-content:center; background:var(--bg); cursor:pointer;
+  }
+  .hotspot::after{content:''; width:5px; height:5px; border-radius:50%; background:var(--orange);}
+  .hotspot.h1{top:8%; left:8%;}
+  .hotspot.h2{bottom:10%; right:10%;}
+  .hotspot.h3{top:50%; right:4%; transform:translateY(-50%);}
+  .hotspot-tip{
+    position:absolute; width:200px; background:var(--surface-2); border:1px solid var(--line);
+    border-radius:6px; padding:12px 14px; font-size:12.5px; color:var(--text-dim); z-index:5;
+    opacity:0; pointer-events:none; transition:opacity .2s; box-shadow:0 12px 30px rgba(0,0,0,.4);
+  }
+  .hotspot-tip strong{display:block; color:var(--text); font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.05em; margin-bottom:4px;}
+  .hotspot.show .hotspot-tip{opacity:1;}
+
+  .product-specs{list-style:none; display:flex; flex-direction:column; gap:18px;}
+  .product-specs li{border-bottom:1px solid var(--line-soft); padding-bottom:16px;}
+  .product-specs .k{font-family:var(--mono); font-size:11px; color:var(--orange); text-transform:uppercase; letter-spacing:.08em; margin-bottom:4px;}
+  .product-specs .v{font-size:14.5px; color:var(--text-dim);}
+
+  /* ===== Security ===== */
+  .sec-flow{
+    display:flex; flex-direction:column; align-items:center; gap:0; font-family:var(--mono); font-size:12px;
+    max-width:420px; margin:0 auto 48px;
+  }
+  .sec-flow .node{
+    border:1px solid var(--line); border-radius:20px; padding:10px 20px; background:var(--surface);
+    color:var(--text-dim);
+  }
+  .sec-flow .node.mid{border-color:var(--privacy-dim); color:var(--privacy);}
+  .sec-flow .connector{width:1px; height:26px; background:var(--line);}
+  .sec-points{display:grid; grid-template-columns:1fr; gap:14px;}
+  @media(min-width:760px){ .sec-points{grid-template-columns:1fr 1fr;} }
+  .sec-point{display:flex; gap:12px; align-items:flex-start; font-size:13.5px; color:var(--text-dim);}
+  .sec-point .mk{color:var(--privacy); font-family:var(--mono); flex-shrink:0;}
+
+  /* ===== Decision ===== */
+  .decision-box{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:40px; text-align:center;}
+  .scenario-line{font-size:16px; color:var(--text-dim); max-width:480px; margin:0 auto 28px;}
+  .decision-choices{display:flex; gap:16px; justify-content:center; flex-wrap:wrap; margin-bottom:20px;}
+  .choice{
+    width:220px; padding:22px; border:1px solid var(--line); border-radius:8px; background:var(--surface-2);
+    text-align:left; transition:border-color .2s;
+  }
+  .choice:hover{border-color:var(--text-dim);}
+  .choice .let{font-family:var(--mono); font-size:11px; color:var(--text-faint); margin-bottom:8px; display:block;}
+  .choice h4{font-size:15px; margin-bottom:6px;}
+  .choice p{font-size:12.5px; color:var(--text-faint);}
+  .decision-result{
+    font-family:var(--mono); font-size:13px; color:var(--orange); min-height:20px; opacity:0; transition:opacity .3s;
+  }
+  .decision-result.show{opacity:1;}
+
+  /* ===== Final CTA ===== */
+  .final{padding:110px 0 130px; text-align:center; position:relative;}
+  .final h2{font-size:clamp(30px,5vw,48px); margin-bottom:6px;}
+  .final h2 .fade{color:var(--text-faint);}
+  .final-sub{color:var(--text-dim); font-size:16px; max-width:440px; margin:20px auto 36px;}
+  .final-ctas{display:flex; gap:14px; justify-content:center; flex-wrap:wrap;}
+
+  footer{border-top:1px solid var(--line-soft); padding:32px 0; text-align:center;}
+  footer p{font-family:var(--mono); font-size:11px; color:var(--text-faint); letter-spacing:.04em;}
+
+  .sticky-cta{
+    position:fixed; bottom:0; left:0; right:0; z-index:40; display:flex; gap:10px;
+    padding:12px 16px; background:rgba(10,14,23,.92); backdrop-filter:blur(10px);
+    border-top:1px solid var(--line-soft); transform:translateY(100%); transition:transform .3s;
+  }
+  .sticky-cta.show{transform:translateY(0);}
+  .sticky-cta .btn{flex:1; justify-content:center;}
+  @media(min-width:960px){ .sticky-cta{display:none;} }
+</style>
+</head>
+<body>
+
+<div class="trace" id="trace">
+  <div class="trace-dot" id="traceDot" style="top:8%"></div>
+</div>
+
+<nav>
+  <div class="navrow">
+    <div class="logo"><span class="dot"></span>NTAGZ</div>
+    <button class="nav-cta" onclick="document.getElementById('final').scrollIntoView({behavior:'smooth'})">Get Ntagz</button>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero" id="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="eyebrow">Private Vehicle Contact Tag</div>
+      <h1>Contact the owner.<br>Not their <span class="hl">phone number.</span></h1>
+      <p class="hero-sub">A small tag on the windshield. Anyone who needs to reach the owner scans it, sends a message, and gets a reply — without either side ever seeing the other's number.</p>
+      <div class="hero-ctas">
+        <button class="btn btn-primary" onclick="document.getElementById('final').scrollIntoView({behavior:'smooth'})">Get Your Ntagz Tag</button>
+        <button class="btn btn-ghost" onclick="document.getElementById('sim').scrollIntoView({behavior:'smooth'})">Try It Below ↓</button>
+      </div>
+      <div class="stamp">TAG-ID <span id="tagIdStamp">NTZ-7A21-KX</span> · <b>Numbers never shared</b></div>
+    </div>
+
+    <div id="sim">
+      <div class="sim reveal">
+        <button class="sim-reset" onclick="resetSim()">↺ Reset</button>
+        <div class="sim-head">
+          <div class="tag-chip"><span class="pulse"></span>NTAGZ TAG ACTIVE</div>
+          <div class="tag-id">SCAN SIMULATOR</div>
+        </div>
+        <div class="sim-stage">
+          <div class="scene">
+            <div class="vehicle-wrap">
+              <svg class="car" viewBox="0 0 200 90" fill="none">
+                <path d="M10 62 Q10 40 35 38 L55 22 Q65 14 80 14 L130 14 Q145 14 152 24 L165 38 Q190 40 190 62 L190 66 Q190 74 182 74 L170 74 Q170 60 156 60 Q142 60 142 74 L58 74 Q58 60 44 60 Q30 60 30 74 L18 74 Q10 74 10 66 Z" fill="#161f2e" stroke="#25334a"/>
+                <path d="M60 38 L72 24 Q78 18 88 18 L128 18 Q136 18 141 24 L152 38 Z" fill="#0d1421" stroke="#25334a"/>
+                <circle cx="44" cy="74" r="12" fill="#0a0e17" stroke="#25334a"/>
+                <circle cx="156" cy="74" r="12" fill="#0a0e17" stroke="#25334a"/>
+              </svg>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+                <div class="qr" style="width:44px;height:44px;padding:5px;">
+                  <div class="qr-grid" id="miniQr"></div>
+                </div>
+                <span style="font-family:var(--mono);font-size:9px;color:var(--text-faint);">TAG ON WINDSHIELD</span>
+              </div>
+            </div>
+
+            <div class="phone">
+              <div class="phone-bar"></div>
+              <div class="phone-title" id="phoneTitle">Ntagz · Contact Vehicle Owner</div>
+              <div class="chat" id="chatWindow"></div>
+              <div class="chat-input">
+                <input type="text" id="msgInput" placeholder="Type your message…" maxlength="80">
+                <button onclick="sendCustomMessage()">Send</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="quick-actions" id="quickActions">
+            <button class="qa" data-msg="My car is blocked">🚗 My car is blocked</button>
+            <button class="qa" data-msg="Your lights are on">💡 Your lights are on</button>
+            <button class="qa" data-msg="Your vehicle may be damaged">⚠️ Vehicle may be damaged</button>
+            <button class="qa" data-msg="Please move your vehicle">🔔 Please move your vehicle</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PROBLEM -->
+<section id="problem">
+  <div class="wrap">
+    <div class="eyebrow reveal">The Problem</div>
+    <h2 class="section-title reveal">Right now, the only way to reach you is to hand out your number.</h2>
+    <p class="section-sub reveal">Most owners either write their phone number on a sticker, or make themselves impossible to reach at all. Neither is good.</p>
+
+    <div class="problem-grid">
+      <div class="panel reveal">
+        <span class="corner tl"></span><span class="corner br"></span>
+        <div class="panel-label">Option A — Number on windshield</div>
+        <div class="plate">+91 9XXXX XXXXX</div>
+        <ul class="risk-list">
+          <li>Visible to every passerby, forever</li>
+          <li>Collected by spam and marketing lists</li>
+          <li>Unwanted calls and WhatsApp messages</li>
+          <li>Anyone can save it, no way to revoke it</li>
+        </ul>
+      </div>
+      <div class="panel reveal">
+        <span class="corner tl"></span><span class="corner br"></span>
+        <div class="panel-label">Option B — No contact info at all</div>
+        <div class="plate">Owner: unreachable</div>
+        <ul class="risk-list">
+          <li>Blocked driveways go unresolved for hours</li>
+          <li>Lights left on drain the battery overnight</li>
+          <li>Minor damage goes unreported</li>
+          <li>Genuine emergencies have no way through</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how">
+  <div class="wrap">
+    <div class="eyebrow reveal">How It Works</div>
+    <h2 class="section-title reveal">One tag. Four steps. Zero exposed numbers.</h2>
+    <p class="section-sub reveal">The sequence is always the same, whether it's a blocked driveway or a real emergency.</p>
+
+    <div class="steps">
+      <div class="step reveal">
+        <span class="num">01 — Scan</span>
+        <h3>Scan the tag</h3>
+        <p>Any smartphone camera reads the QR, or an NFC-enabled phone taps it. No app to install.</p>
+      </div>
+      <div class="step reveal">
+        <span class="num">02 — Send</span>
+        <h3>Send a message</h3>
+        <p>A WhatsApp-based composer opens instantly. Pick a quick message or write your own.</p>
+      </div>
+      <div class="step reveal">
+        <span class="num">03 — Relay</span>
+        <h3>Ntagz routes it</h3>
+        <p>The message passes through Ntagz's private relay. Neither phone number is ever exposed.</p>
+      </div>
+      <div class="step reveal">
+        <span class="num">04 — Reply</span>
+        <h3>Owner replies</h3>
+        <p>The owner responds from their own phone. The reply reaches you the same protected way.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRIVACY -->
+<section id="privacy">
+  <div class="wrap">
+    <div class="eyebrow reveal">Privacy, Compared</div>
+    <h2 class="section-title reveal">Same conversation. One version exposes you.</h2>
+    <p class="section-sub reveal">Toggle between a sticker with your number on it, and a tag routed through Ntagz.</p>
+
+    <div class="toggle-row reveal">
+      <span>Phone number visible</span>
+      <div class="toggle" id="privToggle" onclick="togglePrivacy()"><div class="knob"></div></div>
+      <span class="on-label">Ntagz privacy relay</span>
+    </div>
+
+    <div class="compare-box reveal" id="compareBox">
+      <div class="panel-label" style="margin-bottom:0;">Vehicle Owner</div>
+      <div class="compare-id" id="compareId">+91 98XXX XX210</div>
+      <div class="compare-tags" id="compareTags">
+        <span class="compare-tag bad">Spam calls</span>
+        <span class="compare-tag bad">Privacy exposure</span>
+        <span class="compare-tag bad">Unwanted WhatsApp msgs</span>
+        <span class="compare-tag bad">Saved by strangers</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- USE CASES -->
+<section id="usecases">
+  <div class="wrap">
+    <div class="eyebrow reveal">Beyond Wrong Parking</div>
+    <h2 class="section-title reveal">One tag, every reason someone needs to reach you.</h2>
+
+    <div class="uc-buttons reveal" id="ucButtons">
+      <button class="uc-btn active" data-msg="Your vehicle is blocking my exit. Please move it.">🚗 Blocked Vehicle</button>
+      <button class="uc-btn" data-msg="Your vehicle lights are still on.">💡 Lights Left On</button>
+      <button class="uc-btn" data-msg="Your vehicle appears to have been damaged.">⚠️ Vehicle Damage</button>
+      <button class="uc-btn" data-msg="There is an urgent issue regarding your vehicle. Please respond.">🚨 Emergency</button>
+      <button class="uc-btn" data-msg="Hi — I need to reach you about your vehicle.">💬 General Contact</button>
+    </div>
+
+    <div class="uc-display reveal">
+      <span class="label">Simulated message to owner</span>
+      <span class="msg" id="ucMsg">Your vehicle is blocking my exit. Please move it.</span>
+    </div>
+  </div>
+</section>
+
+<!-- PRODUCT -->
+<section id="product">
+  <div class="wrap">
+    <div class="eyebrow reveal">The Tag</div>
+    <h2 class="section-title reveal">A simple object. A private identity behind it.</h2>
+
+    <div class="product-wrap">
+      <div class="tag-visual reveal">
+        <div class="qr">
+          <div class="qr-grid" id="bigQr"></div>
+        </div>
+        <div class="hotspot h1" onclick="toggleTip(this)">
+          <div class="hotspot-tip" style="top:24px;left:0;"><strong>QR Code</strong>Scan from any smartphone camera. No app required.</div>
+        </div>
+        <div class="hotspot h2" onclick="toggleTip(this)">
+          <div class="hotspot-tip" style="bottom:24px;right:0;"><strong>NFC</strong>Tap with any NFC-enabled phone for an instant connect.</div>
+        </div>
+        <div class="hotspot h3" onclick="toggleTip(this)">
+          <div class="hotspot-tip" style="top:-10px;right:24px;"><strong>Unique Tag ID</strong>Every tag is bound to one private identity — yours alone.</div>
+        </div>
+      </div>
+
+      <ul class="product-specs reveal">
+        <li>
+          <div class="k">Dual scan</div>
+          <div class="v">QR code and NFC on the same tag — works with virtually any phone.</div>
+        </li>
+        <li>
+          <div class="k">Unique identity</div>
+          <div class="v">Each tag carries its own secure ID, linked privately to one owner.</div>
+        </li>
+        <li>
+          <div class="k">Weather-resistant</div>
+          <div class="v">Built to sit on a windshield or dashboard through sun, rain, and dust.</div>
+        </li>
+        <li>
+          <div class="k">Vehicle-friendly install</div>
+          <div class="v">Peel, place, done. No wiring, no pairing, no setup on the owner's side.</div>
+        </li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- SECURITY -->
+<section id="security">
+  <div class="wrap">
+    <div class="eyebrow reveal">Security</div>
+    <h2 class="section-title reveal" style="text-align:center; margin-left:auto; margin-right:auto;">What actually protects you</h2>
+
+    <div class="sec-flow reveal">
+      <div class="node">QR / NFC</div>
+      <div class="connector"></div>
+      <div class="node">Unique Secure Tag ID</div>
+      <div class="connector"></div>
+      <div class="node mid">🔒 Ntagz Relay</div>
+      <div class="connector"></div>
+      <div class="node">Private Message Routing</div>
+      <div class="connector"></div>
+      <div class="node">Vehicle Owner</div>
+    </div>
+
+    <div class="sec-points reveal">
+      <div class="sec-point"><span class="mk">—</span>Phone numbers are never publicly displayed, on the tag or in the app.</div>
+      <div class="sec-point"><span class="mk">—</span>Lost or compromised tags can be deactivated instantly by the owner.</div>
+      <div class="sec-point"><span class="mk">—</span>Rate limiting keeps any one tag from being used to spam an owner.</div>
+      <div class="sec-point"><span class="mk">—</span>Owners can block abusive contacts at any time, with one tap.</div>
+    </div>
+  </div>
+</section>
+
+<!-- DECISION -->
+<section id="decision">
+  <div class="wrap">
+    <div class="eyebrow reveal">What Would You Do?</div>
+    <div class="decision-box reveal">
+      <h2 class="section-title" style="margin-bottom:12px;">You're trying to leave.</h2>
+      <p class="scenario-line">The car behind you is blocking the exit, and there's no way to reach whoever owns it.</p>
+      <div class="decision-choices">
+        <button class="choice" onclick="pickChoice('A')">
+          <span class="let">Option A</span>
+          <h4>Search for the owner</h4>
+          <p>Wander the parking lot. Ask around. Wait, hoping they come back.</p>
+        </button>
+        <button class="choice" onclick="pickChoice('B')">
+          <span class="let">Option B</span>
+          <h4>Scan the Ntagz tag</h4>
+          <p>Scan, send one line, and get a reply in minutes — numbers never exchanged.</p>
+        </button>
+      </div>
+      <div class="decision-result" id="decisionResult">Scan. Message. Problem solved.</div>
+    </div>
+  </div>
+</section>
+
+<!-- FINAL CTA -->
+<section class="final" id="final">
+  <div class="wrap">
+    <h2 class="reveal">Your vehicle number is public.<br><span class="fade">Your phone number doesn't have to be.</span></h2>
+    <p class="final-sub reveal">Let people reach you when it matters, without handing everyone your personal number.</p>
+    <div class="final-ctas reveal">
+      <button class="btn btn-primary">Get Your Ntagz Vehicle Tag</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('sim').scrollIntoView({behavior:'smooth'})">Try The Demo</button>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p>NTAGZ — SCAN. MESSAGE. CONNECT. PRIVATELY. · A PRODUCT LINE BY AMBIVERT TECHNOLOGIES</p>
+</footer>
+
+<div class="sticky-cta" id="stickyCta">
+  <button class="btn btn-ghost" style="flex:none;padding:12px 16px;" onclick="document.getElementById('sim').scrollIntoView({behavior:'smooth'})">Demo</button>
+  <button class="btn btn-primary" onclick="document.getElementById('final').scrollIntoView({behavior:'smooth'})">Get Ntagz Tag</button>
+</div>
+
+<script>
+// ---------- helpers ----------
+function makeQr(el, cellsFilled){
+  el.innerHTML='';
+  const total = 49;
+  const pattern = cellsFilled || [0,1,2,4,6,7,8,10,12,13,14,16,20,21,23,24,25,27,28,30,32,34,36,37,38,40,42,44,45,46,48];
+  for(let i=0;i<total;i++){
+    const d=document.createElement('div');
+    if(pattern.includes(i)) d.style.background='#0a0e17';
+    else d.style.background='#fff';
+    el.appendChild(d);
+  }
+}
+makeQr(document.getElementById('miniQr'));
+makeQr(document.getElementById('bigQr'));
+
+function randomTagId(){
+  const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let s='NTZ-';
+  for(let i=0;i<4;i++) s+=chars[Math.floor(Math.random()*chars.length)];
+  s+='-';
+  for(let i=0;i<2;i++) s+=chars[Math.floor(Math.random()*chars.length)];
+  return s;
+}
+document.getElementById('tagIdStamp').textContent = randomTagId();
+
+// ---------- reveal on scroll ----------
+const revealEls = document.querySelectorAll('.reveal');
+const io = new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
+},{threshold:0.15});
+revealEls.forEach(el=>io.observe(el));
+
+// ---------- trace dot + nodes ----------
+const trace = document.getElementById('trace');
+const traceDot = document.getElementById('traceDot');
+const traceSections = ['hero','problem','how','privacy','usecases','product','security','decision','final'];
+traceSections.forEach((id,i)=>{
+  const n = document.createElement('div');
+  n.className='trace-node';
+  n.style.top = (6 + i*(88/(traceSections.length-1))) + '%';
+  n.dataset.id = id;
+  trace.appendChild(n);
+});
+function updateTrace(){
+  const vh = window.innerHeight;
+  let activeIdx = 0;
+  traceSections.forEach((id,i)=>{
+    const el = document.getElementById(id);
+    if(el){
+      const r = el.getBoundingClientRect();
+      if(r.top < vh*0.5) activeIdx = i;
+    }
+  });
+  const pct = 6 + activeIdx*(88/(traceSections.length-1));
+  traceDot.style.top = pct+'%';
+  document.querySelectorAll('.trace-node').forEach((n,i)=>{
+    n.classList.toggle('active', i<=activeIdx);
+  });
+}
+window.addEventListener('scroll', updateTrace);
+updateTrace();
+
+// ---------- sticky cta on mobile ----------
+const stickyCta = document.getElementById('stickyCta');
+window.addEventListener('scroll', ()=>{
+  const heroBottom = document.getElementById('hero').getBoundingClientRect().bottom;
+  stickyCta.classList.toggle('show', heroBottom < 0);
+});
+
+// ---------- chat simulator ----------
+const chatWindow = document.getElementById('chatWindow');
+const phoneTitle = document.getElementById('phoneTitle');
+let simRunning = false;
+
+function addBubble(text, cls, delay){
+  return new Promise(res=>{
+    setTimeout(()=>{
+      const b=document.createElement('div');
+      b.className='bubble '+cls;
+      b.textContent=text;
+      chatWindow.appendChild(b);
+      chatWindow.scrollTop = chatWindow.scrollHeight;
+      res();
+    }, delay);
+  });
+}
+
+async function runSim(message){
+  if(simRunning) return;
+  simRunning = true;
+  chatWindow.innerHTML='';
+  phoneTitle.textContent = 'Ntagz · Contact Vehicle Owner';
+
+  await addBubble(message, 'out', 100);
+  await addBubble('Sending through Ntagz relay…', 'sys', 500);
+  await addBubble('🔒 Numbers protected — routing message', 'sys', 900);
+  await addBubble('Someone wants to contact you about your vehicle.', 'in', 900);
+  await addBubble(message, 'in', 500);
+  await addBubble("I'll move it in 5 minutes.", 'out', 1000);
+  await addBubble('✓ Delivered. Numbers protected.', 'sys', 700);
+  simRunning = false;
+}
+
+document.querySelectorAll('.qa').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.qa').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    runSim(btn.dataset.msg);
+  });
+});
+
+function sendCustomMessage(){
+  const input = document.getElementById('msgInput');
+  const val = input.value.trim();
+  if(!val) return;
+  runSim(val);
+  input.value='';
+}
+document.getElementById('msgInput').addEventListener('keydown', e=>{
+  if(e.key==='Enter') sendCustomMessage();
+});
+
+function resetSim(){
+  chatWindow.innerHTML='';
+  phoneTitle.textContent = 'Ntagz · Contact Vehicle Owner';
+  document.querySelectorAll('.qa').forEach(b=>b.classList.remove('active'));
+}
+
+// auto-run once when sim scrolls into view
+const simObs = new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{
+    if(e.isIntersecting){
+      runSim('My car is blocked');
+      document.querySelector('.qa[data-msg="My car is blocked"]').classList.add('active');
+      simObs.disconnect();
+    }
+  });
+},{threshold:0.5});
+simObs.observe(document.getElementById('sim'));
+
+// ---------- privacy toggle ----------
+let privacyOn = false;
+function togglePrivacy(){
+  privacyOn = !privacyOn;
+  document.getElementById('privToggle').classList.toggle('on', privacyOn);
+  const idEl = document.getElementById('compareId');
+  const tagsEl = document.getElementById('compareTags');
+  if(privacyOn){
+    idEl.textContent = '🔒 Contact protected';
+    idEl.style.color = 'var(--privacy)';
+    tagsEl.innerHTML = `
+      <span class="compare-tag good">No spam calls</span>
+      <span class="compare-tag good">Number never shared</span>
+      <span class="compare-tag good">Messages routed, not exposed</span>
+      <span class="compare-tag good">Block abusive contacts anytime</span>`;
+  } else {
+    idEl.textContent = '+91 98XXX XX210';
+    idEl.style.color = 'var(--danger)';
+    tagsEl.innerHTML = `
+      <span class="compare-tag bad">Spam calls</span>
+      <span class="compare-tag bad">Privacy exposure</span>
+      <span class="compare-tag bad">Unwanted WhatsApp msgs</span>
+      <span class="compare-tag bad">Saved by strangers</span>`;
+  }
+}
+
+// ---------- use case selector ----------
+document.querySelectorAll('.uc-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.uc-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    const msgEl = document.getElementById('ucMsg');
+    msgEl.style.opacity=0;
+    setTimeout(()=>{
+      msgEl.textContent = btn.dataset.msg;
+      msgEl.style.transition='opacity .3s';
+      msgEl.style.opacity=1;
+    },150);
+  });
+});
+
+// ---------- product hotspots ----------
+function toggleTip(el){
+  const isOpen = el.classList.contains('show');
+  document.querySelectorAll('.hotspot').forEach(h=>h.classList.remove('show'));
+  if(!isOpen) el.classList.add('show');
+}
+document.addEventListener('click', (e)=>{
+  if(!e.target.closest('.hotspot')) document.querySelectorAll('.hotspot').forEach(h=>h.classList.remove('show'));
+});
+
+// ---------- decision ----------
+function pickChoice(opt){
+  const result = document.getElementById('decisionResult');
+  if(opt==='A'){
+    result.textContent = "Still searching. No luck. — Try scanning instead.";
+  } else {
+    result.textContent = 'Scan. Message. Problem solved.';
+  }
+  result.classList.add('show');
+}
+</script>
+</body>
+</html>
