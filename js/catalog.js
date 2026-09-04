@@ -190,9 +190,9 @@
     },
     {
       id: 'mini-nfc-tag',
-      sku: 'MNT11',
+      sku: 'MNT16',
       name: 'Mini NFC Tag (3D Printing / Jewellery)',
-      price: 11,
+      price: 16,
       unit: 'pc',
       image: 'images/mini-nfc-tag.jpeg',
       detail: 'product/mini-nfc-tag/',
