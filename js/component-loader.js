@@ -50,6 +50,7 @@
         const headerPlaceholder = document.getElementById('header-placeholder');
         if (headerPlaceholder) {
           headerPlaceholder.innerHTML = headerHtml;
+          document.dispatchEvent(new CustomEvent('ntagz:header-loaded'));
         }
       }
 

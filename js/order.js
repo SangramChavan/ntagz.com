@@ -9,6 +9,7 @@
   'use strict';
 
   var CATALOG = window.NTAGZ_CATALOG;
+  var CART = window.NTAGZ_CART;
   var PRODUCTS = CATALOG.products;
   var TIERS = CATALOG.tiers;
   var SHIP = CATALOG.shipping;
@@ -22,6 +23,20 @@
   var fetchedCity = '', fetchedState = '';
 
   var $ = function (id) { return document.getElementById(id); };
+
+  /* This page IS the cart's checkout step — every selection change
+     is mirrored back into localStorage so the header badge (and any
+     other tab) stays accurate. */
+  function syncCart() {
+    if (!CART) return;
+    var cart = {};
+    selectedIds.forEach(function (id) {
+      var p = CATALOG.byId(id);
+      var qty = p.fixed ? 1 : (quantities[id] || 0);
+      if (qty > 0) cart[id] = qty;
+    });
+    CART.write(cart);
+  }
 
   /* ── FORMATTING ───────────────────────────────────────────── */
   var fmt = function (n) {
@@ -208,6 +223,7 @@
     renderGrid();
     renderSelectedItems();
     calculateQuote();
+    syncCart();
   }
 
   function addProduct(id) {
@@ -229,6 +245,7 @@
     if (inp) inp.value = quantities[id];
     updateItemTotal(id);
     calculateQuote();
+    syncCart();
   }
 
   function setQty(id, val) {
@@ -237,6 +254,7 @@
     quantities[id] = isNaN(parsed) ? 0 : Math.max(0, parsed);
     updateItemTotal(id);
     calculateQuote();
+    syncCart();
   }
 
   function enforceMoq(id) {
@@ -248,6 +266,7 @@
       if (inp) inp.value = moq;
       updateItemTotal(id);
       calculateQuote();
+      syncCart();
     }
   }
 
@@ -606,12 +625,41 @@
   var printBtn = $('printQuote');
   if (printBtn) printBtn.addEventListener('click', function () { window.print(); });
 
-  /* ── DEEP LINK: order.html?add=black-nfc-card,nfc-coin ────── */
-  (function applyDeepLink() {
-    var raw = new URLSearchParams(location.search).get('add');
-    if (!raw) return;
-    raw.split(',').forEach(function (id) { addProduct(id.trim()); });
-  })();
+  /* Order has been handed off to WhatsApp for confirmation — the
+     cart's job is done, so clear it rather than leaving stale items
+     waiting for the next visit. */
+  $('waLink').addEventListener('click', function () {
+    if (CART && selectedIds.length) CART.clear();
+  });
+
+  /* ── INITIAL SELECTION ──────────────────────────────────────
+     This page is the cart's checkout step: whatever the customer
+     added on the homepage is waiting in localStorage. The
+     ?add=id,id2 query string is a secondary entry point (a direct
+     link straight into the order page) and only applies when the
+     cart is empty, so it can never clobber items the customer
+     already picked. */
+  function seedFromCart() {
+    if (!CART) return false;
+    var cart = CART.read();
+    var ids = Object.keys(cart);
+    ids.forEach(function (id) {
+      var p = CATALOG.byId(id);
+      if (!p) return;
+      selectedIds.push(id);
+      quantities[id] = p.fixed ? 1 : cart[id];
+    });
+    return ids.length > 0;
+  }
+
+  var seededFromCart = seedFromCart();
+  if (!seededFromCart) {
+    var deepLinkRaw = new URLSearchParams(location.search).get('add');
+    if (deepLinkRaw) {
+      deepLinkRaw.split(',').forEach(function (id) { addProduct(id.trim()); });
+      syncCart();
+    }
+  }
 
   /* ── INIT ─────────────────────────────────────────────────── */
   renderTiers();
