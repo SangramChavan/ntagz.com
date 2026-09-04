@@ -1,495 +1,626 @@
-/* ── PRODUCT DATA ── */
-    const PRODUCTS = [
-      { id: 'black-card', code: 'BNC30', name: 'Black NFC 215 Card', price: 30, emoji: '🖤', category: 'nfc' },
-      { id: 'white-card', code: 'WNC25', name: 'PVC NFC Business Card NTAG216', price: 30, emoji: '🤍', category: 'nfc' },
-      { id: 'blank-card', code: 'WBC33', name: 'White Inkjet NTAG215 Card', price: 32.80, emoji: '⬜', category: 'nfc' },
-      { id: 'anti-metal', code: 'MNT20', name: 'Anti-Metal NFC Tag', price: 20, emoji: '🔩', category: 'nfc' },
-      { id: 'rfid-tag', code: 'RNT18', name: 'NTAG216 Stickers NFC Tag', price: 18, emoji: '📡', category: 'nfc' },
-      { id: 'nfc-coin', code: 'WNC15', name: 'NTAG 215 Coin 25mm', price: 20, emoji: '🪙', category: 'nfc' },
-      { id: 'mini-tag', code: 'MNT11', name: 'Mini NFC Tag (3D Printing / Jewellery)', price: 11, emoji: '💎', category: 'nfc' },
-      { id: 'flex-nfc', code: 'FNT75', name: 'Micro Flex NFC Tag (FPC)', price: 75, emoji: '⚡', category: 'nfc' },
-      { id: 'uhf-rfid', code: 'URL25', name: 'UHF RFID Label Sticker 27×15mm', price: 25, emoji: '🏷️', category: 'rfid' },
-      { id: 'inkjet-print-nfc', code: 'INK50', name: 'NFC Card with Custom Printing', price: 75, emoji: '🖨️', category: 'nfc' },
-      { id: 'inkjet-print-rfid', code: 'INK50', name: 'RFID Card with Custom Printing', price: 75, emoji: '🖨️', category: 'rfid' },
-       { id: 'wrist-rfid', code: 'INK50', name: 'NFC Wrist Band', price: 80, emoji: '🖨️', category: 'nfc' },
-      {
-        id: 'sample-kit', code: 'SMPL', name: 'Complete NFC Sample Kit', price: 1940, emoji: '🎁',
-        fixed: true, fixedQty: 70, fixedLabel: '1 kit · 70 pcs · All types', category: 'nfc'
-      },
-      { id: 'google-review-card', code: 'GRV95', name: 'Google Review Cards', price: 95, emoji: '⭐', category: 'nfc' },
-    ];
+/* ═══════════════════════════════════════════════════════════════
+   ntagz — ORDER / QUOTE BUILDER
+   ───────────────────────────────────────────────────────────────
+   Product data lives in js/catalog.js and is shared with the
+   homepage grid. Never hard-code a product in this file.
+   ═══════════════════════════════════════════════════════════════ */
 
-    /* Active category filter: 'nfc' | 'rfid' */
-    let activeCategory = 'nfc';
+(function () {
+  'use strict';
 
-    /* State */
-    let selectedIds = new Set();
-    let quantities = {};
-    let fetchedCity = '', fetchedState = '';
+  var CATALOG = window.NTAGZ_CATALOG;
+  var PRODUCTS = CATALOG.products;
+  var TIERS = CATALOG.tiers;
+  var SHIP = CATALOG.shipping;
 
-    /* Quote number */
-    const quoteNum = 'QT-' + Math.random().toString(36).substring(2, 8).toUpperCase();
-    document.getElementById('quoteNum').textContent = quoteNum;
+  /* Active category filter: 'nfc' | 'rfid' */
+  var activeCategory = 'nfc';
 
-    /* Dates */
-    const now = new Date();
-    const valid = new Date(now); valid.setDate(valid.getDate() + 15);
-    const fmtDate = d => d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-    document.getElementById('quoteDate').textContent = fmtDate(now);
-    document.getElementById('quoteValidUntil').textContent = fmtDate(valid);
+  /* State */
+  var selectedIds = [];
+  var quantities = {};
+  var fetchedCity = '', fetchedState = '';
 
-    /* Init QR */
-    const qrcodeContainer = new QRCode(document.getElementById('qrcode'), {
-      width: 140, height: 140,
-      colorDark: '#1A1714', colorLight: '#ffffff',
-      correctLevel: QRCode.CorrectLevel.M
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* ── FORMATTING ───────────────────────────────────────────── */
+  var fmt = function (n) {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency', currency: 'INR',
+      minimumFractionDigits: 0, maximumFractionDigits: 0
+    }).format(n);
+  };
+  var fmtNum = function (n) {
+    return new Intl.NumberFormat('en-IN', {
+      minimumFractionDigits: 0, maximumFractionDigits: 0
+    }).format(n);
+  };
+  /* Unit rates can carry paise (e.g. ₹32.80) — keep them exact. */
+  var fmtRate = function (n) {
+    return '₹' + new Intl.NumberFormat('en-IN', {
+      minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2
+    }).format(n);
+  };
+  var esc = function (s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  };
+  var sanitize = function (v, max) {
+    return String(v || '').replace(/[^\w\s.,\-/#&()]/gi, '').trim().substring(0, max || 80);
+  };
+
+  /* Neutral tile drawn for products that have no photo yet. */
+  var PLACEHOLDER = '<svg class="prod-thumb-ph" viewBox="0 0 40 40" aria-hidden="true">' +
+    '<rect x="5" y="9" width="30" height="22" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
+    '<path d="M22 15.5a6 6 0 0 1 0 9M25.5 13a10 10 0 0 1 0 14" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.6" stroke-linecap="round"/>' +
+    '<rect x="9.5" y="14" width="6" height="5" rx="1.2" fill="currentColor" opacity=".55"/></svg>';
+
+  function thumb(p, cls) {
+    if (!p.image) return '<span class="' + cls + ' is-placeholder">' + PLACEHOLDER + '</span>';
+    return '<span class="' + cls + '"><img src="' + esc(p.image) + '" alt="' + esc(p.name) +
+      '" loading="lazy" decoding="async" onerror="this.remove()"></span>';
+  }
+
+  /* ── QUOTE HEADER ─────────────────────────────────────────── */
+  var quoteNum = 'QT-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+  $('quoteNum').textContent = quoteNum;
+
+  var now = new Date();
+  var valid = new Date(now); valid.setDate(valid.getDate() + 15);
+  var fmtDate = function (d) {
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+  $('quoteDate').textContent = fmtDate(now);
+  $('quoteValidUntil').textContent = fmtDate(valid);
+
+  /* ── UPI QR ───────────────────────────────────────────────── */
+  var qrcodeContainer = new QRCode($('qrcode'), {
+    width: 140, height: 140,
+    colorDark: '#1A1714', colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.M
+  });
+
+  /* ── TIER TABLE (rendered from the catalogue) ─────────────── */
+  function renderTiers() {
+    var host = $('tierRows');
+    if (!host) return;
+    host.innerHTML = TIERS.map(function (t) {
+      var range = t.max === Infinity
+        ? fmtNum(t.min) + '+ pcs'
+        : fmtNum(t.min) + ' – ' + fmtNum(t.max) + ' pcs';
+      return '<div class="tier-row"><span>' + range + '</span><b>' + esc(t.label) + '</b></div>';
+    }).join('');
+  }
+
+  /* ── PRODUCT GRID ─────────────────────────────────────────── */
+  function renderGrid() {
+    var grid = $('productGrid');
+    var visible = PRODUCTS.filter(function (p) {
+      return p.category === activeCategory || p.category === 'both';
     });
 
-    /* ── GST FIELD TOGGLE ── */
-    function toggleGstField() {
-      const checked = document.getElementById('gstCheck').checked;
-      const wrap = document.getElementById('gstFieldWrap');
-      if (checked) {
-        wrap.classList.add('visible');
-      } else {
-        wrap.classList.remove('visible');
-      }
-    }
+    grid.innerHTML = visible.map(function (p) {
+      var selected = selectedIds.indexOf(p.id) > -1;
+      var unit = p.unitLabel || p.unit || 'pc';
+      return '' +
+        '<button type="button" class="prod-card' + (p.fixed ? ' bundle-card' : '') +
+        (selected ? ' selected' : '') + '" data-id="' + esc(p.id) + '" aria-pressed="' +
+        (selected ? 'true' : 'false') + '">' +
+        '<span class="check" aria-hidden="true">' +
+        '<svg viewBox="0 0 10 8"><path d="M1 4L3.5 6.5L9 1" stroke="#fff" stroke-width="1.8" ' +
+        'stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></span>' +
+        thumb(p, 'prod-thumb') +
+        '<span class="prod-body">' +
+        (p.badge ? '<span class="prod-badge">' + esc(p.badge) + '</span>' : '') +
+        '<span class="prod-name">' + esc(p.name) + '</span>' +
+        '<span class="prod-code">' + esc(p.sku) + (p.fixed ? ' · 70 pcs' : '') + '</span>' +
+        '<span class="prod-price">' + fmtRate(p.price) + '<span>/' + esc(unit) + '</span></span>' +
+        '</span>' +
+        '</button>';
+    }).join('');
+  }
 
-    /* ── RENDER PRODUCT GRID ── */
-    function renderGrid() {
-      const grid = document.getElementById('productGrid');
-      const visible = PRODUCTS.filter(p => p.category === activeCategory || p.category === 'both');
-      grid.innerHTML = visible.map(p => `
-      <div class="prod-card ${p.fixed ? 'bundle-card' : ''} ${selectedIds.has(p.id) ? 'selected' : ''}"
-           onclick="toggleProduct('${p.id}')" data-id="${p.id}">
-        <div class="check">
-          <svg viewBox="0 0 10 8"><path d="M1 4L3.5 6.5L9 1" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
-        </div>
-        ${p.fixed ? '<div class="bundle-badge">★ Bundle</div>' : ''}
-        <div class="prod-name">${p.emoji} ${p.name}</div>
-        <div class="prod-code">${p.code}${p.fixed ? ' · 70 pcs' : ''}</div>
-        <div class="prod-price">₹${p.price.toLocaleString('en-IN')}<span>/${p.fixed ? 'kit' : 'pc'}</span></div>
-      </div>
-    `).join('');
-    }
+  /* ── CATEGORY TOGGLE (NFC / RFID) ─────────────────────────── */
+  function setCategory(cat) {
+    if (cat === activeCategory) return;
+    activeCategory = cat;
 
-    /* ── CATEGORY TOGGLE (NFC / RFID) ── */
-    function setCategory(cat) {
-      if (cat === activeCategory) return;
-      activeCategory = cat;
+    var toggle = $('catToggle');
+    toggle.classList.toggle('rfid-active', cat === 'rfid');
+    Array.prototype.forEach.call(toggle.querySelectorAll('.cat-tab'), function (btn) {
+      var isActive = btn.dataset.cat === cat;
+      btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
 
-      const toggle = document.getElementById('catToggle');
-      toggle.classList.toggle('rfid-active', cat === 'rfid');
-      toggle.querySelectorAll('.cat-tab').forEach(btn => {
-        const isActive = btn.dataset.cat === cat;
-        btn.classList.toggle('active', isActive);
-        btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
-      });
-
-      const grid = document.getElementById('productGrid');
-      grid.classList.add('switching');
-      setTimeout(() => {
-        renderGrid();
-        grid.classList.remove('switching');
-      }, 180);
-    }
-
-    /* ── RENDER SELECTED ITEMS (qty inputs) ── */
-    function renderSelectedItems() {
-      const section = document.getElementById('selectedSection');
-      const hint = document.getElementById('emptyHint');
-      const container = document.getElementById('selectedItems');
-
-      if (selectedIds.size === 0) {
-        section.style.display = 'none';
-        hint.style.display = 'block';
-        return;
-      }
-      section.style.display = 'block';
-      hint.style.display = 'none';
-
-      container.innerHTML = [...selectedIds].map(id => {
-        const p = PRODUCTS.find(x => x.id === id);
-        const qty = p.fixed ? 1 : (quantities[id] || 0);
-        const subtotal = p.price * qty;
-        return `
-        <div class="item-row ${p.fixed ? 'bundle-row' : ''}" id="row-${id}">
-          <div class="item-label">
-            <div class="iname">${p.emoji} ${p.name}</div>
-            <div class="iprice">${p.fixed
-            ? `₹${p.price.toLocaleString('en-IN')}/kit · ${p.fixedLabel}`
-            : `₹${p.price}/pc · ${p.code}`
-          }</div>
-          </div>
-          <div class="qty-ctrl">
-            ${p.fixed
-            ? `<div class="fixed-qty-label">Fixed · 1 kit</div>`
-            : `<button class="qty-btn" onclick="adjustQty('${id}',-1)">−</button>
-                 <input class="qty-input" type="number" min="10" step="1" value="${qty}"
-                        oninput="setQty('${id}',this.value)" onblur="enforceMoq('${id}')" id="qty-${id}">
-                 <button class="qty-btn" onclick="adjustQty('${id}',1)">+</button>`
-          }
-          </div>
-          <div class="item-total" id="total-${id}">${subtotal > 0 ? '₹' + subtotal.toLocaleString('en-IN') : '-'}</div>
-        </div>
-      `;
-      }).join('');
-    }
-
-    /* ── TOGGLE PRODUCT ── */
-    function toggleProduct(id) {
-      if (selectedIds.has(id)) {
-        selectedIds.delete(id);
-        delete quantities[id];
-      } else {
-        selectedIds.add(id);
-        const p = PRODUCTS.find(x => x.id === id);
-        if (!p.fixed && !quantities[id]) quantities[id] = MOQ;
-      }
+    var grid = $('productGrid');
+    grid.classList.add('switching');
+    setTimeout(function () {
       renderGrid();
-      renderSelectedItems();
-      calculateQuote();
+      grid.classList.remove('switching');
+    }, 180);
+  }
+
+  /* ── SELECTED ITEMS (quantity rows) ───────────────────────── */
+  function renderSelectedItems() {
+    var section = $('selectedSection');
+    var hint = $('emptyHint');
+    var container = $('selectedItems');
+
+    if (selectedIds.length === 0) {
+      section.style.display = 'none';
+      hint.style.display = 'block';
+      return;
     }
+    section.style.display = 'block';
+    hint.style.display = 'none';
 
-    /* ── QTY CONTROLS (MOQ = 10 pcs per product) ── */
-    const MOQ = 10;
+    container.innerHTML = selectedIds.map(function (id) {
+      var p = CATALOG.byId(id);
+      var qty = p.fixed ? 1 : (quantities[id] || 0);
+      var subtotal = p.price * qty;
+      var moq = CATALOG.moqFor(p);
+      var unit = p.unitLabel || p.unit || 'pc';
 
-    function adjustQty(id, delta) {
-      const current = quantities[id] || MOQ;
-      quantities[id] = Math.max(MOQ, current + delta);
-      const inp = document.getElementById('qty-' + id);
-      if (inp) inp.value = quantities[id];
+      var qtyCtrl = p.fixed
+        ? '<span class="fixed-qty-label">Fixed · 1 kit</span>'
+        : '<button type="button" class="qty-btn" data-act="dec" data-id="' + esc(id) +
+          '" aria-label="Decrease quantity">&minus;</button>' +
+          '<input class="qty-input" type="number" min="' + moq + '" step="1" value="' + qty +
+          '" id="qty-' + esc(id) + '" data-id="' + esc(id) + '" aria-label="Quantity for ' + esc(p.name) + '">' +
+          '<button type="button" class="qty-btn" data-act="inc" data-id="' + esc(id) +
+          '" aria-label="Increase quantity">+</button>';
+
+      return '' +
+        '<div class="item-row' + (p.fixed ? ' bundle-row' : '') + '" id="row-' + esc(id) + '">' +
+        thumb(p, 'item-thumb') +
+        '<div class="item-label">' +
+        '<div class="iname">' + esc(p.name) + '</div>' +
+        '<div class="iprice">' + (p.fixed
+          ? fmtRate(p.price) + '/kit · ' + esc(p.fixedLabel)
+          : fmtRate(p.price) + '/' + esc(unit) + ' · ' + esc(p.sku)) + '</div>' +
+        '</div>' +
+        '<div class="qty-ctrl">' + qtyCtrl + '</div>' +
+        '<div class="item-total" id="total-' + esc(id) + '">' +
+        (subtotal > 0 ? fmt(subtotal) : '—') + '</div>' +
+        '<button type="button" class="item-remove" data-act="remove" data-id="' + esc(id) +
+        '" aria-label="Remove ' + esc(p.name) + '">' +
+        '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" ' +
+        'stroke-width="1.6" stroke-linecap="round"/></svg></button>' +
+        '</div>';
+    }).join('');
+  }
+
+  /* ── SELECTION ────────────────────────────────────────────── */
+  function toggleProduct(id) {
+    var i = selectedIds.indexOf(id);
+    if (i > -1) {
+      selectedIds.splice(i, 1);
+      delete quantities[id];
+    } else {
+      var p = CATALOG.byId(id);
+      if (!p) return;
+      selectedIds.push(id);
+      if (!p.fixed && !quantities[id]) quantities[id] = CATALOG.moqFor(p);
+    }
+    renderGrid();
+    renderSelectedItems();
+    calculateQuote();
+  }
+
+  function addProduct(id) {
+    var p = CATALOG.byId(id);
+    if (!p || selectedIds.indexOf(id) > -1) return;
+    selectedIds.push(id);
+    if (!p.fixed) quantities[id] = CATALOG.moqFor(p);
+    if (p.category !== activeCategory) setCategory(p.category);
+  }
+
+  /* ── QUANTITY ─────────────────────────────────────────────── */
+  function adjustQty(id, delta) {
+    var p = CATALOG.byId(id);
+    var moq = CATALOG.moqFor(p);
+    var step = p.step || (moq >= 10 ? 10 : 1);
+    var current = quantities[id] || moq;
+    quantities[id] = Math.max(moq, current + delta * step);
+    var inp = $('qty-' + id);
+    if (inp) inp.value = quantities[id];
+    updateItemTotal(id);
+    calculateQuote();
+  }
+
+  function setQty(id, val) {
+    // Allow free typing (multi-digit entry), but never go negative.
+    var parsed = parseInt(val, 10);
+    quantities[id] = isNaN(parsed) ? 0 : Math.max(0, parsed);
+    updateItemTotal(id);
+    calculateQuote();
+  }
+
+  function enforceMoq(id) {
+    // Snap back up to the MOQ once the user leaves the field.
+    var moq = CATALOG.moqFor(CATALOG.byId(id));
+    if ((quantities[id] || 0) < moq) {
+      quantities[id] = moq;
+      var inp = $('qty-' + id);
+      if (inp) inp.value = moq;
       updateItemTotal(id);
       calculateQuote();
     }
+  }
 
-    function setQty(id, val) {
-      // Allow free typing (so users can type multi-digit numbers), but never let it go negative.
-      const parsed = parseInt(val, 10);
-      quantities[id] = isNaN(parsed) ? 0 : Math.max(0, parsed);
-      updateItemTotal(id);
-      calculateQuote();
-    }
+  function updateItemTotal(id) {
+    var p = CATALOG.byId(id);
+    var qty = p.fixed ? 1 : (quantities[id] || 0);
+    var el = $('total-' + id);
+    if (el) el.textContent = qty > 0 ? fmt(p.price * qty) : '—';
+  }
 
-    function enforceMoq(id) {
-      // Snap back up to the MOQ once the user leaves the field if they typed below it.
-      if ((quantities[id] || 0) < MOQ) {
-        quantities[id] = MOQ;
-        const inp = document.getElementById('qty-' + id);
-        if (inp) inp.value = MOQ;
-        updateItemTotal(id);
-        calculateQuote();
-      }
-    }
+  /* ── PINCODE LOOKUP ───────────────────────────────────────── */
+  function checkPincodeLength(val) {
+    var clean = val.replace(/[^0-9]/g, '');
+    if (clean.length === 6) { fetchLocationData(clean); return; }
+    fetchedCity = ''; fetchedState = '';
+    $('customerState').value = '';
+    resetLocation('Auto-filled from pincode');
+    $('pincodeLoader').style.display = 'none';
+    calculateQuote();
+  }
 
-    function updateItemTotal(id) {
-      const p = PRODUCTS.find(x => x.id === id);
-      const qty = p.fixed ? 1 : (quantities[id] || 0);
-      const el = document.getElementById('total-' + id);
-      if (el) el.textContent = qty > 0 ? '₹' + (p.price * qty).toLocaleString('en-IN') : '-';
-    }
+  function resetLocation(text) {
+    var locDisplay = $('locationDisplay');
+    var locText = $('locationText');
+    locDisplay.classList.remove('filled');
+    locText.className = 'location-placeholder';
+    locText.textContent = text;
+  }
 
-    /* ── PINCODE ── */
-    function checkPincodeLength(val) {
-      const clean = val.replace(/[^0-9]/g, '');
-      if (clean.length === 6) fetchLocationData(clean);
-      else {
-        fetchedCity = ''; fetchedState = '';
-        document.getElementById('customerState').value = '';
-        const locDisplay = document.getElementById('locationDisplay');
-        const locText = document.getElementById('locationText');
-        locDisplay.classList.remove('filled');
-        locText.className = 'location-placeholder';
-        locText.textContent = 'Auto-filled from pincode';
-        calculateQuote();
-      }
-    }
+  function fetchLocationData(pincode) {
+    var loader = $('pincodeLoader');
+    loader.style.display = 'block';
+    loader.className = 'field-note';
+    loader.textContent = 'Looking up pincode…';
+    resetLocation('Looking up…');
 
-    async function fetchLocationData(pincode) {
-      const loader = document.getElementById('pincodeLoader');
-      const locDisplay = document.getElementById('locationDisplay');
-      const locText = document.getElementById('locationText');
-      loader.style.display = 'block';
-      loader.style.color = 'var(--teal)';
-      loader.textContent = '🔍 Fetching location...';
-      locDisplay.classList.remove('filled');
-      locText.className = 'location-placeholder';
-      locText.textContent = 'Fetching…';
-      try {
-        const res = await fetch(`https://api.postalpincode.in/pincode/${pincode}`);
-        const data = await res.json();
-        if (data[0]?.Status === 'Success') {
-          const po = data[0].PostOffice[0];
+    fetch('https://api.postalpincode.in/pincode/' + pincode)
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data && data[0] && data[0].Status === 'Success') {
+          var po = data[0].PostOffice[0];
           fetchedCity = po.District;
           fetchedState = po.State;
-          // Set hidden state input
-          document.getElementById('customerState').value = fetchedState;
-          // Update location display
+          $('customerState').value = fetchedState;
+
+          var locDisplay = $('locationDisplay');
+          var locText = $('locationText');
           locDisplay.classList.add('filled');
           locText.className = '';
-          locText.innerHTML = `<span class="location-city">📍 ${fetchedCity}</span>&nbsp;<span class="location-state">· ${fetchedState}</span>`;
-          loader.textContent = `✅ ${fetchedCity}, ${fetchedState}`;
-          setTimeout(() => { loader.style.display = 'none'; }, 2000);
+          locText.innerHTML = '<span class="location-city">' + esc(fetchedCity) + '</span>' +
+            '<span class="location-state">' + esc(fetchedState) + '</span>';
+
+          loader.className = 'field-note is-ok';
+          loader.textContent = fetchedCity + ', ' + fetchedState;
+          setTimeout(function () { loader.style.display = 'none'; }, 2000);
         } else {
-          loader.style.color = '#DC2626';
-          loader.textContent = '⚠️ Invalid Pincode. Please verify.';
-          locDisplay.classList.remove('filled');
-          locText.className = 'location-placeholder';
-          locText.textContent = 'Auto-filled from pincode';
-          document.getElementById('customerState').value = '';
+          loader.className = 'field-note is-error';
+          loader.textContent = 'That pincode does not look valid. Please check it.';
+          resetLocation('Auto-filled from pincode');
+          $('customerState').value = '';
           fetchedCity = ''; fetchedState = '';
         }
-      } catch (e) {
-        loader.style.color = '#DC2626';
-        loader.textContent = '⚠️ Could not fetch pincode info.';
-        locDisplay.classList.remove('filled');
-        locText.className = 'location-placeholder';
-        locText.textContent = 'Auto-filled from pincode';
-      }
-      calculateQuote();
-    }
-
-    /* ── HELPERS ── */
-    const fmt = (n) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n);
-    const fmtNum = (n) => new Intl.NumberFormat('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n);
-    const sanitize = (v, max = 80) => String(v || '').replace(/[^\w\s.,\-/#&()]/gi, '').trim().substring(0, max);
-
-    function discountFor(qty) {
-      if (qty >= 5000) return 40;
-      if (qty >= 1000) return 25;
-      if (qty >= 500) return 10;
-      return 0;
-    }
-
-    /* ── MAIN CALCULATE ── */
-    function calculateQuote() {
-      // GST is mandatory on every order — always applied, regardless of any checkbox state.
-      const includeGst = true;
-      const cName = sanitize(document.getElementById('customerName').value, 60) || '—';
-      const cNumber = sanitize(document.getElementById('customerNumber').value, 20) || '—';
-      const cAddress = sanitize(document.getElementById('customerAddress').value, 120) || '—';
-      const cPincode = document.getElementById('customerPincode').value.trim() || '—';
-      const cGST = document.getElementById('customerGST').value.trim().toUpperCase();
-      const stateEl = document.getElementById('customerState');
-      const cState = stateEl.value || ''; // empty string = not selected
-
-      /* Customer block */
-      document.getElementById('outCustomerName').textContent = cName;
-      document.getElementById('outCustomerNumber').textContent = cNumber;
-      document.getElementById('outCustomerAddress').textContent = cAddress;
-      document.getElementById('outCustomerPincode').textContent = cPincode;
-      document.getElementById('outCustomerState').textContent = (fetchedCity && cState) ? `${fetchedCity}, ${cState}` : (cState || '—');
-
-      const gstNumRow = document.getElementById('gstNumberRow');
-      if (includeGst && cGST.length >= 15) {
-        document.getElementById('outCustomerGST').textContent = cGST;
-        gstNumRow.style.display = 'flex';
-      } else {
-        gstNumRow.style.display = 'none';
-      }
-
-      /* Build line items */
-      const lineItems = [];
-      let totalSubtotal = 0, totalDiscount = 0;
-
-      [...selectedIds].forEach(id => {
-        const p = PRODUCTS.find(x => x.id === id);
-        const qty = p.fixed ? 1 : (quantities[id] || 0);
-        if (qty <= 0) return;
-        const disc = p.fixed ? 0 : discountFor(qty);
-        const sub = p.price * qty;
-        const discAmt = sub * disc / 100;
-        const net = sub - discAmt;
-        lineItems.push({ p, qty, sub, disc, discAmt, net });
-        totalSubtotal += sub;
-        totalDiscount += discAmt;
+        calculateQuote();
+      })
+      .catch(function () {
+        loader.className = 'field-note is-error';
+        loader.textContent = 'Could not reach the pincode service. Enter your city manually on WhatsApp.';
+        resetLocation('Auto-filled from pincode');
+        calculateQuote();
       });
+  }
 
-      const netValue = totalSubtotal - totalDiscount;
+  /* ── MAIN CALCULATION ─────────────────────────────────────── */
+  function calculateQuote() {
+    // GST is mandatory on every order — always applied.
+    var includeGst = true;
 
-      /* ── Shipping ── */
-      let shippingCharge = 0;
-      const pillEl = document.getElementById('shippingInfoPill');
-      if (cState !== '') {
-        const isMH = cState === 'Maharashtra';
-        if (netValue >= 2000) {
-          shippingCharge = 0;
-          pillEl.style.display = 'inline-flex';
-          pillEl.className = 'shipping-info-pill';
-          pillEl.innerHTML = '🚚 Free shipping on this order!';
-        } else {
-          shippingCharge = isMH ? 40 : 80;
-          pillEl.style.display = 'inline-flex';
-          pillEl.className = 'shipping-info-pill paid';
-          pillEl.innerHTML = isMH
-            ? `📦 Maharashtra flat rate: ₹40`
-            : `📦 Rest of India: ₹80`;
-        }
-      } else {
-        pillEl.style.display = 'none';
-      }
+    var cName = sanitize($('customerName').value, 60) || '—';
+    var cNumber = sanitize($('customerNumber').value, 20) || '—';
+    var cAddress = sanitize($('customerAddress').value, 120) || '—';
+    var cPincode = $('customerPincode').value.trim() || '—';
+    var cGST = $('customerGST').value.trim().toUpperCase();
+    var cState = $('customerState').value || '';
 
-      /* ── GST ── */
-      const gstAmount = includeGst ? Math.round(netValue * 0.18) : 0;
-      const cgst = includeGst ? Math.round(netValue * 0.09) : 0;
-      const sgst = includeGst ? Math.round(netValue * 0.09) : 0;
-      const grandTotal = netValue + gstAmount + shippingCharge;
+    $('outCustomerName').textContent = cName;
+    $('outCustomerNumber').textContent = cNumber;
+    $('outCustomerAddress').textContent = cAddress;
+    $('outCustomerPincode').textContent = cPincode;
+    $('outCustomerState').textContent =
+      (fetchedCity && cState) ? fetchedCity + ', ' + cState : (cState || '—');
 
-      /* ── Update totals ── */
-      document.getElementById('outSubtotal').textContent = fmt(totalSubtotal);
-      document.getElementById('outDiscountAmt').textContent = totalDiscount > 0 ? `− ${fmt(totalDiscount)}` : '— ₹0';
-      document.getElementById('outNet').textContent = fmt(netValue);
-      document.getElementById('outTotal').textContent = fmtNum(grandTotal);
-
-      /* ── UPI limit notice (>1 lakh) ── */
-      const upiNotice = document.getElementById('upiLimitNotice');
-      if (grandTotal > 100000) {
-        upiNotice.classList.add('show');
-        // Auto-switch to bank tab
-        switchPayTab('bank');
-      } else {
-        upiNotice.classList.remove('show');
-      }
-
-      /* ── Bank quote ref ── */
-      document.getElementById('bankQuoteRef').textContent = quoteNum;
-
-      /* Shipping row */
-      const shRow = document.getElementById('shippingRow');
-      const outSh = document.getElementById('outShipping');
-      if (cState !== '') {
-        shRow.style.display = 'flex';
-        outSh.textContent = shippingCharge === 0 ? 'FREE 🚚' : `+ ${fmt(shippingCharge)}`;
-        outSh.style.color = shippingCharge === 0 ? 'var(--green)' : '';
-        shRow.className = shippingCharge === 0 ? 'qt-line shipping-free' : 'qt-line';
-      } else {
-        shRow.style.display = 'none';
-      }
-
-      /* GST row + breakdown */
-      const gstRow = document.getElementById('gstRow');
-      const gstBreakdown = document.getElementById('gstBreakdown');
-      if (includeGst && netValue > 0) {
-        gstRow.style.display = 'flex';
-        document.getElementById('outGst').textContent = `+ ${fmt(gstAmount)}`;
-        document.getElementById('outCgst').textContent = fmt(cgst);
-        document.getElementById('outSgst').textContent = fmt(sgst);
-        gstBreakdown.classList.add('visible');
-      } else {
-        gstRow.style.display = 'none';
-        gstBreakdown.classList.remove('visible');
-      }
-
-      /* ── Items table ── */
-      const wrap = document.getElementById('itemsTableWrap');
-      if (lineItems.length === 0) {
-        wrap.innerHTML = `<div style="text-align:center;color:var(--ink-3);font-size:13px;padding:20px 0;">No products selected yet.</div>`;
-      } else {
-        wrap.innerHTML = `
-        <table class="q-items-table">
-          <thead><tr>
-            <th>Product</th><th>Qty</th><th>Rate</th><th>Amount</th>
-          </tr></thead>
-          <tbody>
-            ${lineItems.map(li => `
-              <tr>
-                <td>
-                  <div class="td-name">${li.p.name}</div>
-                  <div class="td-sub">${li.p.fixed
-            ? li.p.fixedLabel
-            : li.p.code + (li.disc > 0 ? ` &nbsp;·&nbsp; <span style="color:var(--green);font-weight:700;">${li.disc}% off</span>` : '')
-          }</div>
-                </td>
-                <td>${li.p.fixed ? '1 kit' : li.qty.toLocaleString('en-IN')}</td>
-                <td>${li.p.fixed ? fmt(li.p.price) + '/kit' : fmt(li.p.price) + '/pc'}</td>
-                <td>${fmt(li.net)}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      `;
-      }
-
-      /* ── UPI ── */
-      const upiVpa = '87222401@ubin';
-      const merchant = 'Sanjivani Chavan';
-      const upiNote = `Order ${[...selectedIds].map(id => id.substring(0, 4)).join('+')} ${cPincode.replace(/\D/g, '').substring(0, 6) || '000000'}`.substring(0, 50);
-      const upiParams = new URLSearchParams({ pa: upiVpa, pn: merchant, am: grandTotal.toFixed(2), cu: 'INR', tn: upiNote });
-      const upiString = `upi://pay?${upiParams.toString()}`;
-      document.getElementById('upiLink').href = upiString;
-      qrcodeContainer.clear();
-      if (grandTotal > 0) qrcodeContainer.makeCode(upiString);
-
-      /* ── WhatsApp ── */
-      const itemLines = lineItems.map(li =>
-        `• ${li.p.name} (${li.p.code}) × ${li.p.fixed ? '1 kit (70 pcs)' : li.qty.toLocaleString('en-IN') + ' pcs'} @ ${fmt(li.p.price)}/${li.p.fixed ? 'kit' : 'pc'}` +
-        (li.disc > 0 ? ` [-${li.disc}%]` : '') + ` = ${fmt(li.net)}`
-      ).join('\n');
-
-      const gstLine = includeGst
-        ? `GST (18%): + ${fmt(gstAmount)}\n  CGST (9%): ${fmt(cgst)}\n  SGST (9%): ${fmt(sgst)}`
-        : `GST: Not Applied`;
-
-      const waMsg = `Hello,
-
-I would like to proceed with the following bulk order quotation.
-
-QUOTATION REF: ${quoteNum}
-DATE: ${fmtDate(now)}
-
-CUSTOMER DETAILS
-Name: ${cName}
-Phone: ${cNumber}
-Address: ${cAddress}
-Pincode: ${cPincode}
-State: ${cState || '—'}${cGST.length >= 15 ? `\nGST Number: ${cGST}` : ''}
-
-ORDER ITEMS
-${itemLines || '(no items)'}
-
-SUMMARY
-Subtotal:       ${fmt(totalSubtotal)}
-Bulk Discount:  - ${fmt(totalDiscount)}
-Net Value:      ${fmt(netValue)}
-Shipping:       ${cState && shippingCharge === 0 ? 'FREE' : (cState ? fmt(shippingCharge) : 'TBD')}
-${gstLine}
-─────────────────────
-Grand Total:    ${fmt(grandTotal)}
-
-Please share the next steps for confirmation and dispatch.`;
-
-      document.getElementById('waLink').href = `https://wa.me/919960160016?text=${encodeURIComponent(waMsg)}`;
+    var gstNumRow = $('gstNumberRow');
+    if (includeGst && cGST.length >= 15) {
+      $('outCustomerGST').textContent = cGST;
+      gstNumRow.style.display = 'flex';
+    } else {
+      gstNumRow.style.display = 'none';
     }
 
-    /* ── PAYMENT TAB SWITCH ── */
-    function switchPayTab(tab) {
-      document.getElementById('tabUpi').classList.toggle('active', tab === 'upi');
-      document.getElementById('tabBank').classList.toggle('active', tab === 'bank');
-      document.getElementById('panelUpi').classList.toggle('active', tab === 'upi');
-      document.getElementById('panelBank').classList.toggle('active', tab === 'bank');
+    /* Line items */
+    var lineItems = [];
+    var totalSubtotal = 0, totalDiscount = 0, totalPieces = 0;
+
+    selectedIds.forEach(function (id) {
+      var p = CATALOG.byId(id);
+      var qty = p.fixed ? 1 : (quantities[id] || 0);
+      if (qty <= 0) return;
+      var disc = CATALOG.discountFor(p, qty);
+      var sub = p.price * qty;
+      var discAmt = sub * disc / 100;
+      lineItems.push({ p: p, qty: qty, sub: sub, disc: disc, discAmt: discAmt, net: sub - discAmt });
+      totalSubtotal += sub;
+      totalDiscount += discAmt;
+      totalPieces += qty * (p.packSize || 1) * (p.fixed ? p.fixedQty : 1);
+    });
+
+    var netValue = totalSubtotal - totalDiscount;
+
+    /* Shipping */
+    var shippingCharge = 0;
+    var pillEl = $('shippingInfoPill');
+    if (cState !== '') {
+      var isHome = cState === SHIP.homeState;
+      if (netValue >= SHIP.freeAbove) {
+        shippingCharge = 0;
+        pillEl.style.display = 'inline-flex';
+        pillEl.className = 'shipping-info-pill';
+        pillEl.textContent = 'Free shipping applied to this order';
+      } else {
+        shippingCharge = isHome ? SHIP.homeStateRate : SHIP.restOfIndiaRate;
+        pillEl.style.display = 'inline-flex';
+        pillEl.className = 'shipping-info-pill paid';
+        pillEl.textContent = isHome
+          ? SHIP.homeState + ' flat rate: ' + fmt(SHIP.homeStateRate)
+          : 'Rest of India: ' + fmt(SHIP.restOfIndiaRate);
+      }
+    } else {
+      pillEl.style.display = 'none';
     }
 
-    /* ── COPY BANK DETAIL ── */
-    function copyBankDetail(btn, text) {
-      navigator.clipboard.writeText(text).then(() => {
-        btn.textContent = '✓ Copied';
-        btn.classList.add('copied');
-        setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1800);
-      }).catch(() => {
-        // Fallback
-        const ta = document.createElement('textarea');
-        ta.value = text;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-        btn.textContent = '✓ Copied';
-        btn.classList.add('copied');
-        setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1800);
-      });
+    /* GST */
+    var gstAmount = includeGst ? Math.round(netValue * 0.18) : 0;
+    var cgst = includeGst ? Math.round(netValue * 0.09) : 0;
+    var sgst = includeGst ? Math.round(netValue * 0.09) : 0;
+    var grandTotal = netValue + gstAmount + shippingCharge;
+
+    $('outSubtotal').textContent = fmt(totalSubtotal);
+    $('outDiscountAmt').textContent = totalDiscount > 0 ? '− ' + fmt(totalDiscount) : '₹0';
+    $('outNet').textContent = fmt(netValue);
+    $('outTotal').textContent = fmtNum(grandTotal);
+
+    /* UPI ceiling */
+    var upiNotice = $('upiLimitNotice');
+    if (grandTotal > 100000) {
+      upiNotice.classList.add('show');
+      switchPayTab('bank');
+    } else {
+      upiNotice.classList.remove('show');
     }
 
-    /* ── INIT ── */
-    renderGrid();
+    $('bankQuoteRef').textContent = quoteNum;
+
+    /* Shipping row */
+    var shRow = $('shippingRow');
+    var outSh = $('outShipping');
+    if (cState !== '') {
+      shRow.style.display = 'flex';
+      outSh.textContent = shippingCharge === 0 ? 'Free' : '+ ' + fmt(shippingCharge);
+      shRow.className = shippingCharge === 0 ? 'qt-line shipping-free' : 'qt-line';
+    } else {
+      shRow.style.display = 'none';
+    }
+
+    /* GST rows */
+    var gstRow = $('gstRow');
+    var gstBreakdown = $('gstBreakdown');
+    if (includeGst && netValue > 0) {
+      gstRow.style.display = 'flex';
+      $('outGst').textContent = '+ ' + fmt(gstAmount);
+      $('outCgst').textContent = fmt(cgst);
+      $('outSgst').textContent = fmt(sgst);
+      gstBreakdown.classList.add('visible');
+    } else {
+      gstRow.style.display = 'none';
+      gstBreakdown.classList.remove('visible');
+    }
+
+    /* Items table */
+    var wrap = $('itemsTableWrap');
+    if (lineItems.length === 0) {
+      wrap.innerHTML = '<div class="qc-items-empty">No products selected yet.</div>';
+    } else {
+      wrap.innerHTML = '' +
+        '<table class="q-items-table">' +
+        '<thead><tr><th scope="col">Product</th><th scope="col">Qty</th>' +
+        '<th scope="col">Rate</th><th scope="col">Amount</th></tr></thead><tbody>' +
+        lineItems.map(function (li) {
+          var unit = li.p.unitLabel || li.p.unit || 'pc';
+          var sub = li.p.fixed
+            ? esc(li.p.fixedLabel)
+            : esc(li.p.sku) + (li.disc > 0
+              ? ' · <span class="td-off">' + li.disc + '% off</span>' : '');
+          return '<tr>' +
+            '<td><div class="td-product">' + thumb(li.p, 'td-thumb') +
+            '<div><div class="td-name">' + esc(li.p.name) + '</div>' +
+            '<div class="td-sub">' + sub + '</div></div></div></td>' +
+            '<td>' + (li.p.fixed ? '1 kit' : fmtNum(li.qty) + ' ' + CATALOG.unitLabel(li.p, li.qty)) + '</td>' +
+            '<td>' + fmtRate(li.p.price) + '/' + esc(unit) + '</td>' +
+            '<td>' + fmt(li.net) + '</td>' +
+            '</tr>';
+        }).join('') +
+        '</tbody></table>';
+    }
+
+    /* UPI intent + QR */
+    var upiVpa = '87222401@ubin';
+    var merchant = 'Sanjivani Chavan';
+    var upiNote = ('ntagz ' + quoteNum).substring(0, 50);
+    var upiParams = new URLSearchParams({
+      pa: upiVpa, pn: merchant, am: grandTotal.toFixed(2), cu: 'INR', tn: upiNote
+    });
+    var upiString = 'upi://pay?' + upiParams.toString();
+    $('upiLink').href = upiString;
+    qrcodeContainer.clear();
+    if (grandTotal > 0) qrcodeContainer.makeCode(upiString);
+
+    /* WhatsApp handoff */
+    var itemLines = lineItems.map(function (li) {
+      var qtyTxt = li.p.fixed
+        ? '1 kit (70 pcs)'
+        : fmtNum(li.qty) + ' ' + CATALOG.unitLabel(li.p, li.qty);
+      var unit = li.p.unitLabel || li.p.unit || 'pc';
+      return '- ' + li.p.name + ' (' + li.p.sku + ') x ' + qtyTxt +
+        ' @ ' + fmtRate(li.p.price) + '/' + unit +
+        (li.disc > 0 ? ' [-' + li.disc + '%]' : '') + ' = ' + fmt(li.net);
+    }).join('\n');
+
+    var gstLine = includeGst
+      ? 'GST (18%): + ' + fmt(gstAmount) + '\n  CGST (9%): ' + fmt(cgst) + '\n  SGST (9%): ' + fmt(sgst)
+      : 'GST: Not applied';
+
+    var waMsg = 'Hello,\n\n' +
+      'I would like to proceed with the following bulk order quotation.\n\n' +
+      'QUOTATION REF: ' + quoteNum + '\n' +
+      'DATE: ' + fmtDate(now) + '\n\n' +
+      'CUSTOMER DETAILS\n' +
+      'Name: ' + cName + '\n' +
+      'Phone: ' + cNumber + '\n' +
+      'Address: ' + cAddress + '\n' +
+      'Pincode: ' + cPincode + '\n' +
+      'State: ' + (cState || '—') +
+      (cGST.length >= 15 ? '\nGST Number: ' + cGST : '') + '\n\n' +
+      'ORDER ITEMS\n' + (itemLines || '(no items)') + '\n\n' +
+      'SUMMARY\n' +
+      'Subtotal:       ' + fmt(totalSubtotal) + '\n' +
+      'Bulk Discount:  - ' + fmt(totalDiscount) + '\n' +
+      'Net Value:      ' + fmt(netValue) + '\n' +
+      'Shipping:       ' + (cState ? (shippingCharge === 0 ? 'FREE' : fmt(shippingCharge)) : 'TBD') + '\n' +
+      gstLine + '\n' +
+      '---------------------\n' +
+      'Grand Total:    ' + fmt(grandTotal) + '\n\n' +
+      'Please share the next steps for confirmation and dispatch.';
+
+    $('waLink').href = 'https://wa.me/919960160016?text=' + encodeURIComponent(waMsg);
+  }
+
+  /* ── PAYMENT TABS ─────────────────────────────────────────── */
+  function switchPayTab(tab) {
+    $('tabUpi').classList.toggle('active', tab === 'upi');
+    $('tabBank').classList.toggle('active', tab === 'bank');
+    $('tabUpi').setAttribute('aria-selected', tab === 'upi' ? 'true' : 'false');
+    $('tabBank').setAttribute('aria-selected', tab === 'bank' ? 'true' : 'false');
+    $('panelUpi').classList.toggle('active', tab === 'upi');
+    $('panelBank').classList.toggle('active', tab === 'bank');
+  }
+
+  /* ── COPY BANK DETAIL ─────────────────────────────────────── */
+  function copyBankDetail(btn, text) {
+    var done = function () {
+      btn.textContent = 'Copied';
+      btn.classList.add('copied');
+      setTimeout(function () { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1800);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(function () { legacyCopy(text); done(); });
+    } else {
+      legacyCopy(text); done();
+    }
+  }
+
+  function legacyCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (e) { /* clipboard unavailable */ }
+    document.body.removeChild(ta);
+  }
+
+  /* ── EVENT WIRING ─────────────────────────────────────────── */
+  $('productGrid').addEventListener('click', function (e) {
+    var card = e.target.closest('.prod-card');
+    if (card) toggleProduct(card.dataset.id);
+  });
+
+  $('selectedItems').addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-act]');
+    if (!btn) return;
+    var id = btn.dataset.id;
+    if (btn.dataset.act === 'inc') adjustQty(id, 1);
+    else if (btn.dataset.act === 'dec') adjustQty(id, -1);
+    else if (btn.dataset.act === 'remove') toggleProduct(id);
+  });
+
+  $('selectedItems').addEventListener('input', function (e) {
+    if (e.target.classList.contains('qty-input')) setQty(e.target.dataset.id, e.target.value);
+  });
+
+  $('selectedItems').addEventListener('blur', function (e) {
+    if (e.target.classList.contains('qty-input')) enforceMoq(e.target.dataset.id);
+  }, true);
+
+  $('catToggle').addEventListener('click', function (e) {
+    var tab = e.target.closest('.cat-tab');
+    if (tab) setCategory(tab.dataset.cat);
+  });
+
+  Array.prototype.forEach.call(
+    document.querySelectorAll('[data-recalc]'),
+    function (el) { el.addEventListener('input', calculateQuote); }
+  );
+
+  $('customerGST').addEventListener('input', function () {
+    this.value = this.value.toUpperCase();
     calculateQuote();
+  });
+
+  $('customerPincode').addEventListener('input', function () {
+    checkPincodeLength(this.value);
+  });
+
+  Array.prototype.forEach.call(
+    document.querySelectorAll('[data-copy]'),
+    function (btn) {
+      btn.addEventListener('click', function () { copyBankDetail(btn, btn.dataset.copy); });
+    }
+  );
+
+  Array.prototype.forEach.call(
+    document.querySelectorAll('[data-paytab]'),
+    function (btn) {
+      btn.addEventListener('click', function () { switchPayTab(btn.dataset.paytab); });
+    }
+  );
+
+  var printBtn = $('printQuote');
+  if (printBtn) printBtn.addEventListener('click', function () { window.print(); });
+
+  /* ── DEEP LINK: order.html?add=black-nfc-card,nfc-coin ────── */
+  (function applyDeepLink() {
+    var raw = new URLSearchParams(location.search).get('add');
+    if (!raw) return;
+    raw.split(',').forEach(function (id) { addProduct(id.trim()); });
+  })();
+
+  /* ── INIT ─────────────────────────────────────────────────── */
+  renderTiers();
+  renderGrid();
+  renderSelectedItems();
+  calculateQuote();
+
+  if (selectedIds.length) {
+    var target = document.getElementById('products');
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+})();

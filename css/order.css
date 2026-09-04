@@ -1888,3 +1888,307 @@
         margin-top: 8px;
       }
     }
+
+    /* ═══════════════════════════════════════════════════════════
+       CATALOGUE-DRIVEN UI — product thumbnails & professional pass
+       (products come from js/catalog.js; no emoji anywhere here)
+    ═══════════════════════════════════════════════════════════ */
+
+    /* ── Top strip separator (replaces the old emoji spacers) ── */
+    .top-strip-sep {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: currentColor;
+      opacity: .35;
+      display: inline-block;
+    }
+
+    /* ── Small helper copy ── */
+    .section-note {
+      font-size: 12px;
+      color: var(--ink-3);
+      font-weight: 500;
+      margin: 0 0 10px;
+      line-height: 1.5;
+    }
+
+    .section-note b {
+      color: var(--ink-2);
+    }
+
+    .muted-note {
+      color: var(--ink-3);
+      font-weight: 400;
+    }
+
+    .field-note {
+      font-size: 11.5px;
+      font-weight: 600;
+      font-family: var(--ff-head);
+      margin-top: 6px;
+      color: var(--ink-3);
+      letter-spacing: .01em;
+    }
+
+    .field-note.is-ok {
+      color: var(--teal);
+    }
+
+    .field-note.is-error {
+      color: #DC2626;
+    }
+
+    /* ── PRODUCT CARD (now a real <button>) ── */
+    .prod-card {
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+      width: 100%;
+      text-align: left;
+      font: inherit;
+      color: inherit;
+      appearance: none;
+      -webkit-appearance: none;
+      padding: 9px 9px 12px;
+      overflow: hidden;
+    }
+
+    .prod-card:focus-visible {
+      outline: 2px solid var(--tagz);
+      outline-offset: 2px;
+    }
+
+    .prod-card .prod-body {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    /* Thumbnail tile — small product photo on a neutral ground */
+    .prod-thumb {
+      display: block;
+      position: relative;
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #fff;
+      border: 1px solid var(--paper);
+      flex-shrink: 0;
+    }
+
+    .prod-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+      padding: 6px;
+      box-sizing: border-box;
+    }
+
+    .prod-thumb.is-placeholder,
+    .item-thumb.is-placeholder,
+    .td-thumb.is-placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--warm);
+      color: var(--ink-3);
+    }
+
+    .prod-thumb-ph {
+      width: 46%;
+      height: 46%;
+      max-width: 34px;
+      max-height: 34px;
+    }
+
+    .prod-card .prod-badge {
+      display: inline-block;
+      align-self: flex-start;
+      background: var(--tagz-lt);
+      color: var(--tagz);
+      border-radius: 4px;
+      padding: 2px 5px;
+      font-size: 8.5px;
+      font-weight: 700;
+      font-family: var(--ff-head);
+      letter-spacing: .07em;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .prod-card.bundle-card .prod-badge {
+      background: rgba(0, 122, 107, .12);
+      color: var(--teal);
+    }
+
+    .prod-card .prod-name {
+      display: block;
+      padding-right: 0;
+      /* two-line clamp keeps every tile the same height */
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      min-height: 2.6em;
+    }
+
+    .prod-card .prod-code,
+    .prod-card .prod-price {
+      display: block;
+    }
+
+    .prod-card .check {
+      z-index: 2;
+      top: 15px;
+      right: 15px;
+      box-shadow: 0 1px 4px rgba(26, 23, 20, .18);
+    }
+
+    /* ── SELECTED ITEM ROW thumbnail ── */
+    .item-thumb {
+      width: 42px;
+      height: 42px;
+      border-radius: 7px;
+      overflow: hidden;
+      background: #fff;
+      border: 1px solid var(--paper);
+      flex-shrink: 0;
+      display: block;
+    }
+
+    .item-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+      padding: 3px;
+      box-sizing: border-box;
+    }
+
+    .item-thumb .prod-thumb-ph {
+      width: 22px;
+      height: 22px;
+    }
+
+    .item-row .item-remove {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: none;
+      background: transparent;
+      color: var(--ink-3);
+      cursor: pointer;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background .15s, color .15s;
+    }
+
+    .item-row .item-remove svg {
+      width: 12px;
+      height: 12px;
+    }
+
+    .item-row .item-remove:hover {
+      background: var(--tagz-lt);
+      color: var(--tagz);
+    }
+
+    /* ── QUOTE TABLE thumbnail ── */
+    .td-product {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-width: 0;
+    }
+
+    .td-thumb {
+      width: 30px;
+      height: 30px;
+      border-radius: 5px;
+      overflow: hidden;
+      background: #fff;
+      border: 1px solid var(--paper);
+      flex-shrink: 0;
+      display: block;
+    }
+
+    .td-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+      padding: 2px;
+      box-sizing: border-box;
+    }
+
+    .td-thumb .prod-thumb-ph {
+      width: 16px;
+      height: 16px;
+    }
+
+    .q-items-table .td-off {
+      color: var(--green);
+      font-weight: 700;
+    }
+
+    .qc-items-empty {
+      text-align: center;
+      color: var(--ink-3);
+      font-size: 13px;
+      padding: 18px 0;
+    }
+
+    /* ── Location display: no emoji, clearer hierarchy ── */
+    .location-display.filled {
+      gap: 8px;
+    }
+
+    .location-state {
+      position: relative;
+      padding-left: 9px;
+    }
+
+    .location-state::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 50%;
+      width: 3px;
+      height: 3px;
+      margin-top: -1.5px;
+      border-radius: 50%;
+      background: currentColor;
+      opacity: .5;
+    }
+
+    @media (max-width: 520px) {
+      .prod-card {
+        padding: 8px 8px 10px;
+      }
+
+      .prod-card .check {
+        top: 13px;
+        right: 13px;
+      }
+
+      .item-thumb {
+        width: 34px;
+        height: 34px;
+      }
+    }
+
+    /* Print: thumbnails stay, chrome goes */
+    @media print {
+      .td-thumb {
+        border-color: #ddd;
+      }
+    }

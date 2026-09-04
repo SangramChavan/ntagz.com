@@ -55,8 +55,9 @@
 <body>
 
   <div class="top-strip">
-    <span>🚚</span> <b>Free shipping</b> on orders above ₹2,000 &nbsp;|&nbsp;
-    <span>💬</span> WhatsApp support: <b>+91 9960 160016</b>
+    <b>Free shipping</b> on orders above ₹2,000
+    <span class="top-strip-sep" aria-hidden="true"></span>
+    WhatsApp support <b>+91 9960 160016</b>
   </div>
 
   <div id="header-placeholder"></div>
@@ -419,7 +420,7 @@
   <section class="tap-hero" aria-label="Order custom NFC tags — hero">
     <div class="wrap">
       <div class="tap-hero-copy">
-        <span class="tap-eyebrow">⚡ NO PRINTING. NO QR. JUST TAP.</span>
+        <span class="tap-eyebrow">NO PRINTING. NO QR. JUST TAP.</span>
         <h2 class="tap-h1">Share Everything.<br><span class="grad">Touch Nothing.</span></h2>
         <p class="tap-sub">One tap sends your website, menu, or contact to any phone — instantly. No app to download, no
           paper to reprint, no link to type.</p>
@@ -468,9 +469,9 @@
   <section id="products">
     <div class="wrap">
       <div class="page-header">
-        <h1>Order Now</h1>
-        <p>Pick one or more products and set quantities to get an instant bulk wholesale quote. Mix and match — the more
-          you order, the more you save.</p>
+        <h1>Build your order</h1>
+        <p>Select products, set quantities, and a GST-ready wholesale quotation is generated instantly. Mix and
+          match freely — bulk tiers apply per line item.</p>
       </div>
 
       <div class="calc-grid">
@@ -481,10 +482,8 @@
           <div class="form-group">
             <div class="section-label">Choose Products (Select Multiple)</div>
             <div class="cat-toggle" id="catToggle" role="tablist" aria-label="Filter products by technology">
-              <button type="button" class="cat-tab active" data-cat="nfc" role="tab" aria-selected="true"
-                onclick="setCategory('nfc')">NFC</button>
-              <button type="button" class="cat-tab" data-cat="rfid" role="tab" aria-selected="false"
-                onclick="setCategory('rfid')">RFID</button>
+              <button type="button" class="cat-tab active" data-cat="nfc" role="tab" aria-selected="true">NFC</button>
+              <button type="button" class="cat-tab" data-cat="rfid" role="tab" aria-selected="false">RFID</button>
               <span class="cat-tab-slider" aria-hidden="true"></span>
             </div>
             <div class="product-grid" id="productGrid"></div>
@@ -492,21 +491,21 @@
 
           <div class="form-group" id="selectedSection" style="display:none;">
             <div class="section-label">Set Quantities</div>
-            <div style="font-size:12px;color:var(--ink-3);font-weight:500;margin-bottom:8px;">Minimum order quantity
-              (MOQ) is <b style="color:var(--ink-2);">10 pcs</b> per product.</div>
+            <p class="section-note">Minimum order quantity is <b>10 pcs</b> per product. Quantities step in
+              tens — type any figure to override.</p>
             <div class="selected-items" id="selectedItems"></div>
           </div>
 
           <div id="emptyHint" class="empty-hint" style="margin-bottom:20px;">
-            👆 Select at least one product above to get started
+            Select at least one product above to build your quote.
           </div>
 
           <!-- GST Mandatory Notice (18% GST is compulsory on every order, cannot be disabled) -->
           <div class="form-group">
             <label class="checkbox-group" style="cursor:default;">
               <input type="checkbox" id="gstCheck" checked disabled aria-disabled="true">
-              <span>18% GST is mandatory on all orders &nbsp;<span
-                  style="color:var(--ink-3);font-weight:400;">(cannot be removed — required by law)</span></span>
+              <span>18% GST is applied to all orders <span class="muted-note">(statutory — cannot be
+                  removed)</span></span>
             </label>
           </div>
 
@@ -515,8 +514,8 @@
             <div class="form-group" style="margin-bottom:0;">
               <label for="customerGST">GST Number <span
                   style="font-weight:400;color:var(--ink-3);font-size:11px;">(Optional — for tax invoice)</span></label>
-              <input type="text" id="customerGST" class="form-control" placeholder="e.g. 27AAPCA8177N1ZQ" maxlength="15"
-                oninput="this.value=this.value.toUpperCase();calculateQuote()">
+              <input type="text" id="customerGST" class="form-control" placeholder="e.g. 27AAPCA8177N1ZQ"
+                maxlength="15" autocomplete="off">
             </div>
           </div>
 
@@ -525,28 +524,27 @@
             <div class="form-group">
               <label for="customerName">Customer Name <span class="req-star">*</span></label>
               <input type="text" id="customerName" class="form-control" placeholder="Full name" required
-                oninput="calculateQuote()">
+                autocomplete="name" data-recalc>
             </div>
             <div class="form-group">
               <label for="customerNumber">Phone Number <span class="req-star">*</span></label>
-              <input type="text" id="customerNumber" class="form-control" placeholder="10-digit number" required
-                oninput="calculateQuote()">
+              <input type="tel" id="customerNumber" class="form-control" placeholder="10-digit number" required
+                autocomplete="tel" data-recalc>
             </div>
           </div>
 
           <div class="form-group">
             <label for="customerAddress">Delivery Address <span class="req-star">*</span></label>
             <textarea id="customerAddress" class="form-control" rows="2" placeholder="House / Flat, Street, Area"
-              required oninput="calculateQuote()"></textarea>
+              required autocomplete="street-address" data-recalc></textarea>
           </div>
 
           <div class="form-row-2">
             <div class="form-group">
               <label for="customerPincode">Pincode <span class="req-star">*</span></label>
-              <input type="text" id="customerPincode" class="form-control" placeholder="6-digit pincode" maxlength="6"
-                required oninput="checkPincodeLength(this.value)">
-              <div id="pincodeLoader" class="error-msg" style="color:var(--teal);font-weight:500;display:none;">🔍
-                Fetching location...</div>
+              <input type="text" id="customerPincode" class="form-control" placeholder="6-digit pincode"
+                maxlength="6" inputmode="numeric" required autocomplete="postal-code">
+              <div id="pincodeLoader" class="field-note" style="display:none;"></div>
             </div>
             <div class="form-group">
               <label>Location <span class="req-star">*</span></label>
@@ -560,12 +558,8 @@
           </div>
 
           <div class="tier-guide">
-            <h4>Auto-Applied Bulk Tiers (per item)</h4>
-            <div class="tier-row"><span>10 – 499 pcs</span><b>MOQ · No discount</b></div>
-            <div class="tier-row"><span>500 – 999 pcs</span><b>10% OFF</b></div>
-            <div class="tier-row"><span>1,000 – 4,999 pcs</span><b>15% OFF</b></div>
-            <div class="tier-row"><span>5,000 – 9,999 pcs</span><b>25% OFF</b></div>
-            <div class="tier-row"><span>10,000+ pcs</span><b>Custom Rate</b></div>
+            <h4>Auto-applied bulk tiers (per item)</h4>
+            <div id="tierRows"></div>
           </div>
         </div>
 
@@ -639,8 +633,7 @@
 
           <!-- Items -->
           <div class="qc-items" id="itemsTableWrap">
-            <div style="text-align:center;color:var(--ink-3);font-size:13px;padding:16px 0;">No products selected yet.
-            </div>
+            <div class="qc-items-empty">No products selected yet.</div>
           </div>
 
           <!-- Totals -->
@@ -683,15 +676,17 @@
           <div class="qc-pay">
 
             <!-- Payment method tabs -->
-            <div class="pay-tabs">
-              <button class="pay-tab tab-upi active" id="tabUpi" onclick="switchPayTab('upi')">
+            <div class="pay-tabs" role="tablist" aria-label="Payment method">
+              <button type="button" class="pay-tab tab-upi active" id="tabUpi" data-paytab="upi" role="tab"
+                aria-selected="true" aria-controls="panelUpi">
                 <svg style="width:13px;height:13px;fill:currentColor;flex-shrink:0;" viewBox="0 0 24 24">
                   <path
                     d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14h-2v-2h2v2zm0-4h-2V7h2v5z" />
                 </svg>
                 UPI / QR
               </button>
-              <button class="pay-tab tab-bank" id="tabBank" onclick="switchPayTab('bank')">
+              <button type="button" class="pay-tab tab-bank" id="tabBank" data-paytab="bank" role="tab"
+                aria-selected="false" aria-controls="panelBank">
                 <svg style="width:13px;height:13px;fill:currentColor;flex-shrink:0;" viewBox="0 0 24 24">
                   <path d="M4 10v7h3v-7H4zm6 0v7h3v-7h-3zm-3 10h14v3H7v-3zm9-10v7h3v-7h-3zm-2-8L3 7v1h18V7L12 2z" />
                 </svg>
@@ -709,7 +704,7 @@
             </div>
 
             <!-- UPI Panel -->
-            <div class="pay-panel active" id="panelUpi">
+            <div class="pay-panel active" id="panelUpi" role="tabpanel" aria-labelledby="tabUpi">
               <div class="upi-qr-wrapper">
                 <div id="qrcode"></div>
                 <p>Scan QR to instantly pay via any UPI App</p>
@@ -726,7 +721,7 @@
             </div>
 
             <!-- Bank Transfer Panel -->
-            <div class="pay-panel" id="panelBank">
+            <div class="pay-panel" id="panelBank" role="tabpanel" aria-labelledby="tabBank">
               <div class="bank-card">
                 <div class="bank-card-header">
                   <div class="bank-card-icon">
@@ -743,28 +738,28 @@
                   <div class="bank-detail-row">
                     <span class="bank-detail-label">Account Name</span>
                     <span class="bank-detail-value">AMBIVERT TECHNOLOGIES PVT LTD</span>
-                    <button class="bank-copy-btn"
-                      onclick="copyBankDetail(this,'AMBIVERT TECHNOLOGIES PVT LTD')">Copy</button>
+                    <button class="bank-copy-btn" type="button"
+                      data-copy="AMBIVERT TECHNOLOGIES PVT LTD">Copy</button>
                   </div>
                   <div class="bank-detail-row">
                     <span class="bank-detail-label">Account No.</span>
                     <span class="bank-detail-value">187705003857</span>
-                    <button class="bank-copy-btn" onclick="copyBankDetail(this,'187705003857')">Copy</button>
+                    <button class="bank-copy-btn" type="button" data-copy="187705003857">Copy</button>
                   </div>
                   <div class="bank-detail-row">
                     <span class="bank-detail-label">IFSC Code</span>
                     <span class="bank-detail-value">ICIC0001877</span>
-                    <button class="bank-copy-btn" onclick="copyBankDetail(this,'ICIC0001877')">Copy</button>
+                    <button class="bank-copy-btn" type="button" data-copy="ICIC0001877">Copy</button>
                   </div>
                   <div class="bank-detail-row">
                     <span class="bank-detail-label">BIC / SWIFT</span>
                     <span class="bank-detail-value">ICICINBB</span>
-                    <button class="bank-copy-btn" onclick="copyBankDetail(this,'ICICINBB')">Copy</button>
+                    <button class="bank-copy-btn" type="button" data-copy="ICICINBB">Copy</button>
                   </div>
                 </div>
                 <div class="bank-transfer-note">
-                  📌 <strong>Add your Quote No.</strong> (<span id="bankQuoteRef">QT-000000</span>) as the payment
-                  reference/remarks so we can match your transfer instantly.
+                  <strong>Add your quote number</strong> (<span id="bankQuoteRef">QT-000000</span>) as the
+                  payment reference so we can match your transfer instantly.
                 </div>
               </div>
             </div>
@@ -778,7 +773,7 @@
                 </svg>
                 Confirm Order via WhatsApp
               </a>
-              <button class="btn btn-outline btn-lg btn-block" onclick="window.print()">
+              <button type="button" id="printQuote" class="btn btn-outline btn-lg btn-block">
                 <svg style="width:14px;height:14px;fill:currentColor;" viewBox="0 0 24 24">
                   <path
                     d="M19 8H5V3H19V8ZM16 5H8V6H16V5ZM21 10C21.5523 10 22 10.4477 22 11V18H19V22H5V18H2V11C2 10.4477 2.44772 10 3 10H21ZM17 16H7V20H17V16ZM19 12C18.4477 12 18 12.4477 18 13C18 13.5523 18.4477 14 19 14C19.5523 14 20 13.5523 20 13C20 12.4477 19.5523 12 19 12Z" />
@@ -786,7 +781,7 @@
                 Download / Print Quote
               </button>
             </div>
-            <div class="quote-validity">📋 This quotation is valid for 15 days from issue date.</div>
+            <div class="quote-validity">This quotation is valid for 15 days from the issue date.</div>
           </div>
 
         </div><!-- /quote-card -->
@@ -797,6 +792,7 @@
 
   <div id="footer-placeholder"></div>
 
+  <script src="js/catalog.js" defer></script>
   <script src="js/order.js" defer></script>
 <script defer="" src="js/component-loader.js"></script>
 </body>

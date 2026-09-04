@@ -2532,3 +2532,15 @@
     @media (prefers-reduced-motion: reduce) {
 
     }
+
+/* Placeholder tile for catalogue products that have no photo yet
+   (rendered by js/catalog-sync.js) */
+.product-img .product-photo-ph {
+  width: 40%;
+  max-width: 88px;
+  height: auto;
+  margin: auto;
+  display: block;
+  color: var(--ink-3);
+  opacity: .55;
+}
