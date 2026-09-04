@@ -43,6 +43,7 @@
 
 html {
   scroll-behavior: smooth;
+  overflow-x: hidden;
 }
 
 body {
@@ -51,6 +52,8 @@ body {
   font-family: var(--ff-body);
   -webkit-font-smoothing: antialiased;
   line-height: 1.6;
+  overflow-x: hidden;
+  max-width: 100vw;
 }
 
 a {
@@ -703,5 +706,89 @@ body.cart-open-lock {
 @media (max-width: 420px) {
   .cart-drawer {
     width: 100vw;
+  }
+}
+
+/* ── MOBILE MENU ──
+   nav-links is hidden below 768px (see @media(min-width:768px) above)
+   with nothing replacing it — this hamburger + dropdown panel fills
+   that gap so NFC Check / Programmer / About / Track Order stay
+   reachable on phones. Wired up in js/component-loader.js right
+   after the header is injected. */
+.menu-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1.5px solid var(--paper);
+  background: #fff;
+  color: var(--ink-2);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color .2s, color .2s;
+}
+
+.menu-toggle:hover {
+  border-color: var(--tagz);
+  color: var(--tagz);
+}
+
+.menu-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+
+.menu-toggle .icon-close {
+  display: none;
+}
+
+.menu-toggle[aria-expanded="true"] .icon-burger {
+  display: none;
+}
+
+.menu-toggle[aria-expanded="true"] .icon-close {
+  display: block;
+}
+
+@media (min-width: 768px) {
+  .menu-toggle {
+    display: none;
+  }
+}
+
+.mobile-nav-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: 0;
+  overflow: hidden;
+  background: var(--cream);
+  border-top: 1px solid transparent;
+  transition: max-height .3s var(--ease), border-color .3s;
+}
+
+.mobile-nav-panel.open {
+  max-height: 420px;
+  border-top-color: var(--paper);
+}
+
+.mobile-nav-panel a {
+  padding: 14px 20px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink-2);
+  border-bottom: 1px solid var(--paper);
+}
+
+.mobile-nav-panel a:active,
+.mobile-nav-panel a:hover {
+  color: var(--tagz);
+  background: var(--tagz-lt);
+}
+
+@media (min-width: 768px) {
+  .mobile-nav-panel {
+    display: none;
   }
 }

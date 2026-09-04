@@ -765,6 +765,7 @@
     .q-items-table th:nth-child(3),
     .q-items-table th:last-child {
       text-align: right;
+      padding-left: 8px;
     }
 
     .q-items-table td {
@@ -781,6 +782,7 @@
       font-family: var(--ff-head);
       font-weight: 600;
       color: var(--ink);
+      padding-left: 8px;
     }
 
     .q-items-table .td-name {
@@ -2183,6 +2185,70 @@
       .item-thumb {
         width: 34px;
         height: 34px;
+      }
+
+      /* Thumb + qty stepper + total + remove button no longer fit
+         in one row at this width — the product name was being
+         crushed down to a couple of characters. Reflow into two
+         rows: photo+name on top, quantity/total/remove below. */
+      .item-row {
+        display: grid;
+        grid-template-columns: 34px 1fr auto;
+        grid-template-areas:
+          "thumb name   remove"
+          "qty   qty    total";
+        column-gap: 10px;
+        row-gap: 8px;
+        align-items: center;
+      }
+
+      .item-row .item-thumb {
+        grid-area: thumb;
+      }
+
+      .item-row .item-label {
+        grid-area: name;
+        min-width: 0;
+      }
+
+      .item-row .item-label .iname {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+      }
+
+      .item-row .item-remove {
+        grid-area: remove;
+      }
+
+      .item-row .qty-ctrl {
+        grid-area: qty;
+        justify-content: flex-start;
+      }
+
+      .item-row .item-total {
+        grid-area: total;
+        min-width: 0;
+      }
+
+      /* Items table: Qty/Rate/Amount were wrapping onto two lines
+         and running into each other at this width. */
+      .q-items-table th,
+      .q-items-table td {
+        font-size: 10.5px;
+      }
+
+      .q-items-table th:nth-child(2),
+      .q-items-table th:nth-child(3),
+      .q-items-table th:last-child,
+      .q-items-table td:nth-child(2),
+      .q-items-table td:nth-child(3),
+      .q-items-table td:last-child {
+        white-space: nowrap;
+        padding-left: 6px;
       }
     }
 
