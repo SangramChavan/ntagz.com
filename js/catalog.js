@@ -244,7 +244,7 @@
       packSize: 10,
       moq: 1,
       step: 1,
-      image: 'images/UHF-RFID-Label-Sticker-27x15mm.png',
+      image: 'images/UHF-RFID-Label-Sticker-27x15mm.jpg',
       detail: 'product/uhf-rfid-label/',
       category: 'rfid',
       homeCategory: 'rfid',
