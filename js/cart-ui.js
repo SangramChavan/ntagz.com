@@ -203,6 +203,9 @@
       if (p) {
         CART.add(p.id);
         flashAdded(addBtn);
+        /* The button flash alone leaves no visible path to checkout —
+           open the drawer so "Checkout →" is right there. */
+        openDrawer();
       }
       return;
     }
