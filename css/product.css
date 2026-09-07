@@ -240,3 +240,35 @@
     .related-card:hover { border-color: var(--tagz); transform: translateY(-2px); }
     .related-card .rn { font-family: var(--ff-head); font-weight: 700; font-size: 14px; margin-bottom: 4px; }
     .related-card .rp { font-size: 13px; color: var(--tagz); font-weight: 600; }
+
+    /* ── SIZE PICKER (products sold as multiple size SKUs) ── */
+    .size-pick { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+    .size-opt {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      background: #fff; border: 1px solid var(--paper); border-radius: var(--r);
+      padding: 14px 18px; flex-wrap: wrap;
+    }
+    .size-opt .so-label { font-family: var(--ff-head); font-weight: 700; font-size: 15px; color: var(--ink); }
+    .size-opt .so-sub { display: block; margin-top: 2px; font-size: 12px; font-weight: 500; color: var(--ink-3); }
+    .size-opt .so-right { display: flex; align-items: center; gap: 14px; }
+    .size-opt .so-price { font-family: var(--ff-head); font-weight: 700; font-size: 18px; color: var(--ink); white-space: nowrap; }
+    .size-opt .so-price span { font-size: 12px; font-weight: 500; color: var(--ink-3); }
+    .btn-sm { padding: 9px 16px; font-size: 13px; white-space: nowrap; }
+
+    /* ── BULK PRICE TABLE ── */
+    .bulk-table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
+    .bulk-table th, .bulk-table td { padding: 12px 10px; text-align: right; border-bottom: 1px solid var(--paper); }
+    .bulk-table th:first-child, .bulk-table td:first-child { text-align: left; }
+    .bulk-table th { font-family: var(--ff-head); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-3); font-weight: 700; }
+    .bulk-table td { color: var(--ink-2); }
+    .bulk-table td b { color: var(--ink); font-weight: 700; }
+    .bulk-table tr:last-child td { border-bottom: none; }
+    .bulk-table-wrap { overflow-x: auto; }
+
+    /* ── PLACEHOLDER PRODUCT PHOTO (no real photo shot yet) ── */
+    .prod-media.no-photo::after {
+      content: attr(data-placeholder);
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      text-align: center; padding: 28px; font-family: var(--ff-head); font-size: 14px; font-weight: 600;
+      color: var(--ink-3); background: var(--warm); line-height: 1.5;
+    }

@@ -127,6 +127,72 @@
       badge: 'Printed & Programmed',
       home: true
     },
+
+    /* ── GOOGLE REVIEW NFC STAND (tabletop, sold by size) ──────
+       Two designs (NFC-only / NFC+QR) × two sizes = 4 SKUs, each
+       a separate line item so the order-page qty stepper and the
+       shared bulk-discount tiers work with no extra code. Both
+       sizes of a design point at the same product/ page, which
+       shows a size-pick row rather than duplicating content.
+       home:false — order page only, no homepage tile (avoids four
+       near-duplicate tiles next to the existing review card). */
+    {
+      id: 'google-review-nfc-stand-12x12',
+      sku: 'GRS200',
+      name: 'Google Review NFC Stand — 12×12 cm',
+      price: 200,
+      unit: 'pc',
+      image: null,
+      detail: 'product/google-review-nfc-stand/',
+      category: 'nfc',
+      homeCategory: 'nfc',
+      tags: ['NFC', 'Tabletop Stand', '12×12 cm'],
+      desc: 'Tap-to-review counter stand, 12×12 cm, NFC only. Pre-programmed with your Google review link before dispatch.',
+      home: false
+    },
+    {
+      id: 'google-review-nfc-stand-10x10',
+      sku: 'GRS150',
+      name: 'Google Review NFC Stand — 10×10 cm',
+      price: 150,
+      unit: 'pc',
+      image: null,
+      detail: 'product/google-review-nfc-stand/',
+      category: 'nfc',
+      homeCategory: 'nfc',
+      tags: ['NFC', 'Tabletop Stand', '10×10 cm'],
+      desc: 'Tap-to-review counter stand, 10×10 cm, NFC only. Pre-programmed with your Google review link before dispatch.',
+      home: false
+    },
+    {
+      id: 'google-review-nfc-stand-with-qr-12x12',
+      sku: 'GRQ200',
+      name: 'Google Review NFC + QR Stand — 12×12 cm',
+      price: 200,
+      unit: 'pc',
+      image: null,
+      detail: 'product/google-review-nfc-stand-with-qr/',
+      category: 'nfc',
+      homeCategory: 'nfc',
+      tags: ['NFC', 'QR Fallback', '12×12 cm'],
+      desc: 'Tap-to-review counter stand, 12×12 cm, NFC plus a printed QR fallback for phones without NFC. Pre-programmed before dispatch.',
+      home: false
+    },
+    {
+      id: 'google-review-nfc-stand-with-qr-10x10',
+      sku: 'GRQ150',
+      name: 'Google Review NFC + QR Stand — 10×10 cm',
+      price: 150,
+      unit: 'pc',
+      image: null,
+      detail: 'product/google-review-nfc-stand-with-qr/',
+      category: 'nfc',
+      homeCategory: 'nfc',
+      tags: ['NFC', 'QR Fallback', '10×10 cm'],
+      desc: 'Tap-to-review counter stand, 10×10 cm, NFC plus a printed QR fallback for phones without NFC. Pre-programmed before dispatch.',
+      home: false
+    },
+
     {
       id: 'nfc-card-custom-printing',
       sku: 'PRN75',
