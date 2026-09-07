@@ -248,6 +248,8 @@
       background: #fff; border: 1px solid var(--paper); border-radius: var(--r);
       padding: 14px 18px; flex-wrap: wrap;
     }
+    .size-opt .so-thumb { width: 52px; height: 52px; border-radius: 8px; object-fit: cover; flex-shrink: 0; border: 1px solid var(--paper); }
+    .size-opt .so-body { flex: 1 1 160px; min-width: 0; }
     .size-opt .so-label { font-family: var(--ff-head); font-weight: 700; font-size: 15px; color: var(--ink); }
     .size-opt .so-sub { display: block; margin-top: 2px; font-size: 12px; font-weight: 500; color: var(--ink-3); }
     .size-opt .so-right { display: flex; align-items: center; gap: 14px; }
