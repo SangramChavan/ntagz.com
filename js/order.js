@@ -366,9 +366,12 @@
       gstNumRow.style.display = 'none';
     }
 
-    /* Line items */
+    /* Line items. Products flagged `allInclusive` are priced with GST
+       + shipping already absorbed — GST/shipping are only computed on
+       the regular lines below. */
     var lineItems = [];
     var totalSubtotal = 0, totalDiscount = 0, totalPieces = 0;
+    var allIncNet = 0, regNet = 0, hasAllInc = false;
 
     selectedIds.forEach(function (id) {
       var p = CATALOG.byId(id);
@@ -377,7 +380,10 @@
       var disc = CATALOG.discountFor(p, qty);
       var sub = p.price * qty;
       var discAmt = sub * disc / 100;
-      lineItems.push({ p: p, qty: qty, sub: sub, disc: disc, discAmt: discAmt, net: sub - discAmt });
+      var net = sub - discAmt;
+      if (p.allInclusive) { allIncNet += net; hasAllInc = true; }
+      else { regNet += net; }
+      lineItems.push({ p: p, qty: qty, sub: sub, disc: disc, discAmt: discAmt, net: net });
       totalSubtotal += sub;
       totalDiscount += discAmt;
       totalPieces += qty * (p.packSize || 1) * (p.fixed ? p.fixedQty : 1);
@@ -385,10 +391,15 @@
 
     var netValue = totalSubtotal - totalDiscount;
 
-    /* Shipping */
+    /* Shipping — included in the price of all-inclusive products. */
     var shippingCharge = 0;
     var pillEl = $('shippingInfoPill');
-    if (cState !== '') {
+    if (hasAllInc) {
+      shippingCharge = 0;
+      pillEl.style.display = (cState !== '') ? 'inline-flex' : 'none';
+      pillEl.className = 'shipping-info-pill';
+      pillEl.textContent = 'Shipping included in price';
+    } else if (cState !== '') {
       var isHome = cState === SHIP.homeState;
       if (netValue >= SHIP.freeAbove) {
         shippingCharge = 0;
@@ -407,11 +418,11 @@
       pillEl.style.display = 'none';
     }
 
-    /* GST */
-    var gstAmount = includeGst ? Math.round(netValue * 0.18) : 0;
-    var cgst = includeGst ? Math.round(netValue * 0.09) : 0;
-    var sgst = includeGst ? Math.round(netValue * 0.09) : 0;
-    var grandTotal = netValue + gstAmount + shippingCharge;
+    /* GST — 18% on the regular lines only; all-inclusive lines carry it. */
+    var gstAmount = includeGst ? Math.round(regNet * 0.18) : 0;
+    var cgst = includeGst ? Math.round(regNet * 0.09) : 0;
+    var sgst = includeGst ? Math.round(regNet * 0.09) : 0;
+    var grandTotal = regNet + gstAmount + allIncNet + shippingCharge;
 
     $('outSubtotal').textContent = fmt(totalSubtotal);
     $('outDiscountAmt').textContent = totalDiscount > 0 ? '− ' + fmt(totalDiscount) : '₹0';
@@ -443,7 +454,7 @@
     /* GST rows */
     var gstRow = $('gstRow');
     var gstBreakdown = $('gstBreakdown');
-    if (includeGst && netValue > 0) {
+    if (includeGst && regNet > 0) {
       gstRow.style.display = 'flex';
       $('outGst').textContent = '+ ' + fmt(gstAmount);
       $('outCgst').textContent = fmt(cgst);
@@ -467,8 +478,10 @@
           var unit = li.p.unitLabel || li.p.unit || 'pc';
           var sub = li.p.fixed
             ? esc(li.p.fixedLabel)
-            : esc(li.p.sku) + (li.disc > 0
-              ? ' · <span class="td-off">' + li.disc + '% off</span>' : '');
+            : esc(li.p.sku) +
+              (li.p.allInclusive ? ' · incl. GST &amp; shipping' : '') +
+              (li.disc > 0
+                ? ' · <span class="td-off">' + li.disc + '% off</span>' : '');
           return '<tr>' +
             '<td><div class="td-product">' + thumb(li.p, 'td-thumb') +
             '<div><div class="td-name">' + esc(li.p.name) + '</div>' +
@@ -501,12 +514,18 @@
       var unit = li.p.unitLabel || li.p.unit || 'pc';
       return '- ' + li.p.name + ' (' + li.p.sku + ') x ' + qtyTxt +
         ' @ ' + fmtRate(li.p.price) + '/' + unit +
+        (li.p.allInclusive ? ' [GST & ship incl.]' : '') +
         (li.disc > 0 ? ' [-' + li.disc + '%]' : '') + ' = ' + fmt(li.net);
     }).join('\n');
 
-    var gstLine = includeGst
-      ? 'GST (18%): + ' + fmt(gstAmount) + '\n  CGST (9%): ' + fmt(cgst) + '\n  SGST (9%): ' + fmt(sgst)
-      : 'GST: Not applied';
+    var gstLine;
+    if (hasAllInc && regNet === 0) {
+      gstLine = 'GST & Shipping: included in price';
+    } else if (includeGst) {
+      gstLine = 'GST (18%): + ' + fmt(gstAmount) + '\n  CGST (9%): ' + fmt(cgst) + '\n  SGST (9%): ' + fmt(sgst);
+    } else {
+      gstLine = 'GST: Not applied';
+    }
 
     var waMsg = 'Hello,\n\n' +
       'I would like to proceed with the following bulk order quotation.\n\n' +
@@ -524,7 +543,7 @@
       'Subtotal:       ' + fmt(totalSubtotal) + '\n' +
       'Bulk Discount:  - ' + fmt(totalDiscount) + '\n' +
       'Net Value:      ' + fmt(netValue) + '\n' +
-      'Shipping:       ' + (cState ? (shippingCharge === 0 ? 'FREE' : fmt(shippingCharge)) : 'TBD') + '\n' +
+      'Shipping:       ' + (hasAllInc ? 'Included' : (cState ? (shippingCharge === 0 ? 'FREE' : fmt(shippingCharge)) : 'TBD')) + '\n' +
       gstLine + '\n' +
       '---------------------\n' +
       'Grand Total:    ' + fmt(grandTotal) + '\n\n' +

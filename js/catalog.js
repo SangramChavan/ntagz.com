@@ -20,6 +20,11 @@
    Prices are ex-GST, in INR. Keep them in sync with the matching
    product/<slug>/index.html schema block.
 
+   Exception: products flagged  allInclusive: true  are priced as a
+   final, all-inclusive amount (GST + shipping absorbed), e.g. the
+   Google Review NFC Stands at ₹499/pc. The quote builder (order.js)
+   does not add GST or shipping on top of those products.
+
    ── AFTER EDITING THIS FILE ──
    This file is cached 4h at the edge with no other cache-busting.
    Bump the ?v=YYYYMMDD query string on its <script> tag in BOTH
@@ -143,8 +148,10 @@
       id: 'google-review-nfc-stand-10x10',
       sku: 'GRS150',
       name: 'Google Review NFC Stand — 10×10 cm (NFC only)',
-      price: 150,
+      price: 499,
       unit: 'pc',
+      moq: 1,
+      allInclusive: true,
       image: 'images/google-review-stand-10x10.jpg',
       detail: 'product/google-review-nfc-stand/',
       category: 'nfc',
@@ -157,8 +164,10 @@
       id: 'google-review-nfc-stand-12x12',
       sku: 'GRQ200',
       name: 'Google Review NFC + QR Stand — 12×12 cm',
-      price: 200,
+      price: 499,
       unit: 'pc',
+      moq: 1,
+      allInclusive: true,
       image: 'images/google-review-stand-12x12.jpg',
       detail: 'product/google-review-nfc-stand/',
       category: 'nfc',
