@@ -19,6 +19,12 @@
 
    Prices are ex-GST, in INR. Keep them in sync with the matching
    product/<slug>/index.html schema block.
+
+   ── AFTER EDITING THIS FILE ──
+   This file is cached 4h at the edge with no other cache-busting.
+   Bump the ?v=YYYYMMDD query string on its <script> tag in BOTH
+   index.html and order.html, or returning visitors keep seeing the
+   old catalogue for up to 4 hours after you deploy.
    ═══════════════════════════════════════════════════════════════ */
 
 (function (root) {

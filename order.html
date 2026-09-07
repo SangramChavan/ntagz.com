@@ -792,7 +792,10 @@
 
   <div id="footer-placeholder"></div>
 
-  <script src="js/catalog.js" defer></script>
+  <!-- Bump ?v= to today's date whenever js/catalog.js changes — it's cached
+       4h at the edge with no other cache-busting, so a stale query string
+       means returning visitors see old prices/products until it expires. -->
+  <script src="js/catalog.js?v=20260907" defer></script>
   <script src="js/cart.js" defer></script>
   <script src="js/cart-ui.js" defer></script>
   <script src="js/order.js" defer></script>
