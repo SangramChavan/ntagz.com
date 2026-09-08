@@ -1,0 +1,164 @@
+/* ═══════════════════════════════════════════════════════════
+   ntagz — PRICING PAGE (price list table)
+   Mobile-first: stacked product cards < 768px, table >= 768px.
+   Uses the shared design tokens from css/base.css.
+   ═══════════════════════════════════════════════════════════ */
+
+.p-hero {
+  padding: 64px 0 8px;
+  text-align: left;
+}
+.p-hero h1 {
+  font-family: var(--ff-head);
+  font-size: clamp(30px, 5vw, 46px);
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  margin-bottom: 10px;
+}
+.p-hero .lede {
+  color: var(--ink-2);
+  max-width: 620px;
+  font-size: 17px;
+}
+.p-hero .lede b { color: var(--ink); }
+
+.p-note-bulk {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: var(--teal-lt);
+  color: #02584d;
+  border: 1px solid #c7e4df;
+  border-radius: var(--r-lg);
+  padding: 16px 18px;
+  margin: 28px 0;
+  font-size: 14.5px;
+}
+.p-note-bulk svg { flex: 0 0 auto; margin-top: 2px; }
+.p-note-bulk strong { display: block; margin-bottom: 4px; font-size: 15px; }
+.p-note-bulk .tiers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.p-note-bulk .tier-pill {
+  background: #fff;
+  border: 1px solid #c7e4df;
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 13px;
+  color: #02584d;
+  white-space: nowrap;
+}
+
+.p-table-card {
+  background: #fff;
+  border: 1px solid var(--paper);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  margin-bottom: 40px;
+}
+.p-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+table.prices {
+  width: 100%;
+  min-width: 820px;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+table.prices caption {
+  caption-side: top;
+  text-align: left;
+  padding: 16px 20px;
+  color: var(--ink-3);
+  font-size: 13px;
+}
+.prices thead th {
+  background: var(--ink);
+  color: var(--cream);
+  text-align: left;
+  padding: 12px 14px;
+  font-family: var(--ff-head);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+}
+.prices thead th .pct-chip {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffc1a8;
+  font-size: 11px;
+  font-weight: 500;
+}
+.prices tbody th,
+.prices tbody td {
+  padding: 13px 14px;
+  border-top: 1px solid var(--paper);
+  vertical-align: top;
+}
+.prices tbody th {
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--ink);
+}
+.prices tbody td { color: var(--ink-2); }
+.prices tbody tr:hover td { background: var(--teal-lt); }
+.t-price { font-variant-numeric: tabular-nums; }
+.t-price .p-supply { color: var(--ink-3); font-weight: 500; margin-left: 2px; }
+a.p-cta {
+  display: inline-block;
+  color: var(--tagz-dk);
+  font-weight: 700;
+  white-space: nowrap;
+  border-bottom: 1px solid transparent;
+  transition: border-color .15s var(--ease);
+}
+a.p-cta:hover { border-bottom-color: var(--tagz); }
+
+/* ── Mobile: stack rows into labelled cards ── */
+@media (max-width: 767px) {
+  .p-table-wrap { overflow: visible; }
+  table.prices { min-width: 0; border-collapse: separate; border-spacing: 0 12px; }
+  .prices thead { display: none; }
+  .prices tbody,
+  .prices tbody tr,
+  .prices tbody th,
+  .prices tbody td { display: block; width: 100%; }
+  .prices tbody tr {
+    background: #fff;
+    border: 1px solid var(--paper);
+    border-radius: var(--r);
+    box-shadow: var(--shadow-card);
+    overflow: hidden;
+  }
+  .prices tbody th {
+    background: var(--warm);
+    border-bottom: 1px solid var(--paper);
+    font-size: 15px;
+  }
+  .prices tbody td {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 14px;
+    text-align: right;
+  }
+  .prices tbody td::before {
+    content: attr(data-label);
+    color: var(--ink-3);
+    font-size: 12.5px;
+    font-weight: 500;
+    white-space: normal;
+    text-align: left;
+  }
+  .prices tbody tr:hover td { background: transparent; }
+  .prices tbody tr:hover { background: var(--teal-lt); }
+}

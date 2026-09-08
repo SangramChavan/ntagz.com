@@ -507,7 +507,7 @@
               <input type="checkbox" id="gstCheck" checked disabled aria-disabled="true">
               <span>18% GST is applied to all orders <span class="muted-note">(statutory — cannot be
                   removed · all-inclusive products such as the Google Review NFC Stands already carry it in
-                  their ₹499 price)</span></span>
+                  their ₹149–₹199 price)</span></span>
             </label>
           </div>
 
@@ -797,10 +797,19 @@
   <!-- Bump ?v= to today's date whenever js/catalog.js changes — it's cached
        4h at the edge with no other cache-busting, so a stale query string
        means returning visitors see old prices/products until it expires. -->
-  <script src="js/catalog.js?v=20260907b" defer></script>
+  <script src="js/catalog.js?v=20260908" defer></script>
+  <script>
+    /* ── Order ledger (Google Sheets) ──
+       Paste the Apps Script web-app URL (scripts/order-log-appscript.gs)
+       here to start logging confirmed orders into the order sheet. Empty
+       = feature off; the order page works exactly the same either way. */
+    window.NTAGZ_ORDER_LOG_ENDPOINT = "";
+    window.NTAGZ_ORDER_LOG_KEY = "";
+  </script>
   <script src="js/cart.js" defer></script>
   <script src="js/cart-ui.js" defer></script>
-  <script src="js/order.js" defer></script>
+  <script src="js/order-log.js?v=20260907b" defer></script>
+  <script src="js/order.js?v=20260907b" defer></script>
 <script defer="" src="js/component-loader.js"></script>
 </body>
 

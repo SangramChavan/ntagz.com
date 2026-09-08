@@ -21,6 +21,9 @@
   var selectedIds = [];
   var quantities = {};
   var fetchedCity = '', fetchedState = '';
+  /* Last computed quote, captured for the order ledger (order-log.js).
+     Null until the customer edits quantities / details at least once. */
+  var lastQuote = null;
 
   var $ = function (id) { return document.getElementById(id); };
 
@@ -550,6 +553,34 @@
       'Please share the next steps for confirmation and dispatch.';
 
     $('waLink').href = 'https://wa.me/919960160016?text=' + encodeURIComponent(waMsg);
+
+    /* Order-ledger snapshot — plain data only, shapes defined in
+       js/order-log.js and scripts/order-log-appscript.gs. */
+    lastQuote = {
+      ref: quoteNum,
+      name: cName, phone: cNumber, address: cAddress,
+      pincode: cPincode, state: cState || '', gstin: cGST,
+      items: lineItems.map(function (li) {
+        return {
+          sku: li.p.sku,
+          name: li.p.name,
+          qty: li.p.fixed ? 1 : li.qty,
+          unit: li.p.unitLabel || li.p.unit || 'pc',
+          rate: li.p.price,
+          disc: li.disc || 0,
+          net: li.net
+        };
+      }),
+      qtyTotal: lineItems.reduce(function (s, li) { return s + (li.p.fixed ? 1 : li.qty); }, 0),
+      subtotal: totalSubtotal,
+      discount: totalDiscount,
+      netValue: netValue,
+      ship: hasAllInc && regNet === 0 ? 'Included' : (cState ? (shippingCharge === 0 ? 'FREE' : shippingCharge) : 'TBD'),
+      gstAmt: hasAllInc && regNet === 0 ? 'Included' : (includeGst ? gstAmount : 0),
+      grandTotal: grandTotal,
+      allInclusive: hasAllInc,
+      includeGst: includeGst
+    };
   }
 
   /* ── PAYMENT TABS ─────────────────────────────────────────── */
@@ -648,6 +679,11 @@
      cart's job is done, so clear it rather than leaving stale items
      waiting for the next visit. */
   $('waLink').addEventListener('click', function () {
+    if (lastQuote && window.NTAGZ_LOG_ORDER) {
+      lastQuote.ts = new Date().toISOString();
+      lastQuote.source = 'order.html';
+      window.NTAGZ_LOG_ORDER(lastQuote); /* fire-and-forget, never blocks WA */
+    }
     if (CART && selectedIds.length) CART.clear();
   });
 

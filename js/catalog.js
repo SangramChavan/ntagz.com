@@ -22,7 +22,7 @@
 
    Exception: products flagged  allInclusive: true  are priced as a
    final, all-inclusive amount (GST + shipping absorbed), e.g. the
-   Google Review NFC Stands at ₹499/pc. The quote builder (order.js)
+   Google Review NFC Stands at ₹149 (10×10) / ₹199 (12×12) per pc. The quote builder (order.js)
    does not add GST or shipping on top of those products.
 
    ── AFTER EDITING THIS FILE ──
@@ -148,7 +148,7 @@
       id: 'google-review-nfc-stand-10x10',
       sku: 'GRS150',
       name: 'Google Review NFC Stand — 10×10 cm (NFC only)',
-      price: 499,
+      price: 149,
       unit: 'pc',
       moq: 1,
       allInclusive: true,
@@ -164,7 +164,7 @@
       id: 'google-review-nfc-stand-12x12',
       sku: 'GRQ200',
       name: 'Google Review NFC + QR Stand — 12×12 cm',
-      price: 499,
+      price: 199,
       unit: 'pc',
       moq: 1,
       allInclusive: true,

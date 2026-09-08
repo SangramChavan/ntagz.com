@@ -1,0 +1,46 @@
+name: Sync catalog from Google Sheet
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Daily at 08:30 IST — picks up price edits made in the sheet.
+    - cron: '30 3 * * *'
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Published CSVs (File → Share → Publish to web → CSV).
+      # Set these as repository Variables (Settings → Actions → Variables):
+      #   PRODUCTS_CSV_URL  = published URL of the "products" sheet/tab
+      #   TIERS_CSV_URL     = published URL of the "tiers" sheet/tab (optional)
+      - name: Patch catalog.js from sheet
+        env:
+          PRODUCTS_CSV_URL: ${{ vars.PRODUCTS_CSV_URL }}
+          TIERS_CSV_URL: ${{ vars.TIERS_CSV_URL }}
+        run: node scripts/sync-from-sheet.js
+
+      - name: Commit back (only when prices changed)
+        run: |
+          if git diff --quiet; then
+            echo "No changes — skipping commit."
+            exit 0
+          fi
+          git config user.name "ntagz-pricebot"
+          git config user.email "pricebot@ntagz.com"
+          git add js/catalog.js
+          git commit -m "chore: sync catalogue prices from Google Sheet [skip ci]"
+          git push origin HEAD:main
+
+      # GitHub Pages (deploying from the main branch) picks this up automatically.
