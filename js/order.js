@@ -498,7 +498,7 @@
     }
 
     /* UPI intent + QR */
-    var upiVpa = '87222401@ubin';
+    var upiVpa = 'mayatchavan@axl';
     var merchant = 'Sanjivani Chavan';
     var upiNote = ('ntagz ' + quoteNum).substring(0, 50);
     var upiParams = new URLSearchParams({
