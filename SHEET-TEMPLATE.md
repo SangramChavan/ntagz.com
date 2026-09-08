@@ -39,6 +39,13 @@ sheet is an editing layer **and** a live order ledger:
 **Example tiers row:** `1000,9999,15,1000+ · 15% OFF` → a 15% tier from
 1,000 to 9,999 pcs. Set `label` to "Custom" when it's a call-for-quote tier.
 
+> 💡 **Skip the typing.** `assets/sheets/products.csv` and `assets/sheets/tiers.csv`
+> in this repo are pre-built from `js/catalog.js` (regenerate with
+> `node scripts/export-sheet-csv.js`). In the spreadsheet use **File → Import →
+> Upload → Replace current sheet** for each one instead of typing rows.
+> Sync normalises trailing zeros like `32.80 → 32.8` once — cosmetic,
+> not a price change.
+
 ---
 
 ## 2. Publish both tabs

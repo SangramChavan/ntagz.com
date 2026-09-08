@@ -1,0 +1,6 @@
+min,max,percent,label
+10,499,0,MOQ · No discount
+500,999,10,10% OFF
+1000,4999,15,15% OFF
+5000,9999,25,25% OFF
+10000,Infinity,25,Custom Rate
