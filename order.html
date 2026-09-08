@@ -491,9 +491,8 @@
 
           <div class="form-group" id="selectedSection" style="display:none;">
             <div class="section-label">Set Quantities</div>
-            <p class="section-note">Minimum order quantity is <b>10 pcs</b> per product by default
-              (the Google Review NFC Stands can be ordered from <b>1 pc</b>). Quantities step in tens —
-              type any figure to override.</p>
+            <p class="section-note">Minimum order quantity is <b>10 pcs</b> per product. Quantities step in
+              tens — type any figure to override.</p>
             <div class="selected-items" id="selectedItems"></div>
           </div>
 
@@ -797,7 +796,7 @@
   <!-- Bump ?v= to today's date whenever js/catalog.js changes — it's cached
        4h at the edge with no other cache-busting, so a stale query string
        means returning visitors see old prices/products until it expires. -->
-  <script src="js/catalog.js?v=20260908" defer></script>
+<script src="js/catalog.js?v=20260908a" defer></script>
   <script>
     /* ── Order ledger (Google Sheets) ──
        Paste the Apps Script web-app URL (scripts/order-log-appscript.gs)
