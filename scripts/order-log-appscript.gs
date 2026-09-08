@@ -20,8 +20,11 @@
  *      (It is visible in page source — it stops casual noise, it is
  *      NOT a security boundary.)
  *
- * The "orders" tab (and its header row) is created automatically on
- * the first POST, so no manual tab setup is needed.
+ * The "Orders" tab is reused if you already created one (matched
+ * case-insensitively), otherwise it is created with its header row.
+ * Row 1 is set to the canonical HEADERS below — never type headers
+ * yourself; any existing header row gets replaced so columns always
+ * line up with what the order page sends.
  * ═══════════════════════════════════════════════════════════════ */
 
 /** Set to a random string to require a matching `k` in the payload. */
@@ -34,15 +37,40 @@ var HEADERS = [
   'Grand Total', 'Status', 'Source'
 ];
 
+/** Locate the Orders tab — created as "Orders" if missing. */
+function findOrdersTab(ss) {
+  var named = ['Orders', 'orders'];
+  for (var i = 0; i < named.length; i++) {
+    var sh = ss.getSheetByName(named[i]);
+    if (sh) return sh;
+  }
+  var sheets = ss.getSheets();
+  for (i = 0; i < sheets.length; i++) {
+    if (/^orders$/i.test(sheets[i].getName())) return sheets[i];
+  }
+  return ss.insertSheet('Orders');
+}
+
+/** Ensure row 1 holds exactly HEADERS; write/repair if it doesn't. */
+function ensureHeaders(sh) {
+  var current = sh.getRange(1, 1, 1, HEADERS.length).getValues()[0];
+  var drift = !current[0];
+  if (!drift) {
+    for (var i = 0; i < HEADERS.length; i++) {
+      if (String(current[i]) !== HEADERS[i]) { drift = true; break; }
+    }
+  }
+  if (drift) sh.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
+}
+
 function doPost(e) {
   try {
     var body = JSON.parse((e.postData && e.postData.contents) || '{}');
     if (ALLOW_KEY && body.k !== ALLOW_KEY) return respond('forbidden', 403);
 
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sh = ss.getSheetByName('orders');
-    if (!sh) sh = ss.insertSheet('orders');
-    if (sh.getLastRow() === 0) sh.appendRow(HEADERS);
+    var sh = findOrdersTab(ss);
+    ensureHeaders(sh);
 
     var items = (body.items || []).map(function (it) {
       return (it.sku || '') + ' x ' + (it.qty || 0) +
