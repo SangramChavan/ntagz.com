@@ -506,7 +506,7 @@
               <input type="checkbox" id="gstCheck" checked disabled aria-disabled="true">
               <span>18% GST is applied to all orders <span class="muted-note">(statutory — cannot be
                   removed · all-inclusive products such as the Google Review NFC Stands already carry it in
-                  their ₹149–₹199 price)</span></span>
+                  their ₹99–₹199 price)</span></span>
             </label>
           </div>
 
@@ -704,7 +704,7 @@
               UPI limit is ₹1,00,000 — this order exceeds it. Please use Bank Transfer.
             </div>
 
-            <!-- UPI Panel -->
+<!-- UPI Panel -->
             <div class="pay-panel active" id="panelUpi" role="tabpanel" aria-labelledby="tabUpi">
               <div class="upi-qr-wrapper">
                 <div id="qrcode"></div>
@@ -715,8 +715,21 @@
                   <svg style="width:16px;height:16px;fill:currentColor;" viewBox="0 0 24 24">
                     <path
                       d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14h-2v-2h2v2zm0-4h-2V7h2v5z" />
-                  </svg>
+                    </svg>
                   Pay via UPI App
+                </a>
+              </div>
+            </div>
+
+            <!-- Razorpay Panel -->
+            <div class="pay-panel" id="panelRazorpay" role="tabpanel" aria-labelledby="tabRazorpay">
+              <div class="razorpay-qr-wrapper">
+                <div id="rzp-qrcode"></div>
+                <p>Scan QR to pay via Razorpay</p>
+              </div>
+              <div class="quote-actions">
+                <a href="#" id="rzpPayNow" class="btn btn-razorpay btn-lg btn-block">
+                  Pay via Razorpay
                 </a>
               </div>
             </div>
@@ -799,7 +812,7 @@
   <!-- Bump ?v= to today's date whenever js/catalog.js changes — it's cached
        4h at the edge with no other cache-busting, so a stale query string
        means returning visitors see old prices/products until it expires. -->
-<script src="js/catalog.js?v=20260908e" defer></script>
+<script src="js/catalog.js?v=20260914" defer></script>
   <script>
     /* ── Order ledger (Google Sheets) ──
        Paste the Apps Script web-app URL (scripts/order-log-appscript.gs)
@@ -813,6 +826,75 @@
   <script src="js/order-log.js?v=20260907b" defer></script>
   <script src="js/order.js?v=20260908d" defer></script>
 <script defer="" src="js/component-loader.js"></script>
+  <script>
+    // Razorpay checkout initialization
+    document.getElementById("rzpPayNow").addEventListener("click", function() {
+      var total = parseInt(document.getElementById("outTotal").innerText.replace(/[^\d]/g, ''));
+      if (total <= 0) {
+        alert("Please add products to your order first.");
+        return;
+      }
+      
+      // Create Razorpay order via our server
+      fetch("/api/create-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: total })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.error) {
+          alert(data.error);
+          return;
+        }
+        
+        var options = {
+          key: "rzp_test_your_razorpay_key_id", // Replace with your Razorpay key ID
+          amount: data.amount * 100, // amount in paise
+          currency: "INR",
+          name: "nTagz",
+          description: "Order payment - " + (document.getElementById("quoteNum") ? document.getElementById("quoteNum").innerText : "QT-000000"),
+          image: "/img/favicon.svg",
+          handler: function (response) {
+            // Send payment success to our webhook
+            fetch("/api/payment-success", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_signature: response.razorpay_signature,
+                order_amount: total
+              })
+            })
+            .then(res => res.text())
+            .then(text => {
+              // Show success message
+              alert("Payment successful! Order ID: " + response.razorpay_payment_id);
+              // Reload or redirect to success page
+              window.location.href = "/success.html";
+            })
+            .catch(err => console.error("Error:", err));
+          },
+          prefill: {
+            name: "",
+            email: "",
+            contact: ""
+          },
+          notes: {
+            address: ""
+          }
+        };
+        
+        var rzp = new Razorpay(options);
+        rzp.open();
+      })
+      .catch(err => {
+        console.error("Error:", err);
+        alert("Failed to create order. Please try again.");
+      });
+    });
+  </script>
 </body>
 
 </html>
