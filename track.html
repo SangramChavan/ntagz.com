@@ -64,21 +64,31 @@
     <section class="track-hero">
       <div class="track-icon">📦</div>
       <h1>Track Your Shipment</h1>
-      <p>Enter your AWB or tracking number below. We partner with Ekart Logistics to ensure fast, secure delivery across India.</p>
+      <p>Enter your AWB or tracking number below. We ship pan-India via Delhivery, Blue Dart, Trackon and Ekart Logistics.</p>
       
       <div class="track-form-card">
         <form id="trackingForm" onsubmit="handleTracking(event)">
           <div class="form-group">
-            <label for="trackingId">Tracking ID / AWB Number</label>
-            <input type="text" id="trackingId" class="form-control" placeholder="e.g. FMPC1234567890" required autocomplete="off">
+            <label for="carrier">Courier</label>
+            <select id="carrier" class="form-control">
+              <option value="delhivery">Delhivery</option>
+              <option value="bluedart">Blue Dart</option>
+              <option value="trackon">Trackon</option>
+              <option value="ekart">Ekart Logistics</option>
+            </select>
           </div>
-          <button type="submit" class="btn btn-tagz btn-block">Track via Ekart Logistics →</button>
+          <div class="form-group">
+            <label for="trackingId">Tracking ID / AWB Number</label>
+            <input type="text" id="trackingId" class="form-control" placeholder="e.g. 1234567890" required autocomplete="off">
+          </div>
+          <button type="submit" class="btn btn-tagz btn-block" id="trackBtn">Track via Delhivery →</button>
+          <p class="track-copied" id="trackCopied" hidden></p>
         </form>
 
         <div class="track-meta">
           <span class="track-meta-icon">🔒</span>
           <div>
-            For security and accuracy, clicking 'Track' will securely open your live tracking details directly on the official Ekart Logistics tracking portal in a new tab.
+            For security and accuracy, clicking 'Track' will securely open the official courier tracking portal in a new tab. Some couriers do not accept a prefilled tracking ID, so we copy it to your clipboard to paste there.
           </div>
         </div>
       </div>
