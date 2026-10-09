@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Order Confirmation — ntagz</title>
+  <meta name="robots" content="noindex" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=Manrope:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/base.css" />
+  <style>
+    body { min-height: 100vh; display: flex; flex-direction: column; }
+    main {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+    }
+    .confirm-card {
+      background: var(--warm);
+      border-radius: var(--r-xl);
+      box-shadow: var(--shadow-strong);
+      padding: 48px 36px;
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+    }
+    .confirm-icon {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+      font-size: 32px;
+    }
+    .confirm-icon.success { background: #F0FDF4; }
+    .confirm-icon.failed  { background: #FFF0EB; }
+    .confirm-title {
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--ink);
+      margin: 0 0 10px;
+    }
+    .confirm-subtitle {
+      color: var(--ink-2);
+      font-size: 16px;
+      margin: 0 0 28px;
+      line-height: 1.55;
+    }
+    .order-id-box {
+      background: var(--paper);
+      border-radius: var(--r);
+      padding: 14px 20px;
+      margin-bottom: 28px;
+      font-size: 13px;
+      color: var(--ink-3);
+    }
+    .order-id-box strong {
+      display: block;
+      font-size: 17px;
+      color: var(--ink);
+      margin-top: 4px;
+      word-break: break-all;
+    }
+    .confirm-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .confirm-actions .btn {
+      width: 100%;
+      justify-content: center;
+      text-align: center;
+    }
+    .trust-note {
+      margin-top: 24px;
+      font-size: 13px;
+      color: var(--ink-3);
+    }
+    .trust-note a { color: var(--tagz); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <script src="../js/component-loader.js"></script>
+
+  <main>
+    <div class="confirm-card" id="confirmCard">
+      <!-- filled by JS below -->
+    </div>
+  </main>
+
+  <script src="../js/catalog.js"></script>
+  <script src="../js/cart.js"></script>
+  <script>
+    var params = new URLSearchParams(location.search);
+    var status  = params.get('status')  || 'success';
+    var txnid   = params.get('txnid')   || params.get('orderId') || '';
+    var amount  = params.get('amount')  || '';
+    var gateway = params.get('gateway') || '';
+
+    var card = document.getElementById('confirmCard');
+    var isSuccess = status === 'success';
+
+    if (isSuccess && window.NTAGZ_CART) {
+      window.NTAGZ_CART.clear();
+    }
+
+    var orderIdHtml = txnid
+      ? '<div class="order-id-box">Order / Transaction ID<strong>' + escHtml(txnid) + '</strong></div>'
+      : '';
+
+    var amountHtml = (isSuccess && amount)
+      ? '<div class="order-id-box">Amount paid<strong>₹' + escHtml(amount) + '</strong></div>'
+      : '';
+
+    card.innerHTML = isSuccess
+      ? '<div class="confirm-icon success">✓</div>' +
+        '<h1 class="confirm-title">Order confirmed!</h1>' +
+        '<p class="confirm-subtitle">Your payment was successful. We\'ll start preparing your NFC order and ship it within 2–3 business days.</p>' +
+        orderIdHtml +
+        amountHtml +
+        '<div class="confirm-actions">' +
+          '<a class="btn btn-tagz" href="../track.html">Track your order →</a>' +
+          '<a class="btn btn-outline" href="../product/">Browse more products</a>' +
+        '</div>' +
+        '<p class="trust-note">Questions? <a href="mailto:hello@ntagz.com">hello@ntagz.com</a> · <a href="https://wa.me/919503123456">WhatsApp</a></p>'
+      : '<div class="confirm-icon failed">✕</div>' +
+        '<h1 class="confirm-title">Payment not completed</h1>' +
+        '<p class="confirm-subtitle">Your payment was not processed. No amount has been charged. You can try again or contact us for help.</p>' +
+        orderIdHtml +
+        '<div class="confirm-actions">' +
+          '<a class="btn btn-tagz" href="../order.html">Try again →</a>' +
+          '<a class="btn btn-outline" href="mailto:hello@ntagz.com">Contact us</a>' +
+        '</div>' +
+        '<p class="trust-note">If money was deducted, it will be refunded in 5–7 business days.</p>';
+
+    function escHtml(str) {
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+  </script>
+</body>
+</html>

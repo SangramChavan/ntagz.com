@@ -177,19 +177,17 @@ async function onRequest({ request, env }) {
       } else {
         transaction = { status: body.status };
       }
-      const title = body.status === "success" ? "Payment verified" : "Payment not completed";
-      const message = body.status === "success" ? "Your payment was successful. You may close this page." : "PayU reports this payment was not successful.";
-      return new Response(`<!doctype html><title>${title}</title><main><h1>${title}</h1><p>${message}</p></main>`, {
-        headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'" },
+      const isSuccess = body.status === "success";
+      const confirmParams = new URLSearchParams({
+        status: isSuccess ? "success" : "failed",
+        gateway: "payu",
+        ...(body.txnid  && { txnid:  body.txnid }),
+        ...(body.amount && { amount: body.amount }),
       });
+      return Response.redirect(`https://www.ntagz.com/order/confirm.html?${confirmParams}`, 303);
     } catch (error) {
-      const message = error instanceof Error && error.message === "Invalid PayU payment signature"
-        ? error.message
-        : "We could not confirm this transaction. Please contact nTagz before retrying.";
-      return new Response(`<!doctype html><title>Payment status</title><main><h1>Payment status unavailable</h1><p>${message}</p></main>`, {
-        status: 502,
-        headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'" },
-      });
+      const confirmParams = new URLSearchParams({ status: "failed", gateway: "payu" });
+      return Response.redirect(`https://www.ntagz.com/order/confirm.html?${confirmParams}`, 303);
     }
   }
 
