@@ -277,6 +277,11 @@
       margin-bottom: 48px;
     }
 
+    .hero-actions .btn-ghost {
+      color: var(--ink);
+      border-color: var(--ink-3);
+    }
+
     .hero-proof {
       display: flex;
       flex-direction: column;
@@ -797,7 +802,7 @@
     }
 
     .product-card {
-      background: #fff;
+      background: var(--surface);
       border: 1px solid var(--paper);
       border-radius: var(--r-xl);
       overflow: hidden;
@@ -1131,7 +1136,7 @@
       display: flex;
       flex-direction: column;
       flex-grow: 1;
-      background: #fff;
+      background: var(--surface);
     }
 
     .product-name {
@@ -1579,7 +1584,7 @@
       width: 48px;
       height: 48px;
       border-radius: 50%;
-      background: #fff;
+      background: var(--surface);
       border: 1.5px dashed var(--ink-3);
       display: flex;
       align-items: center;
@@ -1645,12 +1650,11 @@
       width: 56px;
       height: 56px;
       border-radius: 14px;
-      background: #fff;
+      background: var(--surface);
       border: 1.5px solid var(--paper);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 26px;
       margin-bottom: 24px;
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
       transition: transform 0.4s var(--ease), box-shadow 0.4s;
@@ -1683,7 +1687,7 @@
     }
 
     .usecase-card {
-      background: #fff;
+      background: var(--surface);
       border: 1.5px solid var(--paper);
       border-radius: var(--r-xl);
       padding: 32px;
@@ -1807,7 +1811,7 @@
     }
 
     .testi-card {
-      background: #fff;
+      background: var(--surface);
       border: 1px solid var(--paper);
       border-radius: var(--r-xl);
       padding: 32px;
@@ -1901,7 +1905,7 @@
     }
 
     .rfid-table-wrap {
-      background: #fff;
+      background: var(--surface);
       border-radius: var(--r-xl);
       border: 1px solid rgba(0, 122, 107, 0.15);
       overflow: hidden;
@@ -2025,7 +2029,7 @@
     }
 
     .faq-item {
-      background: #fff;
+      background: var(--surface);
       border-radius: var(--r-lg);
       border: 1px solid var(--paper);
       overflow: hidden;
@@ -2155,9 +2159,9 @@
     }
 
     .badge-icon {
-      font-size: 32px;
       margin-bottom: 12px;
-      display: block;
+      display: flex;
+      justify-content: center;
     }
 
     .badge-title {
@@ -2183,7 +2187,7 @@
     .location-inner {
       display: grid;
       grid-template-columns: 1fr;
-      background: #fff;
+      background: var(--surface);
       border: 1px solid var(--paper);
       border-radius: var(--r-xl);
       overflow: hidden;
@@ -2318,7 +2322,7 @@
         width: 40px;
         height: 40px;
         border-radius: 50%;
-        background: #fff;
+        background: var(--surface);
         border: 1px solid var(--paper);
         align-items: center;
         justify-content: center;
@@ -2470,7 +2474,7 @@
       }
 
       .step:hover {
-        background: #fff;
+        background: var(--surface);
         transform: translateY(-4px);
         box-shadow: 0 12px 40px rgba(0, 0, 0, 0.05);
         z-index: 40 !important;
@@ -2561,3 +2565,12 @@
   color: var(--ink-3);
   opacity: .55;
 }
+
+    /* ── MEMBER STRIP ── */
+    .member-strip { background: var(--warm); padding: 32px 0; }
+    .member-strip-inner { display: flex; flex-direction: column; gap: 16px; }
+    .member-strip h2 { font-size: 20px; margin-bottom: 6px; }
+    .member-strip p { color: var(--ink-2); font-size: 14px; max-width: 62ch; }
+    @media (min-width: 768px) {
+      .member-strip-inner { flex-direction: row; align-items: center; justify-content: space-between; gap: 32px; }
+    }

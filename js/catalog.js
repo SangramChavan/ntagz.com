@@ -133,7 +133,7 @@
       image: 'images/google-review-card.jpg',
       detail: 'product/google-review-nfc-card/',
       category: 'nfc',
-      homeCategory: 'nfc',
+      homeCategory: 'review',
       tags: ['NFC', 'Printed', 'Review Collection'],
       desc: 'Printed and pre-programmed review card — one tap opens your Google review form. Supplied ready to place on a counter.',
       badge: 'Printed & Programmed',
@@ -144,7 +144,7 @@
        The QR fallback is size-locked, not a free choice: the 5×5 and
        9×9 are NFC-only (smaller panels, no room for a QR block) and
        the 12×12 is NFC + a printed QR fallback. Three SKUs, one page.
-       home:false — order page only, no homepage tile. */
+       home:true — one homepage tile per SKU, filed under the Google Review tab. */
     {
       id: 'google-review-nfc-stand-5x5',
       sku: 'GRS99',
@@ -156,10 +156,10 @@
       image: 'images/google-review-stand-10x10.jpg',
       detail: 'product/google-review-nfc-stand/',
       category: 'nfc',
-      homeCategory: 'nfc',
+      homeCategory: 'review',
       tags: ['NFC', 'Tabletop Stand', '5×5 cm'],
       desc: 'Tap-to-review counter stand, 5×5 cm, NFC only. Pre-programmed with your Google review link before dispatch.',
-      home: false
+      home: true
     },
     {
       id: 'google-review-nfc-stand-10x10',
@@ -172,10 +172,10 @@
       image: 'images/google-review-stand-10x10.jpg',
       detail: 'product/google-review-nfc-stand/',
       category: 'nfc',
-      homeCategory: 'nfc',
+      homeCategory: 'review',
       tags: ['NFC', 'Tabletop Stand', '9×9 cm'],
       desc: 'Tap-to-review counter stand, 9×9 cm, NFC only. Pre-programmed with your Google review link before dispatch.',
-      home: false
+      home: true
     },
     {
       id: 'google-review-nfc-stand-12x12',
@@ -188,10 +188,10 @@
       image: 'images/google-review-stand-12x12.jpg',
       detail: 'product/google-review-nfc-stand/',
       category: 'nfc',
-      homeCategory: 'nfc',
+      homeCategory: 'review',
       tags: ['NFC', 'QR Fallback', '12×12 cm'],
       desc: 'Tap-to-review counter stand, 12×12 cm, NFC plus a printed QR fallback for phones without NFC. Pre-programmed before dispatch.',
-      home: false
+      home: true
     },
 
     {

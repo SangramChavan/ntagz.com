@@ -139,12 +139,6 @@
         "description": "India's favourite NFC & RFID product brand. We sell physical hardware — NFC cards, tags, coins, and flex circuits — that makes contactless magic happen.",
         "slogan": "Tap. Share. Connect.",
         "foundingDate": "2022",
-        "founders": [
-          {
-            "@type": "Person",
-            "name": "ntagz Founder"
-          }
-        ],
         "address": {
           "@type": "PostalAddress",
           "@id": "https://www.ntagz.com/#address",
@@ -165,7 +159,6 @@
               "name": "India"
             },
             "availableLanguage": ["English", "Hindi", "Marathi"],
-            "contactOption": "TollFree",
             "hoursAvailable": {
               "@type": "OpeningHoursSpecification",
               "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
@@ -855,9 +848,7 @@
 </svg>
 </a>
 <div class="top-strip">
-<span>🚚</span> <b>Free shipping</b> on orders above ₹2,000 |
-    <span>💬</span> WhatsApp support: <b>+91 9960 160016</b> |
-    <span>🛒</span> Also on <b>Amazon · Flipkart · IndiaMart</b>
+  <div><b>Free shipping</b> on orders above ₹2,000 · WhatsApp: <b>+91 9960 160016</b> · Also on <b>Amazon · Flipkart · IndiaMart</b></div>
 </div>
 <div id="header-placeholder"></div>
 <main id="main-content">
@@ -881,13 +872,8 @@
                   Flipkart</span></span>
 </div>
 <div class="hero-actions">
-<a class="btn btn-tagz btn-lg" href="#products">Explore Products ↓</a>
-<div class="mt-3">
-<span style="font-size: 0.9em; color: #555;">
-                  ✨ <em>NFC tags require zero batteries—they pull power directly from your phone and can last for over
-                    100,000 scans!</em>
-</span>
-</div>
+<a class="btn btn-tagz btn-lg" href="#products">Shop NFC Products</a>
+<a class="btn btn-ghost btn-lg" href="product/google-review-nfc-stand/">Google Review Stands</a>
 </div>
 <div class="hero-proof">
 <div class="proof-item">
@@ -1007,6 +993,7 @@
 <div aria-label="Filter products by category" class="filter-tabs reveal" role="tablist">
 <button aria-controls="productsGrid" aria-selected="true" class="ftab active" onclick="filterProducts('all',this)" role="tab">All Products</button>
 <button aria-controls="productsGrid" aria-selected="false" class="ftab" onclick="filterProducts('nfc',this)" role="tab">NFC Cards</button>
+<button aria-controls="productsGrid" aria-selected="false" class="ftab" onclick="filterProducts('review',this)" role="tab">Google Review</button>
 <button aria-controls="productsGrid" aria-selected="false" class="ftab" onclick="filterProducts('tag',this)" role="tab">NFC Tags</button>
 <button aria-controls="productsGrid" aria-selected="false" class="ftab" onclick="filterProducts('rfid',this)" role="tab">RFID</button>
 <button aria-controls="productsGrid" aria-selected="false" class="ftab" onclick="filterProducts('sample',this)" role="tab">Sample Kit</button>
@@ -1014,7 +1001,7 @@
 <div class="products-grid" id="productsGrid">
 <!-- SAMPLE KIT — shown first so it catches the eye -->
 <div aria-label="View details for Complete NFC Sample Kit" class="product-card sample-card" data-cat="sample" data-detail="product/sample-kit/" role="link" tabindex="0">
-<span class="product-badge badge-sample">🎁 SAMPLE KIT</span>
+<span class="product-badge badge-sample">SAMPLE KIT</span>
 <div class="product-img img-bg-sample" style="background:#1A1714;overflow:hidden;">
 <svg style="width:100%;height:100%;display:block;" viewbox="0 0 400 220" xmlns="http://www.w3.org/2000/svg">
 <!-- Background grid -->
@@ -1150,7 +1137,7 @@
 </div>
 <!-- BLACK NFC CARD -->
 <div aria-label="View details for Black NFC 215 Card" class="product-card" data-cat="nfc" data-detail="product/black-nfc-card/" role="link" tabindex="0">
-<span class="product-badge badge-hot">🔥 BESTSELLER</span>
+<span class="product-badge badge-hot">BESTSELLER</span>
 <span class="tech-badge tech-nfc">NFC</span>
 <div class="product-img" style="background:#fff;overflow:hidden;"><img alt="NFC Black PVC Business Card — ntagz" class="product-photo" loading="lazy" onerror="this.style.display='none'" src="images/black-nfc-card.png"/></div>
 <div class="product-info">
@@ -1236,7 +1223,7 @@
 </div>
 <!-- NTAG216 ADHESIVE NFC TAG -->
 <div aria-label="View details for NTAG216 Adhesive NFC Tag" class="product-card" data-cat="tag" data-detail="product/ntag216-adhesive-tag/" role="link" tabindex="0">
-<span class="product-badge badge-bulk">📦 BULK POPULAR</span>
+<span class="product-badge badge-bulk">BULK POPULAR</span>
 <span class="tech-badge tech-nfc">NFC</span>
 <div class="product-img" style="background:#fff;overflow:hidden;"><img alt="NTAG216 Adhesive NFC Tag — ntagz" class="product-photo" loading="lazy" onerror="this.style.display='none'" src="images/nfc-adhesive-tag.jpg"/></div>
 <div class="product-info">
@@ -1256,7 +1243,7 @@
 </div>
 <!-- UHF RFID LABEL STICKER — RFID ONLY, never mixed with NFC tabs -->
 <div aria-label="View details for UHF RFID Label Sticker 27×15mm" class="product-card rfid-card" data-cat="rfid" data-detail="product/uhf-rfid-label/" id="rfid" role="link" tabindex="0">
-<span class="product-badge" style="background:var(--teal);color:#fff;">📡 NEW · UHF RFID</span>
+<span class="product-badge" style="background:var(--teal);color:#fff;">NEW · UHF RFID</span>
 <span class="tech-badge tech-rfid">RFID</span>
 <div class="product-img" style="background:#fff;overflow:hidden;"><img alt="UHF RFID Label Sticker 27x15mm - ntagz" class="product-photo" loading="lazy" onerror="this.style.display='none'" src="images/UHF-RFID-Label-Sticker-27x15mm.jpg"/></div>
 <div class="product-info">
@@ -1317,7 +1304,7 @@
 <!-- MICRO FLEX -->
 <!-- MICRO FLEX -->
 <div aria-label="View details for Micro Flex NFC Tags (FPC)" class="product-card" data-cat="tag" data-detail="product/micro-flex-fpc/" role="link" tabindex="0">
-<span class="product-badge badge-hot">🔬 MICRO TECH</span>
+<span class="product-badge badge-hot">MICRO TECH</span>
 <span class="tech-badge tech-nfc">NFC</span>
 <div class="product-img" style="background:#fff;overflow:hidden;"><img alt="Micro Flex NFC Tags (FPC) — ntagz" class="product-photo" loading="lazy" onerror="this.style.display='none'" src="images/micro-flex-fpc.jpeg"/></div>
 <div class="product-info">
@@ -1339,9 +1326,9 @@
 <div class="product-card custom-card" data-cat="always">
 <div class="product-img">
 <div class="custom-icon-row">
-<div class="custom-icon">📱</div>
+<div class="custom-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--ink-2)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18" stroke-width="2.5"/></svg></div>
 <div class="custom-plus">+</div>
-<div class="custom-icon">📡</div>
+<div class="custom-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--ink-2)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5C5 8.4 8.1 5 12 5s7 3.4 7 7.5"/><path d="M8 12.5c0-2.2 1.8-4 4-4s4 1.8 4 4"/><circle cx="12" cy="12.5" r="1.5" fill="var(--ink-2)"/></svg></div>
 </div>
 </div>
 <div class="product-info">
@@ -1357,6 +1344,15 @@
 </div>
 </div>
 </div>
+</div>
+</section>
+<section aria-label="NTAGZ Trade Pass membership" class="member-strip">
+<div class="wrap member-strip-inner">
+<div>
+<h2>NTAGZ Trade Pass · ₹999/year</h2>
+<p>Buying regularly? Members get 10% off NFC consumables and 12% off finished products, applied automatically at checkout. Break-even is roughly ₹700–₹830 of eligible spend per month, before the welcome credit. No auto-renewal; 7-day refund if unused.</p>
+</div>
+<a class="btn btn-outline btn-lg" href="membership/">See member pricing</a>
 </div>
 </section>
 <section aria-label="RFID product specification catalogue" class="rfid-table-section">
@@ -1445,7 +1441,7 @@
 <div class="steps-grid reveal">
 <div class="step">
 <div class="step-num">01</div>
-<div class="step-icon">💬</div>
+<div class="step-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--ink-2)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></div>
 <h3>Order via WhatsApp</h3>
 <p>Send us a message with your product, quantity, and logo. We generate your GST invoice instantly and ship
               pan-India.</p>
@@ -1453,7 +1449,7 @@
 </div>
 <div class="step">
 <div class="step-num">02</div>
-<div class="step-icon">📲</div>
+<div class="step-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--ink-2)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M9 11c0-1.7 1.3-3 3-3s3 1.3 3 3"/><path d="M6.5 8.5C7.4 6.4 9.5 5 12 5s4.6 1.4 5.5 3.5"/></svg></div>
 <h3>Program Your Tap</h3>
 <p>Once delivered, use our free ntagz app or any NFC writer to easily set your link — website, WhatsApp,
               Google review, or vCard.</p>
@@ -1461,7 +1457,7 @@
 </div>
 <div class="step">
 <div class="step-num">03</div>
-<div class="step-icon">✅</div>
+<div class="step-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--ink-2)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
 <h3>Tap &amp; Connect</h3>
 <p>Hand over your card. Your contact taps. Their phone opens your link instantly — no app, no download, just
               seamless sharing.</p>
@@ -1604,7 +1600,7 @@
 <div>
 <div class="testi-name">Rahul Khandelwal</div>
 <div class="testi-role">Director, Khandelwal Properties</div>
-<div class="testi-city">📍 Jaipur</div>
+<div class="testi-city">Jaipur</div>
 </div>
 </div>
 <div class="testi-source">✓ Verified · Direct Order</div>
@@ -1618,7 +1614,7 @@
 <div>
 <div class="testi-name">Priya Menon</div>
 <div class="testi-role">Operations Head, BuildTech India</div>
-<div class="testi-city">📍 Bengaluru</div>
+<div class="testi-city">Bengaluru</div>
 </div>
 </div>
 <div class="testi-source">✓ Verified · IndiaMART Buyer</div>
@@ -1633,7 +1629,7 @@
 <div>
 <div class="testi-name">Amit Sharma</div>
 <div class="testi-role">Owner, Aura Designs</div>
-<div class="testi-city">📍 Pune</div>
+<div class="testi-city">Pune</div>
 </div>
 </div>
 <div class="testi-source">✓ Verified · Amazon Buyer</div>
@@ -1706,7 +1702,6 @@
 </div>
 </div>
 <div class="faq-cta-box reveal">
-<div style="font-size:40px;">💬</div>
 <h3>Still have questions?</h3>
 <p>Our team is available on WhatsApp from 9am to 8pm, Monday to Saturday. We respond within minutes — not
               hours.</p>
@@ -1746,22 +1741,22 @@
 <div class="wrap">
 <div class="badges-grid">
 <div class="badge-card">
-<span class="badge-icon">🏭</span>
+<span class="badge-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.75)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span>
 <div class="badge-title">Made in India</div>
 <div class="badge-sub">Manufactured domestically</div>
 </div>
 <div class="badge-card">
-<span class="badge-icon">📋</span>
+<span class="badge-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.75)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>
 <div class="badge-title">GST Invoice</div>
 <div class="badge-sub">Every order, always</div>
 </div>
 <div class="badge-card">
-<span class="badge-icon">🔒</span>
+<span class="badge-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.75)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg></span>
 <div class="badge-title">ISO 14443-A</div>
 <div class="badge-sub">Certified NFC chips</div>
 </div>
 <div class="badge-card">
-<span class="badge-icon">🚚</span>
+<span class="badge-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.75)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="1"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></span>
 <div class="badge-title">Pan-India Shipping</div>
 <div class="badge-sub">120+ cities covered</div>
 </div>
@@ -1774,7 +1769,7 @@
 <!-- Bump ?v= to today's date whenever js/catalog.js changes — it's cached
      4h at the edge with no other cache-busting, so a stale query string
      means returning visitors see old prices/products until it expires. -->
-<script defer="" src="js/catalog.js?v=20260914"></script>
+<script defer="" src="js/catalog.js?v=20261009"></script>
 <script defer="" src="js/catalog-sync.js"></script>
 <script defer="" src="js/cart.js"></script>
 <script defer="" src="js/cart-ui.js"></script>

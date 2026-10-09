@@ -8,6 +8,7 @@
 
 :root {
   /* ── SURFACES ── */
+  --surface: #FFFFFF; /* cards and panels; dark override below */
   --cream:   #FAF7F2;
   --warm:    #F2EDE4;
   --paper:   #ECEADF;
@@ -53,6 +54,7 @@
 /* ── DARK MODE ─────────────────────────────────────────── */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    --surface: #1A1714;
     --cream:  #100F0C;
     --warm:   #1A1714;
     --paper:  #252118;
@@ -77,6 +79,7 @@
 }
 
 :root[data-theme="dark"] {
+  --surface: #1A1714;
   --cream:  #100F0C;
   --warm:   #1A1714;
   --paper:  #252118;
