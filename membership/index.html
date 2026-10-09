@@ -345,7 +345,7 @@
     <section class="tp-section" style="background:var(--cream);">
       <div class="tp-section-inner">
         <h2 class="tp-section-title">Will it pay off for you?</h2>
-        <p class="tp-section-sub">Estimate your savings based on your typical monthly NFC spend. Uses indicative member pricing — actual rates applied at checkout may vary.</p>
+        <p class="tp-section-sub">Estimate your savings based on your typical monthly NFC spend. Uses actual member pricing applied at checkout.</p>
         <div class="calc-card">
           <label class="calc-label" for="calcSpend">Your average monthly NFC spend</label>
           <div class="calc-input-wrap">
@@ -358,7 +358,7 @@
               <div class="calc-result-value" id="calcAnnual">₹60,000</div>
             </div>
             <div class="calc-result">
-              <div class="calc-result-label">Est. savings (5–8%)</div>
+              <div class="calc-result-label">Est. savings (10–12%)</div>
               <div class="calc-result-value" id="calcSavings">₹3,600</div>
             </div>
             <div class="calc-result">
@@ -370,7 +370,7 @@
               <div class="calc-result-value" id="calcNet">₹2,601</div>
             </div>
           </div>
-          <p class="calc-note" id="calcBreakeven">Break-even at ₹1,665/month. At your current spend, Trade Pass pays for itself and returns ₹2,601. Includes indicative ₹500 welcome credit on first qualifying order.</p>
+          <p class="calc-note" id="calcBreakeven">Break-even at ₹909/month. At your current spend, Trade Pass pays for itself and returns ₹2,601. Includes ₹500 welcome credit on first qualifying order.</p>
         </div>
       </div>
     </section>
@@ -404,31 +404,31 @@
         <p class="tp-section-sub">Member prices are set per product category and validated at checkout.</p>
         <div class="pricing-notice">
           <span>⚠</span>
-          <div><strong>Member pricing is being finalised</strong>The indicative discounts below are pending cost review and margin approval. Standard prices remain in effect for all buyers until member pricing is activated. This page will be updated once approved.</div>
+          <div><strong>Member pricing is now live</strong>Trade Pass members get 10% off NFC consumables and 12% off finished products, applied automatically at checkout.</div>
         </div>
         <table class="category-table">
           <thead>
             <tr>
               <th>Category</th>
               <th>Standard</th>
-              <th>Trade Pass (indicative)</th>
+              <th>Trade Pass member price</th>
             </tr>
           </thead>
           <tbody>
             <tr>
               <td>Raw NFC tags, stickers, coins, cards</td>
               <td>Listed price</td>
-              <td><span class="member-price">~5% off</span></td>
+              <td><span class="member-price">10% off</span></td>
             </tr>
             <tr>
               <td>Printed & programmed NFC cards</td>
               <td>Listed price</td>
-              <td><span class="member-price">~5% off</span></td>
+              <td><span class="member-price">10% off</span></td>
             </tr>
             <tr>
               <td>Google Review products & QR stands</td>
               <td>Listed price</td>
-              <td><span class="member-price">~8% off</span></td>
+              <td><span class="member-price">12% off</span></td>
             </tr>
             <tr>
               <td>Acrylic & customised products</td>
@@ -479,7 +479,7 @@
           </div>
           <div class="faq-item">
             <button class="faq-q">What if member pricing hasn't been activated yet?</button>
-            <div class="faq-a">Member pricing is shown as "indicative" until officially approved and activated. If you purchase Trade Pass before activation, you will receive full member pricing once it goes live — your membership date and credit are unaffected.</div>
+            <div class="faq-a">Member pricing is live and applied automatically at checkout. NFC consumables get 10% off; finished products (Google Review stands, programmed cards) get 12% off. Quantity tier discounts stack on top where eligible.</div>
           </div>
           <div class="faq-item">
             <button class="faq-q">How does the ₹500 welcome credit appear at checkout?</button>
@@ -557,7 +557,7 @@
     function calcUpdate() {
       var monthly = parseFloat(document.getElementById('calcSpend').value) || 0;
       var annual = monthly * 12;
-      var savings = annual * 0.065; // 6.5% blended indicative rate
+      var savings = annual * 0.11; // 11% blended rate (10% consumables, 12% finished products)
       var credit = monthly >= 4999 ? 500 : 0;
       var net = savings + credit - 999;
       var breakeven = 999 / (0.065 * 12);
@@ -571,7 +571,7 @@
       if (monthly < breakeven) {
         msg += 'At your current spend, Trade Pass costs more than the savings. You need to spend at least ' + fmt(breakeven) + '/month to break even.';
       } else {
-        msg += 'At your current spend, Trade Pass pays for itself and returns ' + fmt(net) + ' (incl. indicative ₹500 welcome credit if first order ≥ ₹4,999).';
+        msg += 'At your current spend, Trade Pass pays for itself and returns ' + fmt(net) + ' (incl. ₹500 welcome credit on first order ≥ ₹4,999).';
       }
       document.getElementById('calcBreakeven').textContent = msg;
     }

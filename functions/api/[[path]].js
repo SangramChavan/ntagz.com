@@ -1,21 +1,21 @@
 const PRODUCTS = {
-  "sample-kit": { price: 1940, fixed: true, allInclusive: false },
-  "black-nfc-card": { price: 30 },
-  "white-nfc-card": { price: 25 },
-  "white-inkjet-nfc-card": { price: 32.8 },
-  "google-review-nfc-card": { price: 95 },
-  "google-review-nfc-stand-5x5": { price: 99, allInclusive: true },
-  "google-review-nfc-stand-10x10": { price: 149, allInclusive: true },
-  "google-review-nfc-stand-12x12": { price: 199, allInclusive: true },
-  "nfc-card-custom-printing": { price: 75 },
-  "anti-metal-tag": { price: 20 },
-  "ntag216-adhesive-tag": { price: 18 },
-  "nfc-coin": { price: 20 },
-  "mini-nfc-tag": { price: 16 },
-  "micro-flex-fpc": { price: 75 },
-  "nfc-wristband": { price: 80 },
-  "uhf-rfid-label": { price: 249, packSize: 10, moq: 1 },
-  "rfid-card-custom-printing": { price: 75 },
+  "sample-kit":                   { price: 1940, fixed: true, allInclusive: false },
+  "black-nfc-card":               { price: 30,  category: "nfc_consumables" },
+  "white-nfc-card":               { price: 25,  category: "nfc_consumables" },
+  "white-inkjet-nfc-card":        { price: 32.8,category: "nfc_consumables" },
+  "google-review-nfc-card":       { price: 95,  category: "finished_products" },
+  "google-review-nfc-stand-5x5":  { price: 99,  category: "finished_products", allInclusive: true },
+  "google-review-nfc-stand-10x10":{ price: 149, category: "finished_products", allInclusive: true },
+  "google-review-nfc-stand-12x12":{ price: 199, category: "finished_products", allInclusive: true },
+  "nfc-card-custom-printing":     { price: 75,  category: "finished_products" },
+  "anti-metal-tag":               { price: 20,  category: "nfc_consumables" },
+  "ntag216-adhesive-tag":         { price: 18,  category: "nfc_consumables" },
+  "nfc-coin":                     { price: 20,  category: "nfc_consumables" },
+  "mini-nfc-tag":                 { price: 16,  category: "nfc_consumables" },
+  "micro-flex-fpc":               { price: 75,  category: "nfc_consumables" },
+  "nfc-wristband":                { price: 80,  category: "nfc_consumables" },
+  "uhf-rfid-label":               { price: 249, category: "nfc_consumables", packSize: 10, moq: 1 },
+  "rfid-card-custom-printing":    { price: 75,  category: "finished_products" },
 };
 
 const corsHeaders = {
@@ -32,7 +32,7 @@ function json(data, status = 200, origin) {
   });
 }
 
-function calculateTotal(items, state) {
+function calculateTotal(items, state, memberDiscounts) {
   if (!Array.isArray(items) || items.length < 1 || items.length > 30) return null;
   let regular = 0;
   let inclusive = 0;
@@ -45,7 +45,8 @@ function calculateTotal(items, state) {
     if (product.fixed && qty !== 1) return null;
     const linePieces = qty * (product.packSize || 1);
     const discount = product.fixed ? 0 : linePieces >= 5000 ? 25 : linePieces >= 1000 ? 15 : linePieces >= 500 ? 10 : 0;
-    const net = product.price * qty * (100 - discount) / 100;
+    const memberDisc = memberDiscounts && product.category ? (memberDiscounts[product.category] || 0) : 0;
+    const net = product.price * qty * (100 - discount) / 100 * (100 - memberDisc) / 100;
     if (product.allInclusive) inclusive += net;
     else regular += net;
     pieces += product.fixed ? 70 : linePieces;
@@ -162,6 +163,25 @@ function jsonAuth(data, status, allowedOrigin, cookieHeader) {
   const headers = { ...corsHeaders, "Access-Control-Allow-Origin": allowedOrigin, "Content-Type": "application/json" };
   if (cookieHeader) headers["Set-Cookie"] = cookieHeader;
   return new Response(JSON.stringify(data), { status, headers });
+}
+
+async function getMemberDiscounts(request, env) {
+  if (!env.DB) return null;
+  const u = await getSession(request, env);
+  if (!u) return null;
+  const mem = await env.DB.prepare(
+    `SELECT id FROM memberships WHERE user_id=? AND status='active' AND expires_at>unixepoch() LIMIT 1`
+  ).bind(u.user_id).first();
+  if (!mem) return null;
+  const { results } = await env.DB.prepare(
+    `SELECT key, value FROM membership_config WHERE key IN ('discounts_live','discount_nfc_consumables_pct','discount_finished_products_pct')`
+  ).all();
+  const cfg = Object.fromEntries(results.map(r => [r.key, r.value]));
+  if (cfg.discounts_live !== "1") return null;
+  return {
+    nfc_consumables:   parseFloat(cfg.discount_nfc_consumables_pct)   || 0,
+    finished_products: parseFloat(cfg.discount_finished_products_pct) || 0,
+  };
 }
 
 // ── Membership handler ────────────────────────────────────────────────────────
@@ -503,7 +523,8 @@ async function onRequest({ request, env }) {
 
   try {
     if (url.pathname.endsWith("/create-order")) {
-      const total = calculateTotal(body.items, body.state);
+      const memberDiscounts = await getMemberDiscounts(request, env);
+      const total = calculateTotal(body.items, body.state, memberDiscounts);
       if (!total) return json({ error: "Invalid order" }, 400, origin);
       const order = await razorpayRequest("/orders", env, {
         amount: total.amount * 100,
@@ -514,7 +535,7 @@ async function onRequest({ request, env }) {
           pieces: String(total.pieces),
         },
       });
-      return json({ id: order.id, amount: order.amount, currency: order.currency, keyId: env.RAZORPAY_KEY_ID }, 200, origin);
+      return json({ id: order.id, amount: order.amount, currency: order.currency, keyId: env.RAZORPAY_KEY_ID, memberPricing: !!memberDiscounts }, 200, origin);
     }
 
     if (url.pathname.endsWith("/verify-payment")) {
@@ -530,7 +551,8 @@ async function onRequest({ request, env }) {
 
     if (url.pathname.endsWith("/payu/checkout")) {
       if (!env.PAYU_KEY || !env.PAYU_SALT) return json({ error: "PayU is not configured" }, 503, origin);
-      const total = calculateTotal(body.items, body.state);
+      const memberDiscounts = await getMemberDiscounts(request, env);
+      const total = calculateTotal(body.items, body.state, memberDiscounts);
       if (!total) return json({ error: "Invalid order" }, 400, origin);
       const firstName = typeof body.name === "string" ? body.name.trim().split(/\s+/)[0].slice(0, 60) : "";
       const email = typeof body.email === "string" ? body.email.trim().slice(0, 254) : "";
