@@ -91,7 +91,7 @@
       font-weight: 700;
       letter-spacing: -0.01em;
       margin-bottom: 16px;
-      color: var(--ink);
+      color: #c8810a;
     }
 
     .policy-section p {
@@ -207,7 +207,7 @@
       padding: 20px 24px; margin-bottom: 24px; display: flex; align-items: center;
       justify-content: space-between; flex-wrap: wrap; gap: 16px;
     }
-    .prod-price { font-family: var(--ff-head); font-size: 30px; font-weight: 700; color: var(--ink); }
+    .prod-price { font-family: var(--ff-head); font-size: 30px; font-weight: 700; color: #c8810a; }
     .prod-price span { font-size: 14px; font-weight: 500; color: var(--ink-3); }
     .prod-cta-row { display: flex; gap: 12px; flex-wrap: wrap; }
 
@@ -217,13 +217,13 @@
     .specs-table tr:last-child { border-bottom: none; }
     .specs-table td { padding: 12px 8px; font-size: 14px; }
     .specs-table td:first-child { color: var(--ink-3); font-weight: 600; width: 40%; }
-    .specs-table td:last-child { color: var(--ink); }
+    .specs-table td:last-child { color: #c8810a; }
 
     /* ── USE CASES ── */
     .use-grid { display: grid; grid-template-columns: 1fr; gap: 14px; margin: 16px 0; }
     @media (min-width: 640px) { .use-grid { grid-template-columns: 1fr 1fr; } }
     .use-card { background: var(--warm); border-radius: var(--r); padding: 18px; font-size: 14px; color: var(--ink-2); }
-    .use-card b { display: block; color: var(--ink); font-family: var(--ff-head); font-size: 14px; margin-bottom: 4px; }
+    .use-card b { display: block; color: #c8810a; font-family: var(--ff-head); font-size: 14px; margin-bottom: 4px; }
 
     /* ── FAQ ── */
     .faq-item { border-bottom: 1px solid var(--paper); padding: 18px 0; }
@@ -250,10 +250,10 @@
     }
     .size-opt .so-thumb { width: 52px; height: 52px; border-radius: 8px; object-fit: cover; flex-shrink: 0; border: 1px solid var(--paper); }
     .size-opt .so-body { flex: 1 1 160px; min-width: 0; }
-    .size-opt .so-label { font-family: var(--ff-head); font-weight: 700; font-size: 15px; color: var(--ink); }
+    .size-opt .so-label { font-family: var(--ff-head); font-weight: 700; font-size: 15px; color: #c8810a; }
     .size-opt .so-sub { display: block; margin-top: 2px; font-size: 12px; font-weight: 500; color: var(--ink-3); }
     .size-opt .so-right { display: flex; align-items: center; gap: 14px; }
-    .size-opt .so-price { font-family: var(--ff-head); font-weight: 700; font-size: 18px; color: var(--ink); white-space: nowrap; }
+    .size-opt .so-price { font-family: var(--ff-head); font-weight: 700; font-size: 18px; color: #c8810a; white-space: nowrap; }
     .size-opt .so-price span { font-size: 12px; font-weight: 500; color: var(--ink-3); }
     .btn-sm { padding: 9px 16px; font-size: 13px; white-space: nowrap; }
 
@@ -263,7 +263,7 @@
     .bulk-table th:first-child, .bulk-table td:first-child { text-align: left; }
     .bulk-table th { font-family: var(--ff-head); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-3); font-weight: 700; }
     .bulk-table td { color: var(--ink-2); }
-    .bulk-table td b { color: var(--ink); font-weight: 700; }
+    .bulk-table td b { color: #c8810a; font-weight: 700; }
     .bulk-table tr:last-child td { border-bottom: none; }
     .bulk-table-wrap { overflow-x: auto; }
 

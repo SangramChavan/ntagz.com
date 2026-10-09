@@ -56,7 +56,7 @@ main { flex-grow: 1; display: flex; flex-direction: column; justify-content: cen
   font-weight: 700;
   font-size: 14px;
   margin-bottom: 8px;
-  color: var(--ink);
+  color: #c8810a;
 }
 .form-control {
   width: 100%;
@@ -65,7 +65,7 @@ main { flex-grow: 1; display: flex; flex-direction: column; justify-content: cen
   border-radius: var(--r);
   font-family: var(--ff-body);
   font-size: 16px;
-  color: var(--ink);
+  color: #c8810a;
   background: var(--cream);
   transition: all 0.2s;
   appearance: none;

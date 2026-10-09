@@ -179,12 +179,12 @@
 
     .btn-secondary {
       background: var(--warm);
-      color: var(--ink);
+      color: #c8810a;
     }
 
     .btn-secondary:hover {
       background: var(--paper);
-      color: var(--ink);
+      color: #c8810a;
       transform: translateY(-1px);
       box-shadow: none;
     }
@@ -201,7 +201,7 @@
       font-weight: 700;
       letter-spacing: -0.01em;
       margin-bottom: 20px;
-      color: var(--ink);
+      color: #c8810a;
     }
 
     .faq-item {
@@ -213,7 +213,7 @@
       font-family: var(--ff-head);
       font-weight: 600;
       font-size: 16px;
-      color: var(--ink);
+      color: #c8810a;
       display: flex;
       justify-content: space-between;
       align-items: center;

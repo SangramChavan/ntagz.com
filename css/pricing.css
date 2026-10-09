@@ -20,7 +20,7 @@
   max-width: 620px;
   font-size: 17px;
 }
-.p-hero .lede b { color: var(--ink); }
+.p-hero .lede b { color: #c8810a; }
 
 .p-note-bulk {
   display: flex;
@@ -107,7 +107,7 @@ table.prices caption {
 .prices tbody th {
   font-weight: 700;
   white-space: nowrap;
-  color: var(--ink);
+  color: #c8810a;
 }
 .prices tbody td { color: var(--ink-2); }
 .prices tbody tr:hover td { background: var(--teal-lt); }

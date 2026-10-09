@@ -8,6 +8,7 @@
 
 :root {
   /* ── SURFACES ── */
+  --dark:    #1A1714; /* always-dark band behind light text; never inverts */
   --surface: #FFFFFF; /* cards and panels; dark override below */
   --cream:   #FAF7F2;
   --warm:    #F2EDE4;

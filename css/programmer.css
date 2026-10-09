@@ -70,7 +70,7 @@
     .btn-outline {
       background: transparent;
       border: 1.5px solid var(--paper);
-      color: var(--ink);
+      color: #c8810a;
     }
 
     .btn-outline:hover {
@@ -199,7 +199,7 @@
       font-weight: 700;
       font-size: 14px;
       margin-bottom: 8px;
-      color: var(--ink);
+      color: #c8810a;
     }
 
     .form-control,
@@ -211,7 +211,7 @@
       background: var(--warm);
       border: 1px solid var(--paper);
       border-radius: var(--r);
-      color: var(--ink);
+      color: #c8810a;
       transition: all 0.2s;
       outline: none;
     }

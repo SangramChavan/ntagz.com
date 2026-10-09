@@ -22,7 +22,7 @@ html {
 
 body {
   background: var(--cream);
-  color: var(--ink);
+  color: #c8810a;
   font-family: var(--ff-body);
   -webkit-font-smoothing: antialiased;
   line-height: 1.6;
@@ -55,8 +55,8 @@ img {
 
 /* ── TOP STRIP ── */
 .top-strip {
-  background: var(--ink);
-  color: var(--cream);
+  background: var(--dark);
+  color: #fff;
   text-align: center;
   padding: 10px;
   font-size: 12px;
@@ -232,7 +232,7 @@ nav {
 
 .btn-wa {
   background: #25D366;
-  color: #fff;
+  color: var(--dark);
 }
 
 .btn-wa:hover {
@@ -248,7 +248,7 @@ nav {
 
 /* ── SHARED FOOTER (bottom strip present on every page) ── */
 footer {
-  background: var(--ink);
+  background: var(--dark);
   color: rgba(255, 255, 255, 0.6);
   padding: 48px 0 24px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
@@ -549,7 +549,7 @@ body.cart-open-lock {
   font-family: var(--ff-head);
   font-weight: 700;
   font-size: 17px;
-  color: var(--ink);
+  color: #c8810a;
 }
 
 .cart-drawer-close {
@@ -640,7 +640,7 @@ body.cart-open-lock {
   font-family: var(--ff-head);
   font-weight: 700;
   font-size: 13px;
-  color: var(--ink);
+  color: #c8810a;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -656,7 +656,7 @@ body.cart-open-lock {
   font-family: var(--ff-head);
   font-weight: 700;
   font-size: 13px;
-  color: var(--ink);
+  color: #c8810a;
   flex-shrink: 0;
 }
 
@@ -698,7 +698,7 @@ body.cart-open-lock {
   font-family: var(--ff-head);
   font-weight: 700;
   font-size: 16px;
-  color: var(--ink);
+  color: #c8810a;
   margin-bottom: 6px;
 }
 

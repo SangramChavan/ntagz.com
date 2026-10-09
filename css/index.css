@@ -93,7 +93,7 @@
     .btn-outline {
       background: transparent;
       border: 1.5px solid var(--ink);
-      color: var(--ink);
+      color: #c8810a;
     }
 
     .btn-outline:hover {
@@ -220,7 +220,7 @@
       font-family: var(--ff-serif);
       font-style: italic;
       font-weight: 400;
-      color: var(--ink);
+      color: #c8810a;
       letter-spacing: -0.02em;
       white-space: nowrap;
     }
@@ -262,7 +262,7 @@
       font-family: var(--ff-head);
       font-size: 13px;
       font-weight: 700;
-      color: var(--ink);
+      color: #c8810a;
     }
 
     .hero-rating-text span {
@@ -278,7 +278,7 @@
     }
 
     .hero-actions .btn-ghost {
-      color: var(--ink);
+      color: #c8810a;
       border-color: var(--ink-3);
     }
 
@@ -430,7 +430,7 @@
       font-weight: 700;
       letter-spacing: -0.02em;
       margin-bottom: 4px;
-      color: var(--ink);
+      color: #c8810a;
     }
 
     .card-type {
@@ -544,7 +544,7 @@
       font-family: var(--ff-head);
       font-size: 18px;
       font-weight: 800;
-      color: var(--ink);
+      color: #c8810a;
     }
 
     .htb-value.tagz {
@@ -557,7 +557,7 @@
 
     /* ── TRUST BAND ── */
     .trust-band {
-      background: var(--ink);
+      background: var(--dark);
       padding: 18px 0;
       overflow: hidden;
       position: relative;
@@ -700,7 +700,7 @@
     }
 
     .marketplace-note strong {
-      color: var(--ink);
+      color: #c8810a;
       font-weight: 700;
     }
 
@@ -788,7 +788,7 @@
     }
 
     .ftab.active {
-      background: var(--ink);
+      background: var(--dark);
       color: #fff;
       border-color: var(--ink);
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
@@ -838,11 +838,11 @@
 
     .badge-bulk {
       background: var(--gold);
-      color: #fff;
+      color: var(--dark);
     }
 
     .badge-dark {
-      background: var(--ink);
+      background: var(--dark);
       color: #fff;
     }
 
@@ -1145,7 +1145,7 @@
       font-weight: 800;
       letter-spacing: -0.02em;
       margin-bottom: 8px;
-      color: var(--ink);
+      color: #c8810a;
     }
 
     .product-desc {
@@ -1167,7 +1167,7 @@
       font-family: var(--ff-head);
       font-size: 22px;
       font-weight: 800;
-      color: var(--ink);
+      color: #c8810a;
       line-height: 1.1;
     }
 
@@ -1492,7 +1492,7 @@
       font-family: var(--ff-head);
       font-size: 17px;
       font-weight: 800;
-      color: var(--ink);
+      color: #c8810a;
     }
 
     .price-opt-val span {
@@ -1718,7 +1718,7 @@
 
     /* ── BULK CTA ── */
     .bulk-section {
-      background: var(--ink);
+      background: var(--dark);
       color: #fff;
       position: relative;
       overflow: hidden;
@@ -1794,6 +1794,7 @@
 
     .tier-badge.gold {
       background: var(--gold);
+      color: var(--dark);
     }
 
     .bulk-actions {
@@ -1861,7 +1862,7 @@
       font-size: 15px;
       font-weight: 800;
       margin-bottom: 4px;
-      color: var(--ink);
+      color: #c8810a;
     }
 
     .testi-role {
@@ -1966,7 +1967,7 @@
     .rfid-product-name {
       font-family: var(--ff-head);
       font-weight: 800;
-      color: var(--ink);
+      color: #c8810a;
       font-size: 14px;
     }
 
@@ -2139,7 +2140,7 @@
 
     /* ── TRUST/FOOTER BADGES ── */
     .badges-section {
-      background: var(--ink);
+      background: var(--dark);
       padding: 60px 0;
     }
 
@@ -2219,7 +2220,7 @@
     }
 
     .loc-address strong {
-      color: var(--ink);
+      color: #c8810a;
       display: block;
       font-family: var(--ff-head);
       font-size: 16px;
