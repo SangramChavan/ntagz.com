@@ -5,7 +5,7 @@
     /* BUTTONS */
 
     .btn-upi {
-      background: #007A6B;
+      background: var(--teal);
       color: #fff;
     }
 
@@ -1422,7 +1422,7 @@
 
       /* Print header — dark band */
       .qc-header {
-        background: #1A1714 !important;
+        background: var(--ink) !important;
         color: #fff !important;
         padding: 18px 24px 16px !important;
         -webkit-print-color-adjust: exact !important;
@@ -1522,7 +1522,7 @@
 
       /* Grand total */
       .qc-grand-total {
-        background: #1A1714 !important;
+        background: var(--ink) !important;
         padding: 14px 24px !important;
         margin-top: 6px !important;
         -webkit-print-color-adjust: exact !important;
@@ -1621,7 +1621,7 @@
     }
 
     .tap-h1 .grad {
-      background: linear-gradient(92deg, #FF4500 0%, #C8960C 55%, #FF4500 100%);
+      background: linear-gradient(92deg, var(--tagz) 0%, var(--gold) 55%, var(--tagz) 100%);
       background-size: 200% auto;
       -webkit-background-clip: text;
       background-clip: text;
@@ -1668,7 +1668,7 @@
       font-weight: 700;
       font-size: 16px;
       color: #06070d;
-      background: linear-gradient(92deg, #FF4500, #C8960C);
+      background: linear-gradient(92deg, var(--tagz), var(--gold));
       box-shadow: 0 8px 30px rgba(255, 69, 0, .35), 0 4px 14px rgba(200, 150, 12, .25);
       text-decoration: none;
       border: none;
@@ -1818,7 +1818,7 @@
       width: 30px;
       height: 22px;
       border-radius: 4px;
-      background: linear-gradient(135deg, #FF4500, #C8960C);
+      background: linear-gradient(135deg, var(--tagz), var(--gold));
       opacity: .9;
     }
 

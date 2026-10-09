@@ -353,19 +353,19 @@
     }
 
     .nfc-product-card.card-back {
-      background: linear-gradient(135deg, #2D2420, #1A1714);
+      background: linear-gradient(135deg, var(--warm-dk), var(--ink));
       transform: rotate(-8deg) translateY(16px) translateX(24px);
       z-index: 1;
     }
 
     .nfc-product-card.card-mid {
-      background: linear-gradient(135deg, #FF6B30, #FF4500);
+      background: linear-gradient(135deg, #FF6B30, var(--tagz));
       transform: rotate(-4deg) translateY(8px) translateX(12px);
       z-index: 2;
     }
 
     .nfc-product-card.card-front {
-      background: linear-gradient(145deg, #FAF7F2, #ECEADF);
+      background: linear-gradient(145deg, var(--cream), var(--paper));
       border: 1px solid rgba(255, 255, 255, 0.4);
       z-index: 3;
       animation: cardLift 6s ease-in-out infinite;
@@ -403,7 +403,7 @@
       width: 36px;
       height: 28px;
       border-radius: 6px;
-      background: linear-gradient(135deg, #E8C44A, #B8962E);
+      background: linear-gradient(135deg, var(--gold-lt), var(--gold-dk));
       margin-bottom: 18px;
       position: relative;
       overflow: hidden;
@@ -811,7 +811,7 @@
     }
 
     .badge-hot {
-      background: #FF4500;
+      background: var(--tagz);
       color: #fff;
     }
 
@@ -831,7 +831,7 @@
     }
 
     .badge-sample {
-      background: linear-gradient(135deg, #FF4500, #C8960C);
+      background: linear-gradient(135deg, var(--tagz), var(--gold));
       color: #fff;
     }
 
@@ -967,7 +967,7 @@
       width: 72px;
       height: 46px;
       border-radius: 6px;
-      background: linear-gradient(135deg, #1A1714, #2D2420);
+      background: linear-gradient(135deg, var(--ink), var(--warm-dk));
       box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
       position: relative;
       transition: transform 0.4s var(--ease);
@@ -981,14 +981,14 @@
       width: 18px;
       height: 13px;
       border-radius: 2px;
-      background: linear-gradient(135deg, #E8C44A, #B8962E);
+      background: linear-gradient(135deg, var(--gold-lt), var(--gold-dk));
     }
 
     .sk-card-white {
       width: 72px;
       height: 46px;
       border-radius: 6px;
-      background: linear-gradient(145deg, #fff, #ECEADF);
+      background: linear-gradient(145deg, #fff, var(--paper));
       border: 1px solid rgba(0, 0, 0, 0.08);
       box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
       position: relative;
@@ -1003,7 +1003,7 @@
       width: 18px;
       height: 13px;
       border-radius: 2px;
-      background: linear-gradient(135deg, #E8C44A, #B8962E);
+      background: linear-gradient(135deg, var(--gold-lt), var(--gold-dk));
     }
 
     .sk-coin {
@@ -1067,7 +1067,7 @@
       width: 56px;
       height: 28px;
       border-radius: 4px;
-      background: linear-gradient(145deg, #fff, #F2EDE4);
+      background: linear-gradient(145deg, #fff, var(--warm));
       border: 1px solid var(--paper);
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
       position: relative;
@@ -1342,11 +1342,11 @@
     }
 
     .illo-card.illo-card-dark {
-      background: linear-gradient(135deg, #1A1714, #2D2420);
+      background: linear-gradient(135deg, var(--ink), var(--warm-dk));
     }
 
     .illo-card.illo-card-light {
-      background: linear-gradient(145deg, #fff, #ECEADF);
+      background: linear-gradient(145deg, #fff, var(--paper));
       border: 1px solid rgba(0, 0, 0, 0.08);
     }
 
@@ -1358,7 +1358,7 @@
       width: 30px;
       height: 22px;
       border-radius: 4px;
-      background: linear-gradient(135deg, #E8C44A, #B8962E);
+      background: linear-gradient(135deg, var(--gold-lt), var(--gold-dk));
     }
 
     .illo-card::after {
@@ -1396,7 +1396,7 @@
 
     .illo-disc.illo-disc-metal {
       border: 5px solid #9C9C9C;
-      background: #ECEADF;
+      background: var(--paper);
     }
 
     .illo-disc.illo-disc-rfid {
