@@ -1,0 +1,8 @@
+# Local-only Cloudflare Pages development secrets.
+# Copy this file to .dev.vars and set credentials for the providers you want to enable.
+RAZORPAY_KEY_ID=rzp_test_replace_with_your_key_id
+RAZORPAY_KEY_SECRET=replace_with_your_key_secret
+# PayU is optional. Set both values to enable it; PAYU_ENV=test uses PayU's test checkout.
+PAYU_KEY=replace_with_your_payu_key
+PAYU_SALT=replace_with_your_payu_salt
+PAYU_ENV=test
