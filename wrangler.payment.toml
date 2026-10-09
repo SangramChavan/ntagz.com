@@ -12,4 +12,4 @@ PAYU_ENV = "production"
 [[d1_databases]]
 binding = "DB"
 database_name = "ntagz-db"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "51216708-c501-49ce-a068-5b8854893e74"
