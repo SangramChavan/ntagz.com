@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bulk Quote Tool — ntagz</title>
+  <meta name="description" content="Get instant bulk pricing for NFC cards, tags, and RFID labels. Enter your quantities, see tier discounts applied live, and download a printable quote." />
+  <link rel="canonical" href="https://www.ntagz.com/tools/bulk-quote.html" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=Manrope:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/base.css" />
+  <style>
+    .bq-hero { padding: 64px 20px 32px; text-align: center; }
+    .bq-hero h1 { font-size: clamp(26px, 4vw, 38px); font-weight: 700; color: var(--ink); margin: 0 0 10px; }
+    .bq-hero p { color: var(--ink-2); font-size: 16px; max-width: 480px; margin: 0 auto; }
+
+    .bq-layout {
+      display: grid;
+      grid-template-columns: 1fr 360px;
+      gap: 24px;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 20px 80px;
+      align-items: start;
+    }
+    @media (max-width: 800px) {
+      .bq-layout { grid-template-columns: 1fr; }
+      .bq-summary { position: static !important; }
+    }
+
+    /* ── Product picker ── */
+    .picker-head {
+      display: grid;
+      grid-template-columns: 1fr 120px 100px;
+      gap: 8px;
+      padding: 8px 12px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      color: var(--ink-3);
+      border-bottom: 2px solid var(--paper);
+      margin-bottom: 4px;
+    }
+    .picker-row {
+      display: grid;
+      grid-template-columns: 1fr 120px 100px;
+      gap: 8px;
+      align-items: center;
+      padding: 10px 12px;
+      border-radius: var(--r);
+      transition: background 0.15s;
+    }
+    .picker-row:hover { background: var(--warm); }
+    .picker-name { font-size: 14px; font-weight: 500; color: var(--ink); }
+    .picker-base { font-size: 12px; color: var(--ink-3); }
+    .picker-qty {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1.5px solid var(--paper);
+      border-radius: 8px;
+      background: var(--cream);
+      color: var(--ink);
+      font-family: var(--ff-body);
+      font-size: 14px;
+      text-align: center;
+      transition: border-color 0.15s;
+      -moz-appearance: textfield;
+    }
+    .picker-qty::-webkit-inner-spin-button,
+    .picker-qty::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    .picker-qty:focus { outline: none; border-color: var(--tagz); }
+    .picker-qty[value="0"], .picker-qty:placeholder-shown { color: var(--ink-3); }
+    .picker-line-total { font-size: 14px; font-weight: 600; color: var(--ink); text-align: right; }
+    .picker-discount { font-size: 11px; color: var(--green); font-weight: 600; }
+
+    /* ── Category label ── */
+    .cat-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      color: var(--tagz);
+      padding: 16px 12px 6px;
+    }
+
+    /* ── Summary panel ── */
+    .bq-summary {
+      background: var(--warm);
+      border-radius: var(--r-lg);
+      box-shadow: var(--shadow-card);
+      padding: 24px;
+      position: sticky;
+      top: 80px;
+    }
+    .bq-summary h2 { font-size: 16px; font-weight: 700; color: var(--ink); margin: 0 0 16px; }
+    .sum-line { display: flex; justify-content: space-between; font-size: 14px; color: var(--ink-2); padding: 5px 0; }
+    .sum-line.total { font-size: 20px; font-weight: 700; color: var(--ink); border-top: 2px solid var(--paper); margin-top: 8px; padding-top: 12px; }
+    .sum-empty { font-size: 13px; color: var(--ink-3); text-align: center; padding: 20px 0; }
+    .sum-tiers { margin-top: 16px; border-top: 1px solid var(--paper); padding-top: 14px; }
+    .sum-tiers h3 { font-size: 12px; font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 8px; }
+    .tier-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-3); padding: 3px 0; }
+    .tier-row.active { color: var(--green); font-weight: 700; }
+
+    .bq-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+    .bq-actions .btn { text-align: center; justify-content: center; }
+
+    /* ── Customer form ── */
+    .bq-form { margin-top: 24px; border-top: 1px solid var(--paper); padding-top: 20px; }
+    .bq-form h3 { font-size: 13px; font-weight: 700; color: var(--ink); margin: 0 0 12px; }
+    .bq-field { margin-bottom: 12px; }
+    .bq-field label { display: block; font-size: 12px; font-weight: 600; color: var(--ink-3); margin-bottom: 4px; }
+    .bq-field input {
+      width: 100%; padding: 9px 12px;
+      border: 1.5px solid var(--paper); border-radius: 8px;
+      background: var(--cream); color: var(--ink);
+      font-family: var(--ff-body); font-size: 13px;
+      box-sizing: border-box;
+    }
+    .bq-field input:focus { outline: none; border-color: var(--tagz); }
+
+    /* ── Print ── */
+    @media print {
+      .no-print { display: none !important; }
+      nav, footer { display: none !important; }
+      .bq-hero { padding: 0 0 16px; }
+      .bq-layout { grid-template-columns: 1fr; display: block; }
+      .bq-picker { margin-bottom: 20px; }
+      .bq-summary { box-shadow: none; border: 1px solid #ddd; position: static; }
+    }
+  </style>
+</head>
+<body>
+  <script src="../js/component-loader.js"></script>
+
+  <section class="bq-hero no-print">
+    <h1>Bulk Quote Tool</h1>
+    <p>Enter quantities to see live tier pricing. Download a printable quote to share with your team.</p>
+  </section>
+
+  <div class="bq-layout">
+    <div class="bq-picker" id="pickerPanel">
+      <div class="picker-head">
+        <span>Product</span><span style="text-align:center;">Quantity (pcs)</span><span style="text-align:right;">Line Total</span>
+      </div>
+      <div id="productRows">Loading…</div>
+    </div>
+
+    <div class="bq-summary">
+      <h2>Quote Summary</h2>
+      <div id="summaryLines"><p class="sum-empty">Add quantities above to see pricing.</p></div>
+
+      <div class="sum-tiers">
+        <h3>Bulk Discount Tiers</h3>
+        <div id="tierRows"></div>
+      </div>
+
+      <div class="bq-form no-print">
+        <h3>Your Details (for quote)</h3>
+        <div class="bq-field">
+          <label for="bqName">Name / Company</label>
+          <input id="bqName" type="text" placeholder="Acme Pvt Ltd" autocomplete="organization" />
+        </div>
+        <div class="bq-field">
+          <label for="bqPhone">Phone</label>
+          <input id="bqPhone" type="tel" placeholder="10-digit number" autocomplete="tel" />
+        </div>
+        <div class="bq-field">
+          <label for="bqGstin">GSTIN (optional)</label>
+          <input id="bqGstin" type="text" placeholder="27AAPCA8177N1ZQ" maxlength="15" autocomplete="off" />
+        </div>
+      </div>
+
+      <div class="bq-actions no-print">
+        <button class="btn btn-tagz" onclick="printQuote()">Download / Print Quote</button>
+        <a class="btn btn-outline" id="orderLink" href="../order.html">Place Order →</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="../js/catalog.js"></script>
+  <script>
+    var CATALOG = window.NTAGZ_CATALOG;
+    var qtys = {};  // { productId: qty }
+
+    function totalPieces() {
+      return Object.keys(qtys).reduce(function(s, id) {
+        var p = CATALOG.byId(id);
+        return s + (p ? qtys[id] * (p.packSize || 1) : 0);
+      }, 0);
+    }
+
+    function linePrice(p, qty) {
+      var disc = CATALOG.discountFor(p, qty);
+      return Math.round(p.price * (1 - disc / 100)) * qty;
+    }
+
+    function discountLabel(p, qty) {
+      var disc = CATALOG.discountFor(p, qty);
+      return disc > 0 ? disc + '% off' : '';
+    }
+
+    function buildPicker() {
+      var cats = [
+        { label: 'NFC Cards & Tags', filter: function(p) { return p.category === 'nfc' && p.detail; } },
+        { label: 'Google Review Stands', filter: function(p) { return p.allInclusive && p.detail; } },
+        { label: 'RFID', filter: function(p) { return p.category === 'rfid' && p.detail; } },
+      ];
+      var seen = {};
+      var html = '';
+      cats.forEach(function(cat) {
+        var prods = CATALOG.products.filter(function(p) { return cat.filter(p) && !seen[p.id]; });
+        if (!prods.length) return;
+        html += '<div class="cat-label">' + cat.label + '</div>';
+        prods.forEach(function(p) {
+          seen[p.id] = true;
+          html += '<div class="picker-row" id="row-' + p.id + '">' +
+            '<div><div class="picker-name">' + esc(p.name) + '</div>' +
+            '<div class="picker-base">₹' + p.price + ' / ' + (p.unit || 'pc') + ' ex-GST' +
+              (p.moq ? ' · MOQ ' + p.moq : '') + '</div></div>' +
+            '<input type="number" class="picker-qty" min="0" step="1" value="0" ' +
+              'data-id="' + p.id + '" aria-label="Quantity for ' + esc(p.name) + '" />' +
+            '<div class="picker-line-total" id="lt-' + p.id + '">—</div>' +
+          '</div>';
+        });
+      });
+      document.getElementById('productRows').innerHTML = html;
+
+      document.getElementById('productRows').addEventListener('input', function(e) {
+        if (e.target.classList.contains('picker-qty')) onQtyChange(e.target);
+      });
+    }
+
+    function onQtyChange(input) {
+      var id = input.dataset.id;
+      var val = parseInt(input.value, 10) || 0;
+      if (val < 0) { val = 0; input.value = 0; }
+      qtys[id] = val;
+      updateLineTotal(id, val);
+      updateSummary();
+    }
+
+    function updateLineTotal(id, qty) {
+      var cell = document.getElementById('lt-' + id);
+      if (!cell) return;
+      var p = CATALOG.byId(id);
+      if (!p || qty === 0) { cell.innerHTML = '—'; return; }
+      var disc = CATALOG.discountFor(p, qty);
+      var total = linePrice(p, qty);
+      cell.innerHTML = '₹' + total.toLocaleString('en-IN') +
+        (disc > 0 ? '<div class="picker-discount">' + disc + '% off</div>' : '');
+    }
+
+    function updateSummary() {
+      var lines = Object.keys(qtys).filter(function(id) { return qtys[id] > 0; });
+      var grandSubtotal = 0;
+      var linesHtml = '';
+      lines.forEach(function(id) {
+        var p = CATALOG.byId(id);
+        if (!p) return;
+        var total = linePrice(p, qtys[id]);
+        grandSubtotal += total;
+        linesHtml += '<div class="sum-line"><span>' + esc(p.name) + ' ×' + qtys[id] + '</span><span>₹' + total.toLocaleString('en-IN') + '</span></div>';
+      });
+      var container = document.getElementById('summaryLines');
+      if (!lines.length) {
+        container.innerHTML = '<p class="sum-empty">Add quantities above to see pricing.</p>';
+      } else {
+        var gst = Math.round(grandSubtotal * 0.18);
+        var grand = grandSubtotal + gst;
+        container.innerHTML = linesHtml +
+          '<div class="sum-line"><span>Subtotal (ex-GST)</span><span>₹' + grandSubtotal.toLocaleString('en-IN') + '</span></div>' +
+          '<div class="sum-line"><span>GST 18%</span><span>₹' + gst.toLocaleString('en-IN') + '</span></div>' +
+          '<div class="sum-line total"><span>Total</span><span>₹' + grand.toLocaleString('en-IN') + '</span></div>';
+      }
+      updateTierHighlight();
+    }
+
+    function updateTierHighlight() {
+      var pcs = totalPieces();
+      var rows = document.querySelectorAll('#tierRows .tier-row');
+      rows.forEach(function(r) {
+        var min = parseInt(r.dataset.min, 10);
+        var max = parseInt(r.dataset.max, 10) || Infinity;
+        r.classList.toggle('active', pcs >= min && pcs <= max);
+      });
+    }
+
+    function buildTiers() {
+      var tiers = CATALOG.tiers || [];
+      var html = tiers.map(function(t, i) {
+        var next = tiers[i + 1];
+        var rangeLabel = next ? t.min + '–' + (next.min - 1) + ' pcs' : t.min + '+ pcs';
+        var discLabel = t.percent > 0 ? t.percent + '% off' : 'Standard price';
+        var max = next ? next.min - 1 : 9999999;
+        return '<div class="tier-row" data-min="' + t.min + '" data-max="' + max + '">' +
+          '<span>' + rangeLabel + '</span><span>' + discLabel + '</span></div>';
+      }).join('');
+      if (!html) html = '<div class="tier-row"><span>500–999 pcs</span><span>10% off</span></div>' +
+        '<div class="tier-row"><span>1,000–4,999 pcs</span><span>15% off</span></div>' +
+        '<div class="tier-row"><span>5,000–9,999 pcs</span><span>25% off</span></div>' +
+        '<div class="tier-row"><span>10,000+ pcs</span><span>Custom</span></div>';
+      document.getElementById('tierRows').innerHTML = html;
+    }
+
+    function printQuote() {
+      window.print();
+    }
+
+    function esc(str) {
+      return String(str == null ? '' : str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    buildPicker();
+    buildTiers();
+    updateSummary();
+  </script>
+</body>
+</html>

@@ -14,9 +14,10 @@
     main {
       flex: 1;
       display: flex;
+      flex-direction: column;
       align-items: center;
-      justify-content: center;
-      padding: 40px 20px;
+      padding: 40px 20px 80px;
+      gap: 28px;
     }
     .confirm-card {
       background: var(--warm);
@@ -28,109 +29,111 @@
       text-align: center;
     }
     .confirm-icon {
-      width: 72px;
-      height: 72px;
+      width: 72px; height: 72px;
       border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      display: flex; align-items: center; justify-content: center;
       margin: 0 auto 24px;
       font-size: 32px;
     }
     .confirm-icon.success { background: #F0FDF4; }
     .confirm-icon.failed  { background: #FFF0EB; }
-    .confirm-title {
-      font-size: 26px;
-      font-weight: 700;
-      color: var(--ink);
-      margin: 0 0 10px;
-    }
-    .confirm-subtitle {
-      color: var(--ink-2);
-      font-size: 16px;
-      margin: 0 0 28px;
-      line-height: 1.55;
-    }
+    .confirm-title { font-size: 26px; font-weight: 700; color: var(--ink); margin: 0 0 10px; }
+    .confirm-subtitle { color: var(--ink-2); font-size: 16px; margin: 0 0 28px; line-height: 1.55; }
     .order-id-box {
-      background: var(--paper);
-      border-radius: var(--r);
-      padding: 14px 20px;
-      margin-bottom: 28px;
-      font-size: 13px;
-      color: var(--ink-3);
+      background: var(--paper); border-radius: var(--r);
+      padding: 14px 20px; margin-bottom: 16px;
+      font-size: 13px; color: var(--ink-3);
     }
-    .order-id-box strong {
-      display: block;
-      font-size: 17px;
-      color: var(--ink);
-      margin-top: 4px;
-      word-break: break-all;
-    }
-    .confirm-actions {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-    .confirm-actions .btn {
-      width: 100%;
-      justify-content: center;
-      text-align: center;
-    }
-    .trust-note {
-      margin-top: 24px;
-      font-size: 13px;
-      color: var(--ink-3);
-    }
+    .order-id-box strong { display: block; font-size: 17px; color: var(--ink); margin-top: 4px; word-break: break-all; }
+    .confirm-actions { display: flex; flex-direction: column; gap: 12px; }
+    .confirm-actions .btn { width: 100%; justify-content: center; text-align: center; }
+    .trust-note { margin-top: 24px; font-size: 13px; color: var(--ink-3); }
     .trust-note a { color: var(--tagz); text-decoration: none; }
+
+    /* ── Invoice ── */
+    #invoiceWrap {
+      background: var(--warm);
+      border-radius: var(--r-xl);
+      box-shadow: var(--shadow-card);
+      padding: 36px;
+      max-width: 640px;
+      width: 100%;
+    }
+    #invoiceWrap h2 { font-size: 18px; font-weight: 700; color: var(--ink); margin: 0 0 20px; }
+    .inv-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; flex-wrap: wrap; gap: 16px; }
+    .inv-from { font-size: 13px; color: var(--ink-2); line-height: 1.7; }
+    .inv-from strong { display: block; font-size: 16px; font-weight: 700; color: var(--ink); }
+    .inv-meta { font-size: 12px; color: var(--ink-3); text-align: right; line-height: 1.8; }
+    .inv-meta strong { color: var(--ink); }
+    .inv-to { background: var(--paper); border-radius: var(--r); padding: 14px 16px; margin-bottom: 20px; font-size: 13px; color: var(--ink-2); line-height: 1.7; }
+    .inv-to strong { display: block; color: var(--ink); font-weight: 600; margin-bottom: 2px; }
+    .inv-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 20px; }
+    .inv-table th { text-align: left; padding: 8px 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase; color: var(--ink-3); border-bottom: 2px solid var(--paper); }
+    .inv-table th:last-child, .inv-table td:last-child { text-align: right; }
+    .inv-table td { padding: 10px 10px; border-bottom: 1px solid var(--paper); color: var(--ink-2); vertical-align: top; }
+    .inv-table tfoot td { font-weight: 600; color: var(--ink); padding-top: 14px; border: none; }
+    .inv-table tfoot .total-row td { font-size: 16px; font-weight: 700; padding-top: 6px; }
+    .inv-print-btn { margin-top: 20px; }
+
+    /* ── Print ── */
+    @media print {
+      .no-print { display: none !important; }
+      body { background: white; }
+      .confirm-card { display: none !important; }
+      #invoiceWrap {
+        box-shadow: none; border-radius: 0; padding: 0;
+        max-width: 100%; border: none;
+      }
+      .inv-print-btn { display: none !important; }
+      nav, footer { display: none !important; }
+      main { padding: 0; }
+    }
   </style>
 </head>
 <body>
   <script src="../js/component-loader.js"></script>
 
   <main>
-    <div class="confirm-card" id="confirmCard">
-      <!-- filled by JS below -->
-    </div>
+    <div class="confirm-card" id="confirmCard"></div>
+    <div id="invoiceWrap" style="display:none;"></div>
   </main>
 
   <script src="../js/catalog.js"></script>
   <script src="../js/cart.js"></script>
   <script>
-    var params = new URLSearchParams(location.search);
+    function escHtml(str) {
+      return String(str == null ? '' : str)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    function fmt(n) { return '₹' + Number(n || 0).toLocaleString('en-IN'); }
+
+    var params  = new URLSearchParams(location.search);
     var status  = params.get('status')  || 'success';
     var txnid   = params.get('txnid')   || params.get('orderId') || '';
     var amount  = params.get('amount')  || '';
-    var gateway = params.get('gateway') || '';
-
-    var card = document.getElementById('confirmCard');
     var isSuccess = status === 'success';
 
-    if (isSuccess && window.NTAGZ_CART) {
-      window.NTAGZ_CART.clear();
-    }
+    if (isSuccess && window.NTAGZ_CART) window.NTAGZ_CART.clear();
 
-    var orderIdHtml = txnid
-      ? '<div class="order-id-box">Order / Transaction ID<strong>' + escHtml(txnid) + '</strong></div>'
-      : '';
-
-    var amountHtml = (isSuccess && amount)
-      ? '<div class="order-id-box">Amount paid<strong>₹' + escHtml(amount) + '</strong></div>'
-      : '';
+    // ── Confirm card ──────────────────────────────────────────────────────
+    var card = document.getElementById('confirmCard');
+    var orderIdHtml = txnid ? '<div class="order-id-box">Order / Transaction ID<strong>' + escHtml(txnid) + '</strong></div>' : '';
+    var amountHtml  = (isSuccess && amount) ? '<div class="order-id-box">Amount paid<strong>₹' + escHtml(amount) + '</strong></div>' : '';
 
     card.innerHTML = isSuccess
       ? '<div class="confirm-icon success">✓</div>' +
         '<h1 class="confirm-title">Order confirmed!</h1>' +
-        '<p class="confirm-subtitle">Your payment was successful. We\'ll start preparing your NFC order and ship it within 2–3 business days.</p>' +
-        orderIdHtml +
-        amountHtml +
+        '<p class="confirm-subtitle">Payment successful. We\'ll prepare your NFC order and ship within 2–3 business days.</p>' +
+        orderIdHtml + amountHtml +
         '<div class="confirm-actions">' +
           '<a class="btn btn-tagz" href="../track.html">Track your order →</a>' +
+          (hasSnapshot() ? '<button class="btn btn-outline inv-print-btn" onclick="printInvoice()">Download GST Invoice</button>' : '') +
           '<a class="btn btn-outline" href="../product/">Browse more products</a>' +
         '</div>' +
-        '<p class="trust-note">Questions? <a href="mailto:hello@ntagz.com">hello@ntagz.com</a> · <a href="https://wa.me/919503123456">WhatsApp</a></p>'
+        '<p class="trust-note">Questions? <a href="mailto:hello@ntagz.com">hello@ntagz.com</a></p>'
       : '<div class="confirm-icon failed">✕</div>' +
         '<h1 class="confirm-title">Payment not completed</h1>' +
-        '<p class="confirm-subtitle">Your payment was not processed. No amount has been charged. You can try again or contact us for help.</p>' +
+        '<p class="confirm-subtitle">Your payment was not processed. No amount has been charged.</p>' +
         orderIdHtml +
         '<div class="confirm-actions">' +
           '<a class="btn btn-tagz" href="../order.html">Try again →</a>' +
@@ -138,8 +141,64 @@
         '</div>' +
         '<p class="trust-note">If money was deducted, it will be refunded in 5–7 business days.</p>';
 
-    function escHtml(str) {
-      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    // ── Invoice ───────────────────────────────────────────────────────────
+    function hasSnapshot() {
+      try { return !!localStorage.getItem('ntagz_pending_order'); } catch(e) { return false; }
+    }
+
+    function loadSnapshot() {
+      try { return JSON.parse(localStorage.getItem('ntagz_pending_order') || 'null'); } catch(e) { return null; }
+    }
+
+    function buildInvoice(snap) {
+      var wrap = document.getElementById('invoiceWrap');
+      if (!snap || !snap.lines || !snap.lines.length) return;
+
+      var invoiceNum = 'INV-' + (snap.quoteRef || '').replace('QT-', '') + '-' + new Date(snap.ts || Date.now()).getFullYear();
+      var dateStr = new Date(snap.ts || Date.now()).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
+
+      var rowsHtml = snap.lines.map(function(l) {
+        return '<tr><td>' + escHtml(l.name) + '</td><td>' + escHtml(l.qty) + '</td>' +
+               '<td>' + escHtml(l.unitPrice) + '</td><td>' + fmt(l.total) + '</td></tr>';
+      }).join('');
+
+      var subtotalNum = snap.lines.reduce(function(s, l) { return s + (l.total || 0); }, 0);
+      var gstNum = Math.round(subtotalNum * 0.18);
+      var totalNum = subtotalNum + gstNum;
+
+      var billTo = [snap.name, snap.phone, snap.address, snap.pincode, snap.state]
+        .filter(Boolean).join(', ');
+      var gstinHtml = snap.gstin ? '<br>GSTIN: ' + escHtml(snap.gstin) : '';
+
+      wrap.style.display = '';
+      wrap.innerHTML =
+        '<h2>Tax Invoice</h2>' +
+        '<div class="inv-header">' +
+          '<div class="inv-from"><strong>nTagz</strong>NFC Solutions · Pune, Maharashtra<br>GSTIN: 27AAPCA8177N1ZQ<br>hello@ntagz.com</div>' +
+          '<div class="inv-meta">Invoice No: <strong>' + escHtml(invoiceNum) + '</strong><br>Date: <strong>' + dateStr + '</strong>' +
+            (txnid ? '<br>Txn ID: <strong>' + escHtml(txnid) + '</strong>' : '') + '</div>' +
+        '</div>' +
+        '<div class="inv-to"><strong>Bill To</strong>' + escHtml(billTo) + gstinHtml + '</div>' +
+        '<table class="inv-table"><thead><tr><th>Product</th><th>Qty</th><th>Rate (ex-GST)</th><th>Amount</th></tr></thead>' +
+        '<tbody>' + rowsHtml + '</tbody>' +
+        '<tfoot>' +
+          '<tr><td colspan="3">Subtotal</td><td>' + fmt(subtotalNum) + '</td></tr>' +
+          '<tr><td colspan="3">GST @ 18% (CGST 9% + SGST 9%)</td><td>' + fmt(gstNum) + '</td></tr>' +
+          '<tr class="total-row"><td colspan="3">Total</td><td>' + fmt(totalNum) + '</td></tr>' +
+        '</tfoot></table>' +
+        '<p style="font-size:12px;color:var(--ink-3);">This is a computer-generated invoice. No signature required.</p>';
+    }
+
+    function printInvoice() {
+      var snap = loadSnapshot();
+      buildInvoice(snap);
+      document.getElementById('invoiceWrap').style.display = '';
+      window.print();
+    }
+
+    if (isSuccess) {
+      var snap = loadSnapshot();
+      if (snap) buildInvoice(snap);
     }
   </script>
 </body>

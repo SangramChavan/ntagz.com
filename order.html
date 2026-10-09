@@ -863,11 +863,39 @@
         return data;
       }); });
     };
+    function snapshotOrder() {
+      var items = orderItems();
+      var catalog = window.NTAGZ_CATALOG;
+      var lines = items.map(function(item) {
+        var p = catalog.byId(item.id);
+        if (!p) return null;
+        var disc = catalog.discountFor(p, item.qty);
+        var unitPrice = Math.round(p.price * (1 - disc / 100));
+        return { id: item.id, name: p.name, qty: item.qty, unitPrice: unitPrice, total: unitPrice * item.qty };
+      }).filter(Boolean);
+      var snap = {
+        quoteRef: document.getElementById("quoteNum").innerText,
+        ts: Date.now(),
+        name: document.getElementById("customerName").value.trim(),
+        phone: document.getElementById("customerNumber").value.trim(),
+        address: document.getElementById("customerAddress").value.trim(),
+        pincode: document.getElementById("customerPincode").value.trim(),
+        state: document.getElementById("customerState").value,
+        gstin: document.getElementById("customerGST").value.trim(),
+        lines: lines,
+        subtotal: document.getElementById("outSubtotal").innerText,
+        gst: document.getElementById("outGst").innerText,
+        total: document.getElementById("outTotal").innerText,
+      };
+      try { localStorage.setItem("ntagz_pending_order", JSON.stringify(snap)); } catch (e) {}
+    }
+
     var rzpButton = document.getElementById("rzpPayNow");
     rzpButton.addEventListener("click", function() {
       if (!orderItems().length) { alert("Please add products to your order first."); return; }
       var button = this;
       button.setAttribute("aria-disabled", "true");
+      snapshotOrder();
       postPayment("/create-order", paymentDetails())
       .then(data => {
         var options = {
@@ -924,6 +952,7 @@
       }
       var button = this;
       button.disabled = true;
+      snapshotOrder();
       postPayment("/payu/checkout", Object.assign(paymentDetails(), { name: name, phone: phone, email: email.value.trim() }))
         .then(function(data) {
           var form = document.createElement("form");
