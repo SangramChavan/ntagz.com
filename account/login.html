@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign In — ntagz</title>
+  <meta name="robots" content="noindex" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=Manrope:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/base.css" />
+  <style>
+    body { min-height: 100vh; display: flex; flex-direction: column; }
+    main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px 20px; }
+    .login-card {
+      background: var(--warm); border-radius: var(--r-xl);
+      box-shadow: var(--shadow-strong); padding: 48px 36px;
+      max-width: 400px; width: 100%;
+    }
+    .login-logo { font-size: 22px; font-weight: 700; color: var(--ink); margin-bottom: 8px; }
+    .login-logo em { color: var(--tagz); font-style: normal; }
+    .login-subtitle { font-size: 14px; color: var(--ink-3); margin-bottom: 32px; }
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: 13px; font-weight: 600; color: var(--ink-2); margin-bottom: 6px; }
+    .form-group input {
+      width: 100%; padding: 13px 14px; border: 1.5px solid var(--paper);
+      border-radius: var(--r); background: var(--cream); color: var(--ink);
+      font-family: var(--ff-body); font-size: 16px; box-sizing: border-box;
+      transition: border-color 0.15s;
+    }
+    .form-group input:focus { outline: none; border-color: var(--tagz); }
+    .otp-hint { font-size: 12px; color: var(--ink-3); margin-bottom: 16px; }
+    .error-msg { font-size: 13px; color: var(--tagz); margin-bottom: 12px; display: none; }
+    .btn-full { width: 100%; justify-content: center; text-align: center; }
+    .back-link { display: block; text-align: center; margin-top: 16px; font-size: 13px; color: var(--ink-3); cursor: pointer; }
+    .back-link:hover { color: var(--tagz); }
+    #otpStep { display: none; }
+  </style>
+</head>
+<body>
+  <script src="../js/component-loader.js"></script>
+  <main>
+    <div class="login-card">
+      <div class="login-logo">N<em>tagz</em></div>
+      <p class="login-subtitle">Sign in to view orders, saved addresses, and bulk pricing.</p>
+
+      <div id="errorMsg" class="error-msg"></div>
+
+      <!-- Step 1: Email -->
+      <div id="emailStep">
+        <div class="form-group">
+          <label for="emailInput">Email address</label>
+          <input id="emailInput" type="email" placeholder="you@company.com" autocomplete="email" inputmode="email" />
+        </div>
+        <button class="btn btn-tagz btn-full" id="sendOtpBtn">Send login code →</button>
+      </div>
+
+      <!-- Step 2: OTP -->
+      <div id="otpStep">
+        <p class="otp-hint">We sent a 6-digit code to <strong id="emailDisplay"></strong></p>
+        <div class="form-group">
+          <label for="otpInput">Login code</label>
+          <input id="otpInput" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="123456" autocomplete="one-time-code" />
+        </div>
+        <button class="btn btn-tagz btn-full" id="verifyOtpBtn">Verify →</button>
+        <span class="back-link" id="backBtn">← Use a different email</span>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    var API = '/api/accounts';
+    var email = '';
+
+    function showError(msg) {
+      var el = document.getElementById('errorMsg');
+      el.textContent = msg;
+      el.style.display = msg ? 'block' : 'none';
+    }
+
+    function setLoading(btn, loading) {
+      btn.disabled = loading;
+      btn.textContent = loading ? 'Please wait…' : btn.dataset.label;
+    }
+
+    var sendBtn = document.getElementById('sendOtpBtn');
+    sendBtn.dataset.label = sendBtn.textContent;
+    sendBtn.addEventListener('click', async function() {
+      email = document.getElementById('emailInput').value.trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showError('Enter a valid email address.'); return; }
+      showError('');
+      setLoading(sendBtn, true);
+      try {
+        var res = await fetch(API + '/auth/send-otp', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to send code');
+        document.getElementById('emailDisplay').textContent = email;
+        document.getElementById('emailStep').style.display = 'none';
+        document.getElementById('otpStep').style.display = 'block';
+        document.getElementById('otpInput').focus();
+      } catch(e) { showError(e.message); }
+      finally { setLoading(sendBtn, false); }
+    });
+
+    document.getElementById('emailInput').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') sendBtn.click();
+    });
+
+    var verifyBtn = document.getElementById('verifyOtpBtn');
+    verifyBtn.dataset.label = verifyBtn.textContent;
+    verifyBtn.addEventListener('click', async function() {
+      var otp = document.getElementById('otpInput').value.trim();
+      if (!/^\d{6}$/.test(otp)) { showError('Enter the 6-digit code.'); return; }
+      showError('');
+      setLoading(verifyBtn, true);
+      try {
+        var res = await fetch(API + '/auth/verify-otp', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, otp }),
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Verification failed');
+        var next = new URLSearchParams(location.search).get('next') || '/account/';
+        location.href = next;
+      } catch(e) { showError(e.message); }
+      finally { setLoading(verifyBtn, false); }
+    });
+
+    document.getElementById('otpInput').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') verifyBtn.click();
+    });
+
+    document.getElementById('backBtn').addEventListener('click', function() {
+      document.getElementById('emailStep').style.display = 'block';
+      document.getElementById('otpStep').style.display = 'none';
+      showError('');
+    });
+
+    // Redirect if already logged in
+    fetch(API + '/me', { credentials: 'include' }).then(function(r) {
+      if (r.ok) location.href = '/account/';
+    }).catch(function() {});
+  </script>
+</body>
+</html>

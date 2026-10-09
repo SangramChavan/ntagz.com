@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Account — ntagz</title>
+  <meta name="robots" content="noindex" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=Manrope:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/base.css" />
+  <style>
+    body { background: var(--cream); }
+    .account-shell {
+      max-width: 900px; margin: 0 auto;
+      padding: 72px 20px 80px;
+      display: grid; grid-template-columns: 220px 1fr; gap: 28px;
+      align-items: start;
+    }
+    @media (max-width: 640px) { .account-shell { grid-template-columns: 1fr; } }
+
+    .acct-sidebar {
+      background: var(--warm); border-radius: var(--r-lg);
+      box-shadow: var(--shadow-card); padding: 20px;
+      position: sticky; top: 72px;
+    }
+    .acct-user { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--paper); }
+    .acct-user-email { font-size: 13px; color: var(--ink-2); word-break: break-all; }
+    .acct-user-tier {
+      display: inline-block; margin-top: 6px;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+      padding: 3px 8px; border-radius: 6px;
+    }
+    .tier-standard { background: var(--paper); color: var(--ink-3); }
+    .tier-pro { background: var(--tagz-lt); color: var(--tagz); }
+    .acct-loyalty { font-size: 12px; color: var(--ink-3); margin-top: 4px; }
+    .nav-item {
+      display: block; padding: 9px 12px; border-radius: 8px;
+      font-size: 14px; font-weight: 500; color: var(--ink-2);
+      cursor: pointer; text-decoration: none;
+      transition: background 0.15s, color 0.15s;
+    }
+    .nav-item:hover, .nav-item.active { background: var(--tagz-lt); color: var(--tagz); }
+    .nav-item + .nav-item { margin-top: 2px; }
+    .logout-btn {
+      margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--paper);
+      font-size: 13px; color: var(--ink-3); cursor: pointer; display: block;
+    }
+    .logout-btn:hover { color: var(--tagz); }
+
+    .acct-panel { background: var(--warm); border-radius: var(--r-lg); box-shadow: var(--shadow-card); }
+    .panel-section { display: none; }
+    .panel-section.active { display: block; }
+    .panel-head { padding: 24px 28px 16px; border-bottom: 1px solid var(--paper); }
+    .panel-head h2 { font-size: 18px; font-weight: 700; color: var(--ink); margin: 0; }
+    .panel-body { padding: 24px 28px; }
+
+    /* Profile form */
+    .profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 480px) { .profile-grid { grid-template-columns: 1fr; } }
+    .field-group { display: flex; flex-direction: column; gap: 5px; }
+    .field-group label { font-size: 12px; font-weight: 600; color: var(--ink-3); }
+    .field-group input {
+      padding: 10px 12px; border: 1.5px solid var(--paper); border-radius: 8px;
+      background: var(--cream); color: var(--ink); font-family: var(--ff-body); font-size: 14px;
+    }
+    .field-group input:focus { outline: none; border-color: var(--tagz); }
+    .save-bar { margin-top: 20px; display: flex; gap: 12px; align-items: center; }
+    .save-msg { font-size: 13px; color: var(--green); display: none; }
+
+    /* Orders */
+    .order-row {
+      display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+      padding: 16px 0; border-bottom: 1px solid var(--paper);
+    }
+    .order-row:last-child { border-bottom: none; }
+    .order-meta { flex: 1; min-width: 0; }
+    .order-ref { font-weight: 600; font-size: 14px; color: var(--ink); }
+    .order-detail { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+    .order-status {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase;
+      padding: 3px 8px; border-radius: 6px;
+    }
+    .status-confirmed { background: #F0FDF4; color: var(--green); }
+    .status-shipped   { background: #EBF3FB; color: #0071E3; }
+    .status-delivered { background: var(--paper); color: var(--ink-3); }
+    .reorder-btn { flex-shrink: 0; }
+    .orders-empty { text-align: center; padding: 40px 20px; color: var(--ink-3); font-size: 14px; }
+
+    /* Addresses */
+    .addr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-bottom: 20px; }
+    .addr-card {
+      background: var(--paper); border-radius: var(--r); padding: 14px 16px;
+      font-size: 13px; color: var(--ink-2); line-height: 1.65; position: relative;
+    }
+    .addr-label { font-weight: 700; color: var(--ink); margin-bottom: 4px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.4px; }
+    .addr-default { font-size: 11px; color: var(--tagz); font-weight: 600; }
+    .addr-del { position: absolute; top: 10px; right: 10px; background: none; border: none; color: var(--ink-3); cursor: pointer; font-size: 16px; line-height: 1; padding: 2px 5px; }
+    .addr-del:hover { color: var(--tagz); }
+    .addr-form { border-top: 1px solid var(--paper); padding-top: 20px; margin-top: 4px; }
+    .addr-form h3 { font-size: 14px; font-weight: 700; color: var(--ink); margin: 0 0 14px; }
+    .addr-grid-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    @media (max-width: 480px) { .addr-grid-form { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <script src="../js/component-loader.js"></script>
+
+  <div class="account-shell">
+    <aside class="acct-sidebar">
+      <div class="acct-user">
+        <div class="acct-user-email" id="userEmail">Loading…</div>
+        <div class="acct-user-tier tier-standard" id="userTier">Standard</div>
+        <div class="acct-loyalty" id="loyaltyBar"></div>
+      </div>
+      <a class="nav-item active" data-panel="orders">Order History</a>
+      <a class="nav-item" data-panel="profile">Profile</a>
+      <a class="nav-item" data-panel="addresses">Saved Addresses</a>
+      <span class="logout-btn" id="logoutBtn">Sign out</span>
+    </aside>
+
+    <div class="acct-panel">
+      <!-- Orders -->
+      <div class="panel-section active" id="panelOrders">
+        <div class="panel-head"><h2>Order History</h2></div>
+        <div class="panel-body" id="ordersBody"><p style="color:var(--ink-3);">Loading…</p></div>
+      </div>
+
+      <!-- Profile -->
+      <div class="panel-section" id="panelProfile">
+        <div class="panel-head"><h2>Profile</h2></div>
+        <div class="panel-body">
+          <div class="profile-grid">
+            <div class="field-group" style="grid-column:1/-1;">
+              <label>Email (cannot change)</label>
+              <input type="email" id="pEmail" disabled />
+            </div>
+            <div class="field-group">
+              <label>Full Name</label>
+              <input type="text" id="pName" placeholder="Your name" autocomplete="name" />
+            </div>
+            <div class="field-group">
+              <label>Phone</label>
+              <input type="tel" id="pPhone" placeholder="10-digit" autocomplete="tel" />
+            </div>
+            <div class="field-group">
+              <label>GSTIN (for invoices)</label>
+              <input type="text" id="pGstin" placeholder="27AAPCA8177N1ZQ" maxlength="15" />
+            </div>
+          </div>
+          <div class="save-bar">
+            <button class="btn btn-tagz" id="saveProfileBtn">Save changes</button>
+            <span class="save-msg" id="saveMsg">Saved ✓</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Addresses -->
+      <div class="panel-section" id="panelAddresses">
+        <div class="panel-head"><h2>Saved Addresses</h2></div>
+        <div class="panel-body">
+          <div class="addr-grid" id="addrGrid"></div>
+          <div class="addr-form">
+            <h3>Add Address</h3>
+            <div class="addr-grid-form">
+              <div class="field-group"><label>Label</label><input id="aLabel" type="text" placeholder="Home / Office" /></div>
+              <div class="field-group"><label>Name</label><input id="aName" type="text" placeholder="Recipient name" autocomplete="name" /></div>
+              <div class="field-group"><label>Phone</label><input id="aPhone" type="tel" placeholder="10-digit" autocomplete="tel" /></div>
+              <div class="field-group"><label>Pincode</label><input id="aPincode" type="text" placeholder="411001" maxlength="6" /></div>
+              <div class="field-group" style="grid-column:1/-1;"><label>Address Line</label><input id="aLine1" type="text" placeholder="House/Flat, Street, Area" autocomplete="street-address" /></div>
+              <div class="field-group"><label>City</label><input id="aCity" type="text" placeholder="Pune" autocomplete="address-level2" /></div>
+              <div class="field-group"><label>State</label><input id="aState" type="text" placeholder="Maharashtra" autocomplete="address-level1" /></div>
+            </div>
+            <label style="display:flex;gap:8px;align-items:center;font-size:13px;color:var(--ink-2);margin-bottom:14px;cursor:pointer;">
+              <input type="checkbox" id="aDefault" /> Set as default
+            </label>
+            <button class="btn btn-tagz" id="saveAddrBtn">Add Address</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="../js/catalog.js"></script>
+  <script src="../js/cart.js"></script>
+  <script>
+    var API = '/api/accounts';
+    var user = null;
+
+    async function api(path, opts) {
+      var r = await fetch(API + path, Object.assign({ credentials: 'include', headers: { 'Content-Type': 'application/json' } }, opts));
+      return r;
+    }
+
+    async function init() {
+      var r = await api('/me').catch(function() { return { ok: false }; });
+      if (!r.ok) { location.href = '/account/login.html?next=' + encodeURIComponent(location.pathname); return; }
+      var data = await r.json();
+      user = data.user;
+
+      document.getElementById('userEmail').textContent = user.email;
+      var tierEl = document.getElementById('userTier');
+      if (user.loyaltyTier === 'pro') {
+        tierEl.textContent = 'NFC Pro ★'; tierEl.className = 'acct-user-tier tier-pro';
+      } else {
+        var spent = Math.round((user.loyaltySpend || 0) / 100);
+        var remaining = Math.max(0, 10000 - spent);
+        if (remaining > 0) document.getElementById('loyaltyBar').textContent = '₹' + remaining.toLocaleString('en-IN') + ' to Pro tier';
+      }
+
+      document.getElementById('pEmail').value = user.email;
+      document.getElementById('pName').value  = user.name  || '';
+      document.getElementById('pPhone').value = user.phone || '';
+      document.getElementById('pGstin').value = user.gstin || '';
+
+      loadOrders();
+      loadAddresses();
+    }
+
+    // ── Nav ─────────────────────────────────────────────────────────────────
+    document.querySelectorAll('.nav-item[data-panel]').forEach(function(link) {
+      link.addEventListener('click', function() {
+        document.querySelectorAll('.nav-item').forEach(function(l) { l.classList.remove('active'); });
+        document.querySelectorAll('.panel-section').forEach(function(p) { p.classList.remove('active'); });
+        link.classList.add('active');
+        document.getElementById('panel' + link.dataset.panel.charAt(0).toUpperCase() + link.dataset.panel.slice(1)).classList.add('active');
+      });
+    });
+
+    // ── Logout ──────────────────────────────────────────────────────────────
+    document.getElementById('logoutBtn').addEventListener('click', async function() {
+      await api('/auth/logout', { method: 'POST' }).catch(function() {});
+      location.href = '/';
+    });
+
+    // ── Profile ─────────────────────────────────────────────────────────────
+    document.getElementById('saveProfileBtn').addEventListener('click', async function() {
+      var btn = this;
+      btn.disabled = true;
+      var r = await api('/me', {
+        method: 'PUT',
+        body: JSON.stringify({
+          name:  document.getElementById('pName').value.trim(),
+          phone: document.getElementById('pPhone').value.trim(),
+          gstin: document.getElementById('pGstin').value.trim().toUpperCase(),
+        }),
+      }).catch(function() { return { ok: false }; });
+      btn.disabled = false;
+      var msg = document.getElementById('saveMsg');
+      msg.style.display = r.ok ? 'inline' : 'none';
+      if (r.ok) setTimeout(function() { msg.style.display = 'none'; }, 3000);
+    });
+
+    // ── Orders ──────────────────────────────────────────────────────────────
+    async function loadOrders() {
+      var r = await api('/orders').catch(function() { return { ok: false }; });
+      var body = document.getElementById('ordersBody');
+      if (!r.ok) { body.innerHTML = '<p style="color:var(--ink-3);">Could not load orders.</p>'; return; }
+      var data = await r.json();
+      if (!data.orders || !data.orders.length) {
+        body.innerHTML = '<div class="orders-empty">No orders yet. <a href="../product/" style="color:var(--tagz);">Browse products →</a></div>';
+        return;
+      }
+      body.innerHTML = data.orders.map(function(o) {
+        var date = new Date(o.created_at * 1000).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+        var amt  = o.total ? '₹' + (o.total / 100).toLocaleString('en-IN') : '';
+        var statusClass = 'status-' + (o.status || 'confirmed');
+        return '<div class="order-row">' +
+          '<div class="order-meta">' +
+            '<div class="order-ref">' + esc(o.quote_ref || o.txn_id || o.id) + '</div>' +
+            '<div class="order-detail">' + date + (amt ? ' · ' + amt : '') + ' · ' + esc(o.gateway || '') + '</div>' +
+          '</div>' +
+          '<span class="order-status ' + statusClass + '">' + esc(o.status || 'confirmed') + '</span>' +
+          '<button class="btn btn-outline reorder-btn" data-id="' + o.id + '" onclick="reorder(this)">Reorder</button>' +
+        '</div>';
+      }).join('');
+    }
+
+    async function reorder(btn) {
+      btn.disabled = true;
+      var r = await api('/orders/' + btn.dataset.id + '/reorder', { method: 'POST' }).catch(function() { return { ok: false }; });
+      if (!r.ok) { btn.disabled = false; alert('Could not load order items.'); return; }
+      var data = await r.json();
+      if (!data.items || !data.items.length) { btn.disabled = false; alert('No items found in this order.'); return; }
+      var CART = window.NTAGZ_CART;
+      if (CART) {
+        CART.replace({});
+        data.items.forEach(function(item) { if (item.id && item.qty) CART.setQty(item.id, item.qty); });
+      }
+      location.href = '../order.html';
+    }
+
+    // ── Addresses ───────────────────────────────────────────────────────────
+    async function loadAddresses() {
+      var r = await api('/addresses').catch(function() { return { ok: false }; });
+      var grid = document.getElementById('addrGrid');
+      if (!r.ok) return;
+      var data = await r.json();
+      if (!data.addresses || !data.addresses.length) {
+        grid.innerHTML = '<p style="font-size:13px;color:var(--ink-3);">No saved addresses yet.</p>';
+        return;
+      }
+      grid.innerHTML = data.addresses.map(function(a) {
+        return '<div class="addr-card">' +
+          '<div class="addr-label">' + esc(a.label || 'Address') + (a.is_default ? ' <span class="addr-default">· Default</span>' : '') + '</div>' +
+          esc(a.name || '') + (a.phone ? '<br>' + esc(a.phone) : '') + '<br>' +
+          esc(a.line1 || '') + (a.city ? ', ' + esc(a.city) : '') + (a.state ? ', ' + esc(a.state) : '') +
+          (a.pincode ? ' – ' + esc(a.pincode) : '') +
+          '<button class="addr-del" data-id="' + a.id + '" title="Delete" onclick="deleteAddr(this)">×</button>' +
+        '</div>';
+      }).join('');
+    }
+
+    async function deleteAddr(btn) {
+      if (!confirm('Delete this address?')) return;
+      btn.disabled = true;
+      await api('/addresses/' + btn.dataset.id, { method: 'DELETE' }).catch(function() {});
+      loadAddresses();
+    }
+
+    document.getElementById('saveAddrBtn').addEventListener('click', async function() {
+      var btn = this;
+      btn.disabled = true;
+      var r = await api('/addresses', {
+        method: 'POST',
+        body: JSON.stringify({
+          label:      document.getElementById('aLabel').value.trim() || 'Address',
+          name:       document.getElementById('aName').value.trim(),
+          phone:      document.getElementById('aPhone').value.trim(),
+          line1:      document.getElementById('aLine1').value.trim(),
+          city:       document.getElementById('aCity').value.trim(),
+          state:      document.getElementById('aState').value.trim(),
+          pincode:    document.getElementById('aPincode').value.trim(),
+          is_default: document.getElementById('aDefault').checked,
+        }),
+      }).catch(function() { return { ok: false }; });
+      btn.disabled = false;
+      if (r.ok) {
+        ['aLabel','aName','aPhone','aLine1','aCity','aState','aPincode'].forEach(function(id) { document.getElementById(id).value = ''; });
+        document.getElementById('aDefault').checked = false;
+        loadAddresses();
+      }
+    });
+
+    function esc(str) {
+      return String(str == null ? '' : str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    init();
+  </script>
+</body>
+</html>

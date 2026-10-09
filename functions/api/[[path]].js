@@ -19,8 +19,9 @@ const PRODUCTS = {
 };
 
 const corsHeaders = {
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Allow-Credentials": "true",
   "Vary": "Origin",
 };
 
@@ -122,11 +123,237 @@ async function verifyPayuResponse(body, salt) {
   return safeEqual(responseHash, body.hash.toLowerCase());
 }
 
+// ── Accounts ──────────────────────────────────────────────────────────────
+
+function sessionCookie(id, maxAge) {
+  return `ntagz_session=${id}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
+}
+
+async function getSession(request, env) {
+  if (!env.DB) return null;
+  const cookie = request.headers.get("Cookie") || "";
+  const m = cookie.match(/ntagz_session=([A-Za-z0-9_-]{10,128})/);
+  if (!m) return null;
+  return env.DB.prepare(
+    `SELECT s.id AS sid, u.id AS user_id, u.email, u.name, u.phone, u.gstin,
+            u.loyalty_spend, u.loyalty_tier
+     FROM sessions s JOIN users u ON u.id = s.user_id
+     WHERE s.id = ? AND s.expires_at > unixepoch()`
+  ).bind(m[1]).first();
+}
+
+async function sendOtp(email, otp, env) {
+  if (!env.RESEND_API_KEY) return; // dev: skip email, log to console
+  console.log(`OTP for ${email}: ${otp}`);
+  await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from: "ntagz <hello@ntagz.com>",
+      to: [email],
+      subject: `${otp} — your ntagz login code`,
+      html: `<p style="font-family:sans-serif;">Your login code is <strong style="font-size:28px;letter-spacing:6px;">${otp}</strong></p><p style="font-family:sans-serif;color:#888;">Valid for 10 minutes. Do not share this code.</p>`,
+    }),
+  }).catch(() => {});
+}
+
+function jsonAuth(data, status, allowedOrigin, cookieHeader) {
+  const headers = { ...corsHeaders, "Access-Control-Allow-Origin": allowedOrigin, "Content-Type": "application/json" };
+  if (cookieHeader) headers["Set-Cookie"] = cookieHeader;
+  return new Response(JSON.stringify(data), { status, headers });
+}
+
+async function handleAccounts(url, request, env, allowedOrigin) {
+  if (!env.DB) return new Response(JSON.stringify({ error: "Database not configured" }), { status: 503, headers: { "Content-Type": "application/json" } });
+
+  const path = url.pathname;
+  const method = request.method;
+  let body = {};
+  if (["POST", "PUT"].includes(method)) {
+    try {
+      const ct = request.headers.get("Content-Type") || "";
+      body = ct.includes("json") ? await request.json() : {};
+    } catch { body = {}; }
+  }
+
+  // POST /api/accounts/auth/send-otp
+  if (method === "POST" && path.endsWith("/auth/send-otp")) {
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase().slice(0, 254) : "";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return jsonAuth({ error: "Invalid email" }, 400, allowedOrigin);
+    const arr = new Uint32Array(1);
+    crypto.getRandomValues(arr);
+    const otp = String(100000 + (arr[0] % 900000));
+    const id = crypto.randomUUID();
+    const expires = Math.floor(Date.now() / 1000) + 600;
+    await env.DB.prepare("DELETE FROM otp_tokens WHERE email = ?").bind(email).run();
+    await env.DB.prepare("INSERT INTO otp_tokens (id, email, otp, expires_at) VALUES (?, ?, ?, ?)").bind(id, email, otp, expires).run();
+    await sendOtp(email, otp, env);
+    return jsonAuth({ sent: true }, 200, allowedOrigin);
+  }
+
+  // POST /api/accounts/auth/verify-otp
+  if (method === "POST" && path.endsWith("/auth/verify-otp")) {
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase().slice(0, 254) : "";
+    const otp   = typeof body.otp   === "string" ? body.otp.trim().slice(0, 6) : "";
+    if (!email || !/^\d{6}$/.test(otp)) return jsonAuth({ error: "Invalid request" }, 400, allowedOrigin);
+    const token = await env.DB.prepare(
+      "SELECT id FROM otp_tokens WHERE email=? AND otp=? AND expires_at>unixepoch() AND used=0"
+    ).bind(email, otp).first();
+    if (!token) return jsonAuth({ error: "Invalid or expired code" }, 401, allowedOrigin);
+    await env.DB.prepare("UPDATE otp_tokens SET used=1 WHERE id=?").bind(token.id).run();
+    let user = await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first();
+    if (!user) {
+      const uid = crypto.randomUUID();
+      await env.DB.prepare("INSERT INTO users (id, email) VALUES (?, ?)").bind(uid, email).run();
+      user = { id: uid };
+    }
+    const sid = crypto.randomUUID();
+    const exp = Math.floor(Date.now() / 1000) + 7 * 86400;
+    await env.DB.prepare("INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)").bind(sid, user.id, exp).run();
+    return jsonAuth({ ok: true }, 200, allowedOrigin, sessionCookie(sid, 7 * 86400));
+  }
+
+  // POST /api/accounts/auth/logout
+  if (method === "POST" && path.endsWith("/auth/logout")) {
+    const m = (request.headers.get("Cookie") || "").match(/ntagz_session=([A-Za-z0-9_-]{10,128})/);
+    if (m) await env.DB.prepare("DELETE FROM sessions WHERE id=?").bind(m[1]).run();
+    return jsonAuth({ ok: true }, 200, allowedOrigin, sessionCookie("", 0));
+  }
+
+  // GET /api/accounts/me
+  if (method === "GET" && path.endsWith("/accounts/me")) {
+    const u = await getSession(request, env);
+    if (!u) return jsonAuth({ error: "Not authenticated" }, 401, allowedOrigin);
+    return jsonAuth({ user: { email: u.email, name: u.name, phone: u.phone, gstin: u.gstin, loyaltySpend: u.loyalty_spend, loyaltyTier: u.loyalty_tier } }, 200, allowedOrigin);
+  }
+
+  // PUT /api/accounts/me
+  if (method === "PUT" && path.endsWith("/accounts/me")) {
+    const u = await getSession(request, env);
+    if (!u) return jsonAuth({ error: "Not authenticated" }, 401, allowedOrigin);
+    const name  = typeof body.name  === "string" ? body.name.trim().slice(0, 100)  : null;
+    const phone = typeof body.phone === "string" ? body.phone.replace(/\D/g, "").slice(-10) : null;
+    const gstin = typeof body.gstin === "string" ? body.gstin.trim().toUpperCase().slice(0, 15) : null;
+    await env.DB.prepare("UPDATE users SET name=COALESCE(?,name), phone=COALESCE(?,phone), gstin=COALESCE(?,gstin) WHERE id=?")
+      .bind(name, phone, gstin, u.user_id).run();
+    return jsonAuth({ ok: true }, 200, allowedOrigin);
+  }
+
+  // GET /api/accounts/addresses
+  if (method === "GET" && path.endsWith("/accounts/addresses")) {
+    const u = await getSession(request, env);
+    if (!u) return jsonAuth({ error: "Not authenticated" }, 401, allowedOrigin);
+    const { results } = await env.DB.prepare(
+      "SELECT * FROM addresses WHERE user_id=? ORDER BY is_default DESC, created_at DESC"
+    ).bind(u.user_id).all();
+    return jsonAuth({ addresses: results }, 200, allowedOrigin);
+  }
+
+  // POST /api/accounts/addresses
+  if (method === "POST" && path.endsWith("/accounts/addresses")) {
+    const u = await getSession(request, env);
+    if (!u) return jsonAuth({ error: "Not authenticated" }, 401, allowedOrigin);
+    const { label, name, phone, line1, city, state, pincode, is_default } = body;
+    const id = crypto.randomUUID();
+    if (is_default) await env.DB.prepare("UPDATE addresses SET is_default=0 WHERE user_id=?").bind(u.user_id).run();
+    await env.DB.prepare(
+      "INSERT INTO addresses (id,user_id,label,name,phone,line1,city,state,pincode,is_default) VALUES (?,?,?,?,?,?,?,?,?,?)"
+    ).bind(id, u.user_id, (label||"Address").slice(0,20), (name||"").slice(0,100), (phone||"").slice(0,20),
+           (line1||"").slice(0,300), (city||"").slice(0,100), (state||"").slice(0,50), (pincode||"").slice(0,10), is_default ? 1 : 0).run();
+    return jsonAuth({ id }, 201, allowedOrigin);
+  }
+
+  // DELETE /api/accounts/addresses/:id
+  const addrDel = path.match(/\/accounts\/addresses\/([0-9a-f-]{36})$/);
+  if (method === "DELETE" && addrDel) {
+    const u = await getSession(request, env);
+    if (!u) return jsonAuth({ error: "Not authenticated" }, 401, allowedOrigin);
+    await env.DB.prepare("DELETE FROM addresses WHERE id=? AND user_id=?").bind(addrDel[1], u.user_id).run();
+    return jsonAuth({ ok: true }, 200, allowedOrigin);
+  }
+
+  // POST /api/accounts/orders  — record a completed order
+  if (method === "POST" && path.endsWith("/accounts/orders")) {
+    const u = await getSession(request, env);
+    const userId = u ? u.user_id : null;
+    const txnId = typeof body.txnId === "string" ? body.txnId.slice(0, 128) : "";
+    if (!txnId) return jsonAuth({ error: "Missing txnId" }, 400, allowedOrigin);
+    const existing = await env.DB.prepare("SELECT id FROM orders WHERE txn_id=?").bind(txnId).first();
+    if (existing) return jsonAuth({ id: existing.id }, 200, allowedOrigin);
+    const oid = crypto.randomUUID();
+    const totalPaise = Math.round((parseFloat(body.total) || 0) * 100);
+    const subtotalPaise = Math.round((parseFloat(body.subtotal) || 0) * 100);
+    const gstPaise = totalPaise - subtotalPaise;
+    await env.DB.prepare(
+      `INSERT INTO orders (id,user_id,txn_id,gateway,quote_ref,items_json,name,phone,email,address,pincode,state,gstin,subtotal,gst,total)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    ).bind(oid, userId, txnId, (body.gateway||"").slice(0,20), (body.quoteRef||"").slice(0,32),
+           JSON.stringify(Array.isArray(body.items) ? body.items : []),
+           (body.name||"").slice(0,100), (body.phone||"").slice(0,20), (body.email||"").slice(0,254),
+           (body.address||"").slice(0,500), (body.pincode||"").slice(0,10), (body.state||"").slice(0,50),
+           (body.gstin||"").slice(0,15), subtotalPaise, gstPaise, totalPaise).run();
+    if (userId && totalPaise > 0) {
+      await env.DB.prepare(
+        "UPDATE users SET loyalty_spend=loyalty_spend+?, loyalty_tier=CASE WHEN loyalty_spend+?>=1000000 THEN 'pro' ELSE loyalty_tier END WHERE id=?"
+      ).bind(totalPaise, totalPaise, userId).run();
+    }
+    return jsonAuth({ id: oid }, 201, allowedOrigin);
+  }
+
+  // GET /api/accounts/orders
+  if (method === "GET" && path.endsWith("/accounts/orders")) {
+    const u = await getSession(request, env);
+    if (!u) return jsonAuth({ error: "Not authenticated" }, 401, allowedOrigin);
+    const { results } = await env.DB.prepare(
+      "SELECT id,txn_id,gateway,status,quote_ref,total,created_at FROM orders WHERE user_id=? ORDER BY created_at DESC LIMIT 50"
+    ).bind(u.user_id).all();
+    return jsonAuth({ orders: results }, 200, allowedOrigin);
+  }
+
+  // GET /api/accounts/orders/:id
+  const orderGet = path.match(/\/accounts\/orders\/([0-9a-f-]{36})$/);
+  if (method === "GET" && orderGet) {
+    const u = await getSession(request, env);
+    if (!u) return jsonAuth({ error: "Not authenticated" }, 401, allowedOrigin);
+    const order = await env.DB.prepare("SELECT * FROM orders WHERE id=? AND user_id=?").bind(orderGet[1], u.user_id).first();
+    if (!order) return jsonAuth({ error: "Not found" }, 404, allowedOrigin);
+    try { order.items = JSON.parse(order.items_json || "[]"); } catch { order.items = []; }
+    return jsonAuth({ order }, 200, allowedOrigin);
+  }
+
+  // POST /api/accounts/orders/:id/reorder
+  const reorder = path.match(/\/accounts\/orders\/([0-9a-f-]{36})\/reorder$/);
+  if (method === "POST" && reorder) {
+    const u = await getSession(request, env);
+    if (!u) return jsonAuth({ error: "Not authenticated" }, 401, allowedOrigin);
+    const order = await env.DB.prepare("SELECT items_json FROM orders WHERE id=? AND user_id=?").bind(reorder[1], u.user_id).first();
+    if (!order) return jsonAuth({ error: "Not found" }, 404, allowedOrigin);
+    let items = [];
+    try { items = JSON.parse(order.items_json || "[]"); } catch {}
+    return jsonAuth({ items }, 200, allowedOrigin);
+  }
+
+  return jsonAuth({ error: "Not found" }, 404, allowedOrigin);
+}
+
+// ── Payment routes ─────────────────────────────────────────────────────────
+
 async function onRequest({ request, env }) {
   const url = new URL(request.url);
   const origin = request.headers.get("Origin");
-  const responseHeaders = { ...corsHeaders, "Access-Control-Allow-Origin": origin === "https://ntagz.com" ? origin : "https://www.ntagz.com" };
+  const allowedOrigin = origin === "https://ntagz.com" ? origin : "https://www.ntagz.com";
+  const responseHeaders = { ...corsHeaders, "Access-Control-Allow-Origin": allowedOrigin };
   if (request.method === "OPTIONS") return new Response(null, { headers: responseHeaders });
+
+  // ── Accounts routes (/api/accounts/*) ──────────────────────────────────
+  if (url.pathname.includes("/accounts/")) {
+    if (origin && !["https://www.ntagz.com", "https://ntagz.com"].includes(origin)) {
+      return json({ error: "Origin not allowed" }, 403, origin);
+    }
+    return handleAccounts(url, request, env, allowedOrigin);
+  }
+
+  // ── Payment routes ─────────────────────────────────────────────────────
   const payuReturn = url.pathname.endsWith("/payu/success") || url.pathname.endsWith("/payu/failure");
   if (request.method !== "POST" && !(request.method === "GET" && (url.pathname.endsWith("/payu/verify-payment") || payuReturn))) return json({ error: "Method not allowed" }, 405, origin);
   const payuCallback = payuReturn || url.pathname.endsWith("/payu/verify-payment");

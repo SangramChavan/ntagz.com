@@ -4,3 +4,12 @@ compatibility_date = "2026-10-08"
 
 [vars]
 PAYU_ENV = "production"
+
+# Set secrets via: npx wrangler secret put <NAME> --name ntagz-payments
+# Required: PAYU_KEY, PAYU_SALT, RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET
+# For email OTP: RESEND_API_KEY (get free key at resend.com)
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ntagz-db"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"

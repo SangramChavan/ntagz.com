@@ -107,6 +107,10 @@
     }
     function fmt(n) { return '₹' + Number(n || 0).toLocaleString('en-IN'); }
 
+    function loadSnapshotEarly() {
+      try { return JSON.parse(localStorage.getItem('ntagz_pending_order') || 'null'); } catch(e) { return null; }
+    }
+
     var params  = new URLSearchParams(location.search);
     var status  = params.get('status')  || 'success';
     var txnid   = params.get('txnid')   || params.get('orderId') || '';
@@ -114,6 +118,35 @@
     var isSuccess = status === 'success';
 
     if (isSuccess && window.NTAGZ_CART) window.NTAGZ_CART.clear();
+
+    if (isSuccess && txnid) {
+      try {
+        var snap = loadSnapshotEarly();
+        var parsePaise = function(str) { return Math.round(parseFloat(String(str || '0').replace(/[^\d.]/g, '')) * 100) || 0; };
+        var gateway = params.get('gateway') || (params.get('orderId') ? 'razorpay' : 'payu');
+        var payload = { txnId: txnid, gateway: gateway };
+        if (snap) {
+          payload.quoteRef  = snap.quoteRef;
+          payload.itemsJson = JSON.stringify(snap.lines || []);
+          payload.name      = snap.name;
+          payload.phone     = snap.phone;
+          payload.address   = snap.address;
+          payload.pincode   = snap.pincode;
+          payload.state     = snap.state;
+          payload.gstin     = snap.gstin;
+          payload.subtotal  = parsePaise(snap.subtotal);
+          payload.gst       = parsePaise(snap.gst);
+          payload.total     = parsePaise(snap.total) || parsePaise(amount);
+        } else if (amount) {
+          payload.total = parsePaise(amount);
+        }
+        fetch('/api/accounts/orders', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }).catch(function() {});
+      } catch(e) {}
+    }
 
     // ── Confirm card ──────────────────────────────────────────────────────
     var card = document.getElementById('confirmCard');
