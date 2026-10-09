@@ -67,8 +67,11 @@ async function main() {
       body: JSON.stringify(validPayuResponse),
     }), env,
   });
-  assert.equal(payuReturn.status, 200);
-  assert.match(await payuReturn.text(), /Payment verified/);
+  assert.equal(payuReturn.status, 303);
+  const location = new URL(payuReturn.headers.get("Location"));
+  assert.equal(location.pathname, "/order/confirm.html");
+  assert.equal(location.searchParams.get("status"), "success");
+  assert.equal(location.searchParams.get("txnid"), validPayuResponse.txnid);
   global.fetch = mockedFetch;
   console.log("payment worker checks passed");
 }
