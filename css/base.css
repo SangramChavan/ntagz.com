@@ -69,6 +69,14 @@ img {
   flex-wrap: wrap;
 }
 
+@media (max-width: 420px) {
+  .top-strip {
+    gap: 6px 10px;
+    padding: 8px 10px;
+    font-size: 11px;
+  }
+}
+
 .top-strip span {
   opacity: 0.6;
   font-size: 10px;
@@ -153,6 +161,33 @@ nav {
   display: flex;
   gap: 8px;
   align-items: center;
+}
+
+@media (max-width: 380px) {
+  .nav-inner {
+    gap: 8px;
+    padding-inline: 12px;
+  }
+
+  .nav-ctas {
+    gap: 4px;
+  }
+
+  .nav-ctas > .btn {
+    padding: 10px 12px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .acct-icon-btn {
+    width: 36px !important;
+    flex-shrink: 0;
+  }
+
+  .menu-toggle {
+    width: 40px;
+    height: 40px;
+  }
 }
 
 @media (min-width: 768px) {
@@ -518,8 +553,8 @@ body.cart-open-lock {
 }
 
 .cart-drawer-close {
-  width: 30px;
-  height: 30px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   border: none;
   background: var(--warm);

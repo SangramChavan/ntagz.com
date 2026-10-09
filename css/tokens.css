@@ -4,6 +4,8 @@
    Imported by base.css — loaded automatically on every page.
    ═══════════════════════════════════════════════════════ */
 
+@import url('https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=Manrope:wght@300;400;500;600;700;800&display=swap');
+
 :root {
   /* ── SURFACES ── */
   --cream:   #FAF7F2;
@@ -32,9 +34,9 @@
   --green-lt: #F0FDF4;
 
   /* ── TYPOGRAPHY ── */
-  --ff-head:  'Familjen Grotesk', sans-serif;
-  --ff-serif: 'Instrument Serif', serif;
-  --ff-body:  'Manrope', sans-serif;
+  --ff-head:  'Familjen Grotesk', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  --ff-serif: 'Instrument Serif', Georgia, 'Times New Roman', serif;
+  --ff-body:  'Manrope', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
 
   /* ── MOTION ── */
   --ease:        cubic-bezier(0.22, 1, 0.36, 1);

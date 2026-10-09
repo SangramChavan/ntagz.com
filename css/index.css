@@ -162,7 +162,7 @@
       z-index: 2;
       display: grid;
       grid-template-columns: 1fr;
-      gap: 40px;
+      gap: 24px;
       align-items: center;
       padding: 80px 0 60px;
     }
@@ -209,7 +209,7 @@
 
     .hero h1 {
       font-family: var(--ff-head);
-      font-size: clamp(46px, 9vw, 84px);
+      font-size: clamp(40px, 10vw, 84px);
       font-weight: 700;
       letter-spacing: -0.04em;
       line-height: 1.05;
@@ -220,8 +220,9 @@
       font-family: var(--ff-serif);
       font-style: italic;
       font-weight: 400;
-      color: var(--tagz);
+      color: var(--ink);
       letter-spacing: -0.02em;
+      white-space: nowrap;
     }
 
     .hero-sub {
@@ -317,7 +318,7 @@
       align-items: center;
       justify-content: center;
       height: 360px;
-      transform: scale(0.9);
+      transform: scale(clamp(0.7, 100vw / 400, 0.9));
     }
 
     .hero-bg-shape {
@@ -508,7 +509,7 @@
 
     .htb-3 {
       top: 180px;
-      left: -30px;
+      left: 0;
       animation-duration: 5.5s;
       animation-delay: -1s;
     }
@@ -749,8 +750,16 @@
     .filter-tabs {
       display: flex;
       gap: 10px;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      scrollbar-width: none;
       margin-bottom: 40px;
+      padding: 2px 2px 8px;
+    }
+
+    .filter-tabs::-webkit-scrollbar {
+      display: none;
     }
 
     .ftab {
@@ -764,6 +773,8 @@
       color: var(--ink-2);
       cursor: pointer;
       transition: all 0.3s var(--ease);
+      min-height: 44px;
+      flex: 0 0 auto;
     }
 
     .ftab:hover {
@@ -1900,6 +1911,7 @@
     .rfid-table-scroll {
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
+      overscroll-behavior-x: contain;
     }
 
     table.rfid-table {
@@ -2281,6 +2293,11 @@
       .hero-visual {
         height: 440px;
         transform: scale(1);
+      }
+
+      .filter-tabs {
+        overflow-x: visible;
+        scrollbar-width: auto;
       }
 
       .products-grid {
