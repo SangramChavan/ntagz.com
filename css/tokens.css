@@ -14,7 +14,7 @@
   /* ── CONTENT ── */
   --ink:   #1A1714;
   --ink-2: #4A4540;
-  --ink-3: #8A837A;
+  --ink-3: #706A61; /* darkened: 5.00:1 on cream, 4.59:1 on warm — WCAG AA */
 
   /* ── BRAND ── */
   --tagz:    #FF4500;
@@ -58,7 +58,7 @@
 
     --ink:   #F0EDE8;
     --ink-2: #C4BCAD;
-    --ink-3: #8A837A;
+    --ink-3: #8D867D; /* lightened: 5.33:1 on dark cream, 4.57:1 on dark warm — WCAG AA */
 
     --tagz:    #FF5722;
     --tagz-lt: rgba(255, 69, 0, 0.14);
@@ -82,7 +82,7 @@
 
   --ink:   #F0EDE8;
   --ink-2: #C4BCAD;
-  --ink-3: #8A837A;
+  --ink-3: #8D867D;
 
   --tagz:    #FF5722;
   --tagz-lt: rgba(255, 69, 0, 0.14);
