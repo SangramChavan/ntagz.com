@@ -2,6 +2,14 @@ name = "ntagz-payments"
 main = "payment-worker.mjs"
 compatibility_date = "2026-10-08"
 
+[[routes]]
+pattern = "ntagz.com/api/*"
+zone_name = "ntagz.com"
+
+[[routes]]
+pattern = "www.ntagz.com/api/*"
+zone_name = "ntagz.com"
+
 [vars]
 PAYU_ENV = "production"
 
