@@ -1,4 +1,21 @@
-/* ── PRODUCT FILTER ── */
+/* ── PRODUCT FILTER + SEARCH ── */
+    var productCat = 'all', productQuery = '';
+    function applyProductFilters() {
+      var terms = productQuery.toLowerCase().split(/\s+/).filter(Boolean), shown = 0;
+      document.querySelectorAll('.product-card').forEach(card => {
+        var always = card.dataset.cat === 'always';
+        var show = always ? (!terms.length && productCat === 'all')
+          : (productCat === 'all' || card.dataset.cat === productCat) &&
+            terms.every(t => card.textContent.toLowerCase().includes(t));
+        card.style.display = show ? '' : 'none';
+        if (show && !always) shown++;
+      });
+      var empty = document.getElementById('noResults');
+      if (empty) {
+        empty.hidden = shown > 0;
+        document.getElementById('noQuery').textContent = productQuery ? '“' + productQuery + '”' : 'this category';
+      }
+    }
     function filterProducts(cat, btn) {
       document.querySelectorAll('.ftab').forEach(b => {
         b.classList.remove('active');
@@ -6,10 +23,15 @@
       });
       btn.classList.add('active');
       btn.setAttribute('aria-selected', 'true');
-      document.querySelectorAll('.product-card').forEach(card => {
-        const show = cat === 'all' || card.dataset.cat === cat;
-        card.style.display = show ? '' : 'none';
-      });
+      productCat = cat;
+      applyProductFilters();
+    }
+    function searchProducts(q) { productQuery = q.trim(); applyProductFilters(); }
+    function clearProductFilters() {
+      var input = document.getElementById('productSearch');
+      if (input) input.value = '';
+      productQuery = '';
+      filterProducts('all', document.querySelector('.ftab'));
     }
 
     /* ── PRODUCT IMAGE CAROUSEL (photo + spec sheet) ── */
@@ -57,6 +79,5 @@
 
     /* ── ARIA: init faq expanded states ── */
     document.querySelectorAll('.faq-q').forEach(q => {
-      q.setAttribute('aria-expanded', 'false');
-      q.setAttribute('role', 'button');
+      q.setAttribute('aria-expanded', q.parentElement.classList.contains('open') ? 'true' : 'false');
     });

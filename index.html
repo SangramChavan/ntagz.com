@@ -961,6 +961,10 @@
             contactless connections. NFC (13.56MHz, phone-readable) and RFID (UHF/HF, reader-based) are different
             technologies — we keep them in separate tabs below so you order the right one.</p>
 </div>
+<div class="product-search">
+<label class="sr-only" for="productSearch">Search products</label>
+<input autocomplete="off" id="productSearch" oninput="searchProducts(this.value)" placeholder="Search products — e.g. coin, anti-metal, Google review" type="search"/>
+</div>
 <div aria-label="Filter products by category" class="filter-tabs reveal" role="tablist">
 <button aria-controls="productsGrid" aria-selected="true" class="ftab active" onclick="filterProducts('all',this)" role="tab">All Products</button>
 <button aria-controls="productsGrid" aria-selected="false" class="ftab" onclick="filterProducts('nfc',this)" role="tab">NFC Cards</button>
@@ -969,7 +973,7 @@
 <button aria-controls="productsGrid" aria-selected="false" class="ftab" onclick="filterProducts('rfid',this)" role="tab">RFID</button>
 <button aria-controls="productsGrid" aria-selected="false" class="ftab" onclick="filterProducts('sample',this)" role="tab">Sample Kit</button>
 </div>
-<div class="products-grid" id="productsGrid">
+<div class="products-grid" id="productsGrid" aria-live="polite">
 <!-- SAMPLE KIT — shown first so it catches the eye -->
 <div aria-label="View details for Complete NFC Sample Kit" class="product-card sample-card" data-cat="sample" data-detail="product/sample-kit/" role="link" tabindex="0">
 <span class="product-badge badge-sample">SAMPLE KIT</span>
@@ -1315,6 +1319,13 @@
 </div>
 </div>
 </div>
+<div class="no-results" hidden id="noResults">
+<p>No products match <b id="noQuery"></b>.</p>
+<div class="no-results-actions">
+<button class="btn btn-outline" onclick="clearProductFilters()" type="button">Clear filters</button>
+<a class="btn btn-tagz" href="https://wa.me/919960160016?text=Hi%20ntagz!%20I'm%20looking%20for%20a%20product%20I%20couldn't%20find%20on%20your%20website." rel="noopener noreferrer">Ask on WhatsApp</a>
+</div>
+</div>
 </div>
 </section>
 <section aria-label="NTAGZ Trade Pass membership" class="member-strip">
@@ -1353,46 +1364,46 @@
 <tbody>
 <!-- RFID PRODUCT ROW — duplicate this <tr> for each new RFID SKU -->
 <tr>
-<td>
+<td data-label="Product">
 <div class="rfid-product-name">UHF RFID Label Sticker 27×15mm
                       <small>Self-adhesive · EPC Gen2 · Inventory tracking</small>
 </div>
 </td>
-<td><span class="rfid-spec-pill">KU7</span></td>
-<td>860–960 MHz</td>
-<td>~2 metres</td>
-<td>Roll · Self-Adhesive</td>
-<td>10 pcs / pack</td>
-<td style="font-family:var(--ff-head);font-weight:800;color:var(--ink);">₹249 <span style="font-weight:600;color:var(--ink-3);font-size:11px;">+GST</span></td>
+<td data-label="Chip"><span class="rfid-spec-pill">KU7</span></td>
+<td data-label="Frequency">860–960 MHz</td>
+<td data-label="Read range">~2 metres</td>
+<td data-label="Format">Roll · Self-Adhesive</td>
+<td data-label="Pack size">10 pcs / pack</td>
+<td data-label="Price" style="font-family:var(--ff-head);font-weight:800;color:var(--ink);">₹249 <span style="font-weight:600;color:var(--ink-3);font-size:11px;">+GST</span></td>
 <td><a class="add-btn" href="order.html" data-product-id="uhf-rfid-label" style="padding:8px 14px;font-size:12px;">Order →</a>
 </td>
 </tr>
 <tr class="rfid-table-row-soon">
-<td>
+<td data-label="Product">
 <div class="rfid-product-name" style="color:var(--ink-3);">UHF RFID Hard Tag (Anti-Metal)
                       <small>For pallets &amp; metal assets</small>
 </div>
 </td>
-<td>—</td>
-<td>860–960 MHz</td>
-<td>Coming soon</td>
-<td>Hard Case</td>
-<td>—</td>
-<td>—</td>
+<td data-label="Chip">—</td>
+<td data-label="Frequency">860–960 MHz</td>
+<td data-label="Read range">Coming soon</td>
+<td data-label="Format">Hard Case</td>
+<td data-label="Pack size">—</td>
+<td data-label="Price">—</td>
 <td><a href="https://wa.me/919960160016?text=Hi%20ntagz!%20Notify%20me%20when%20the%20UHF%20Anti-Metal%20RFID%20tag%20is%20in%20stock." rel="noopener noreferrer" style="font-size:11px;font-weight:700;color:var(--teal);white-space:nowrap;" target="_blank">Notify me →</a></td>
 </tr>
 <tr class="rfid-table-row-soon">
-<td>
+<td data-label="Product">
 <div class="rfid-product-name" style="color:var(--ink-3);">HF RFID Wristband (NTAG213)
                       <small>Events &amp; access control</small>
 </div>
 </td>
-<td>—</td>
-<td>13.56 MHz</td>
-<td>Coming soon</td>
-<td>Silicone Band</td>
-<td>—</td>
-<td>—</td>
+<td data-label="Chip">—</td>
+<td data-label="Frequency">13.56 MHz</td>
+<td data-label="Read range">Coming soon</td>
+<td data-label="Format">Silicone Band</td>
+<td data-label="Pack size">—</td>
+<td data-label="Price">—</td>
 <td><a href="https://wa.me/919960160016?text=Hi%20ntagz!%20Notify%20me%20when%20the%20HF%20RFID%20wristband%20is%20in%20stock." rel="noopener noreferrer" style="font-size:11px;font-weight:700;color:var(--teal);white-space:nowrap;" target="_blank">Notify me →</a></td>
 </tr>
 </tbody>
@@ -1617,45 +1628,45 @@
 <div class="faq-grid">
 <div class="faq-list reveal">
 <div class="faq-item open">
-<div class="faq-q" onclick="toggleFaq(this)">
+<button aria-expanded="false" class="faq-q" onclick="toggleFaq(this)" type="button">
                 How do I place an order?
-                <span class="faq-q-icon">+</span>
-</div>
+                <span aria-hidden="true" class="faq-q-icon">+</span>
+</button>
 <div class="faq-a">Simply click Order Now in the menu or on any product card. You'll be taken to our quote
                 calculator where you can select your product, quantity, and get an instant price — then confirm via
                 WhatsApp or UPI.</div>
 </div>
 <div class="faq-item">
-<div class="faq-q" onclick="toggleFaq(this)">
+<button aria-expanded="false" class="faq-q" onclick="toggleFaq(this)" type="button">
                 Do I need an app to use the NFC tags?
-                <span class="faq-q-icon">+</span>
-</div>
+                <span aria-hidden="true" class="faq-q-icon">+</span>
+</button>
 <div class="faq-a">No app needed at all. Any Android phone with NFC (most phones from 2016+) or iPhone XR
                 and above can tap and read the tags natively. Your contact just taps — their browser opens your link
                 instantly.</div>
 </div>
 <div class="faq-item">
-<div class="faq-q" onclick="toggleFaq(this)">
+<button aria-expanded="false" class="faq-q" onclick="toggleFaq(this)" type="button">
                 Can I change what the chip links to later?
-                <span class="faq-q-icon">+</span>
-</div>
+                <span aria-hidden="true" class="faq-q-icon">+</span>
+</button>
 <div class="faq-a">Yes! Standard NTAG chips are re-writable. You can reprogram the tag anytime using any
                 free NFC writing app. Locked chips (for permanent use) are also available on request.</div>
 </div>
 <div class="faq-item">
-<div class="faq-q" onclick="toggleFaq(this)">
+<button aria-expanded="false" class="faq-q" onclick="toggleFaq(this)" type="button">
                 How long does bulk shipping take?
-                <span class="faq-q-icon">+</span>
-</div>
+                <span aria-hidden="true" class="faq-q-icon">+</span>
+</button>
 <div class="faq-a">Blank stock standard orders ship within 24 hours. Custom printed products take 2–3
                 business days for printing before dispatch. We ship pan-India via Blue Dart and Delhivery. Delivery
                 typically takes 2–4 days.</div>
 </div>
 <div class="faq-item">
-<div class="faq-q" onclick="toggleFaq(this)">
+<button aria-expanded="false" class="faq-q" onclick="toggleFaq(this)" type="button">
                 What's the minimum order quantity (MOQ)?
-                <span class="faq-q-icon">+</span>
-</div>
+                <span aria-hidden="true" class="faq-q-icon">+</span>
+</button>
 <div class="faq-a">Our minimum order quantity is just 10 pieces per product — making it easy for small
                 businesses and first-time buyers to get started. Bulk discounts kick in from 500 pcs onwards, going up
                 to
@@ -1663,10 +1674,10 @@
                 one box!</div>
 </div>
 <div class="faq-item">
-<div class="faq-q" onclick="toggleFaq(this)">
+<button aria-expanded="false" class="faq-q" onclick="toggleFaq(this)" type="button">
                 Is ntagz available on Amazon, Flipkart or IndiaMart?
-                <span class="faq-q-icon">+</span>
-</div>
+                <span aria-hidden="true" class="faq-q-icon">+</span>
+</button>
 <div class="faq-a">Yes — you'll find ntagz products on Amazon.in, Flipkart and IndiaMART, in addition to
                 ordering directly on this website via WhatsApp. Direct orders get the best bulk pricing, custom branding
                 options, and a dedicated account manager.</div>

@@ -93,7 +93,7 @@
     .btn-outline {
       background: transparent;
       border: 1.5px solid var(--ink);
-      color: #c8810a;
+      color: var(--ink);
     }
 
     .btn-outline:hover {
@@ -220,7 +220,7 @@
       font-family: var(--ff-serif);
       font-style: italic;
       font-weight: 400;
-      color: #c8810a;
+      color: var(--ink);
       letter-spacing: -0.02em;
       white-space: nowrap;
     }
@@ -262,7 +262,7 @@
       font-family: var(--ff-head);
       font-size: 13px;
       font-weight: 700;
-      color: #c8810a;
+      color: var(--ink);
     }
 
     .hero-rating-text span {
@@ -278,7 +278,7 @@
     }
 
     .hero-actions .btn-ghost {
-      color: #c8810a;
+      color: var(--ink);
       border-color: var(--ink-3);
     }
 
@@ -430,7 +430,7 @@
       font-weight: 700;
       letter-spacing: -0.02em;
       margin-bottom: 4px;
-      color: #c8810a;
+      color: var(--ink);
     }
 
     .card-type {
@@ -544,7 +544,7 @@
       font-family: var(--ff-head);
       font-size: 18px;
       font-weight: 800;
-      color: #c8810a;
+      color: var(--ink);
     }
 
     .htb-value.tagz {
@@ -700,7 +700,7 @@
     }
 
     .marketplace-note strong {
-      color: #c8810a;
+      color: var(--ink);
       font-weight: 700;
     }
 
@@ -1145,7 +1145,7 @@
       font-weight: 800;
       letter-spacing: -0.02em;
       margin-bottom: 8px;
-      color: #c8810a;
+      color: var(--ink);
     }
 
     .product-desc {
@@ -1167,7 +1167,7 @@
       font-family: var(--ff-head);
       font-size: 22px;
       font-weight: 800;
-      color: #c8810a;
+      color: var(--ink);
       line-height: 1.1;
     }
 
@@ -1492,7 +1492,7 @@
       font-family: var(--ff-head);
       font-size: 17px;
       font-weight: 800;
-      color: #c8810a;
+      color: var(--ink);
     }
 
     .price-opt-val span {
@@ -1862,7 +1862,7 @@
       font-size: 15px;
       font-weight: 800;
       margin-bottom: 4px;
-      color: #c8810a;
+      color: var(--ink);
     }
 
     .testi-role {
@@ -1967,7 +1967,7 @@
     .rfid-product-name {
       font-family: var(--ff-head);
       font-weight: 800;
-      color: #c8810a;
+      color: var(--ink);
       font-size: 14px;
     }
 
@@ -2220,7 +2220,7 @@
     }
 
     .loc-address strong {
-      color: #c8810a;
+      color: var(--ink);
       display: block;
       font-family: var(--ff-head);
       font-size: 16px;
@@ -2574,4 +2574,86 @@
     .member-strip p { color: var(--ink-2); font-size: 14px; max-width: 62ch; }
     @media (min-width: 768px) {
       .member-strip-inner { flex-direction: row; align-items: center; justify-content: space-between; gap: 32px; }
+    }
+
+    /* ═══ CATALOG NORMALISATION · search, grid, cards, RFID table, FAQ ═══ */
+    .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+    .product-search { margin-bottom: 16px; }
+    .product-search input {
+      width: 100%; min-height: 48px; padding: 0 16px; font: inherit; font-size: 16px;
+      color: var(--ink); background: var(--surface); border: 1px solid var(--paper); border-radius: var(--r-xl);
+    }
+    .product-search input::placeholder { color: var(--ink-3); }
+    .ftab { min-height: 44px; }
+    .filter-tabs { margin-bottom: 24px; }
+
+    .no-results { text-align: center; padding: 40px 16px; color: var(--ink-2); }
+    .no-results[hidden] { display: none; }
+    .no-results-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 16px; }
+
+    /* Grid: 1 col <360, 2 cols phones, 3 tablet, 4 desktop */
+    .products-grid { gap: 12px; }
+    @media (min-width: 360px) { .products-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (min-width: 768px) { .products-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; } }
+    @media (min-width: 1200px) { .products-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+    /* Cards: one image ratio, predictable text blocks, price + action pinned to the bottom */
+    .product-card { height: 100%; }
+    .product-img { height: auto; aspect-ratio: 4 / 3; }
+    .product-photo { object-fit: contain; padding: 6px; }
+    .product-info { padding: 12px; }
+    .product-name {
+      font-size: 15px; line-height: 1.25; min-height: 2.5em; margin-bottom: 6px;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .product-desc {
+      font-size: 13px; line-height: 1.5; margin-bottom: 12px; flex-grow: 0; max-height: 4.5em;
+      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .product-tags { margin-bottom: 8px; }
+    .product-tags .ptag:nth-child(n+3) { display: none; }
+    .ptag { font-size: 12px; }
+    .product-meta { margin-top: auto; gap: 10px; }
+    .product-price { font-size: 18px; }
+    .product-price .price-from, .product-price .price-gst { font-size: 12px; }
+    .product-badge, .tech-badge { font-size: 11px; }
+    .add-btn, .add-btn-wa { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 44px; text-align: center; }
+    @media (min-width: 768px) {
+      .product-info { padding: 16px; }
+      .product-name { font-size: 16px; }
+      .product-meta { flex-direction: column; align-items: stretch; }
+    }
+
+    /* Small-text floor */
+    .sec-eyebrow, .price-from, .price-gst, .card-type { font-size: 12px; }
+
+    /* Keyboard focus */
+    a:focus-visible, button:focus-visible, input:focus-visible, .product-card:focus-visible {
+      outline: 2px solid var(--tagz); outline-offset: 2px;
+    }
+
+    /* FAQ: real buttons, whole row clickable */
+    button.faq-q { width: 100%; text-align: left; background: none; border: 0; color: var(--ink); font-family: var(--ff-head); min-height: 56px; }
+    .faq-item.open .faq-q-icon { transform: rotate(45deg); }
+
+    /* RFID table → stacked cards on phones */
+    @media (max-width: 767px) {
+      table.rfid-table { min-width: 0; }
+      .rfid-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+      .rfid-table, .rfid-table tbody, .rfid-table tr, .rfid-table td { display: block; width: 100%; }
+      .rfid-table tbody tr { padding: 14px 16px; border-bottom: 1px solid var(--paper); }
+      .rfid-table tbody td { display: flex; justify-content: space-between; gap: 16px; padding: 6px 0; border: 0; font-size: 14px; text-align: right; }
+      .rfid-table tbody td:first-child { display: block; text-align: left; padding-bottom: 8px; }
+      .rfid-table tbody td[data-label]:not(:first-child)::before {
+        content: attr(data-label); color: var(--ink-3); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; text-align: left;
+      }
+      .rfid-table tbody td:last-child { padding-top: 10px; }
+      .rfid-table tbody td:last-child .add-btn, .rfid-table tbody td:last-child a { width: 100%; }
+    }
+
+    .rfid-table caption { display: block; width: 100%; text-align: left; }
+    @media (max-width: 767px) {
+      .wa-float { width: 48px; height: 48px; bottom: 16px; right: 16px; }
+      .wa-float svg { width: 24px; height: 24px; }
     }
