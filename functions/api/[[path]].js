@@ -145,7 +145,7 @@ async function getSession(request, env) {
 async function sendOtp(email, otp, env) {
   if (!env.RESEND_API_KEY) return; // dev: skip email, log to console
   console.log(`OTP for ${email}: ${otp}`);
-  await fetch("https://api.resend.com/emails", {
+  const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -154,7 +154,8 @@ async function sendOtp(email, otp, env) {
       subject: `${otp} — your ntagz login code`,
       html: `<p style="font-family:sans-serif;">Your login code is <strong style="font-size:28px;letter-spacing:6px;">${otp}</strong></p><p style="font-family:sans-serif;color:#888;">Valid for 10 minutes. Do not share this code.</p>`,
     }),
-  }).catch(() => {});
+  }).catch((e) => { console.error("Resend fetch error:", e); return null; });
+  if (res && !res.ok) console.error("Resend error:", res.status, await res.text().catch(() => ""));
 }
 
 function jsonAuth(data, status, allowedOrigin, cookieHeader) {
@@ -162,6 +163,80 @@ function jsonAuth(data, status, allowedOrigin, cookieHeader) {
   if (cookieHeader) headers["Set-Cookie"] = cookieHeader;
   return new Response(JSON.stringify(data), { status, headers });
 }
+
+// ── Membership handler ────────────────────────────────────────────────────────
+
+async function handleMembership(url, request, env, allowedOrigin) {
+  if (!env.DB) return new Response(JSON.stringify({ error: "Database not configured" }), { status: 503, headers: { "Content-Type": "application/json" } });
+  const path = url.pathname;
+  const method = request.method;
+
+  // GET /api/membership/status
+  if (method === "GET" && path.endsWith("/membership/status")) {
+    const u = await getSession(request, env);
+    if (!u) return jsonAuth({ error: "Not authenticated" }, 401, allowedOrigin);
+    const mem = await env.DB.prepare(
+      `SELECT * FROM memberships WHERE user_id=? AND status='active' AND expires_at > unixepoch() ORDER BY expires_at DESC LIMIT 1`
+    ).bind(u.user_id).first();
+    return jsonAuth({ membership: mem ? {
+      active: true,
+      expiresAt: mem.expires_at,
+      welcomeCreditPaise: mem.welcome_credit_paise,
+      welcomeCreditUsed: !!mem.welcome_credit_used,
+      pricePaid: mem.price_paid,
+      purchasedAt: mem.purchased_at,
+    } : { active: false } }, 200, allowedOrigin);
+  }
+
+  // POST /api/membership/create-order
+  if (method === "POST" && path.endsWith("/membership/create-order")) {
+    const u = await getSession(request, env);
+    if (!u) return jsonAuth({ error: "Not authenticated" }, 401, allowedOrigin);
+    if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) return jsonAuth({ error: "Payment not configured" }, 503, allowedOrigin);
+    const existing = await env.DB.prepare(
+      `SELECT id FROM memberships WHERE user_id=? AND status='active' AND expires_at > unixepoch() LIMIT 1`
+    ).bind(u.user_id).first();
+    if (existing) return jsonAuth({ error: "You already have an active Trade Pass" }, 409, allowedOrigin);
+    const feePaise = 99900;
+    const rpRes = await fetch("https://api.razorpay.com/v1/orders", {
+      method: "POST",
+      headers: {
+        Authorization: "Basic " + btoa(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ amount: feePaise, currency: "INR", receipt: `tp-${u.user_id.slice(0, 8)}` }),
+    });
+    if (!rpRes.ok) { const t = await rpRes.text().catch(() => ""); console.error("Razorpay order error:", t); return jsonAuth({ error: "Payment setup failed" }, 502, allowedOrigin); }
+    const order = await rpRes.json();
+    return jsonAuth({ id: order.id, amount: order.amount, currency: order.currency, keyId: env.RAZORPAY_KEY_ID }, 200, allowedOrigin);
+  }
+
+  // POST /api/membership/verify-payment
+  if (method === "POST" && path.endsWith("/membership/verify-payment")) {
+    const u = await getSession(request, env);
+    if (!u) return jsonAuth({ error: "Not authenticated" }, 401, allowedOrigin);
+    let body = {};
+    try { body = await request.json(); } catch { return jsonAuth({ error: "Invalid body" }, 400, allowedOrigin); }
+    const { razorpay_payment_id, razorpay_order_id, razorpay_signature } = body;
+    if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) return jsonAuth({ error: "Missing payment fields" }, 400, allowedOrigin);
+    const valid = await verifySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature, env.RAZORPAY_KEY_SECRET);
+    if (!valid) return jsonAuth({ error: "Signature mismatch" }, 400, allowedOrigin);
+    // Idempotent: check if already recorded
+    const already = await env.DB.prepare(`SELECT id FROM memberships WHERE razorpay_order_id=?`).bind(razorpay_order_id).first();
+    if (already) return jsonAuth({ ok: true, membershipId: already.id }, 200, allowedOrigin);
+    const memId = crypto.randomUUID();
+    const now = Math.floor(Date.now() / 1000);
+    await env.DB.prepare(
+      `INSERT INTO memberships (id, user_id, status, purchased_at, expires_at, welcome_credit_paise, price_paid, payment_id, razorpay_order_id)
+       VALUES (?, ?, 'active', ?, ?, 50000, 99900, ?, ?)`
+    ).bind(memId, u.user_id, now, now + 365 * 86400, razorpay_payment_id, razorpay_order_id).run();
+    return jsonAuth({ ok: true, membershipId: memId, expiresAt: now + 365 * 86400 }, 200, allowedOrigin);
+  }
+
+  return jsonAuth({ error: "Not found" }, 404, allowedOrigin);
+}
+
+// ── Accounts handler ──────────────────────────────────────────────────────────
 
 async function handleAccounts(url, request, env, allowedOrigin) {
   if (!env.DB) return new Response(JSON.stringify({ error: "Database not configured" }), { status: 503, headers: { "Content-Type": "application/json" } });
@@ -351,6 +426,14 @@ async function onRequest({ request, env }) {
       return json({ error: "Origin not allowed" }, 403, origin);
     }
     return handleAccounts(url, request, env, allowedOrigin);
+  }
+
+  // ── Membership routes (/api/membership/*) ──────────────────────────────
+  if (url.pathname.includes("/membership/")) {
+    if (origin && !["https://www.ntagz.com", "https://ntagz.com"].includes(origin)) {
+      return json({ error: "Origin not allowed" }, 403, origin);
+    }
+    return handleMembership(url, request, env, allowedOrigin);
   }
 
   // ── Payment routes ─────────────────────────────────────────────────────

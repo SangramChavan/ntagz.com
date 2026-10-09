@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NTAGZ Trade Pass — ₹999/year | ntagz</title>
+  <meta name="description" content="India's NFC trade membership. Buy smarter, build your business. ₹999/year unlocks member pricing, ₹500 welcome credit and priority quotes." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=Manrope:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/base.css" />
+  <style>
+    /* ── Hero ── */
+    .tp-hero {
+      background: var(--ink);
+      color: #fff;
+      padding: 80px 20px 72px;
+      text-align: center;
+    }
+    .tp-badge {
+      display: inline-block;
+      background: var(--tagz);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 5px 12px;
+      border-radius: 20px;
+      margin-bottom: 24px;
+    }
+    .tp-hero h1 {
+      font-size: clamp(26px, 5vw, 44px);
+      font-weight: 700;
+      line-height: 1.15;
+      color: #fff;
+      max-width: 640px;
+      margin: 0 auto 16px;
+    }
+    .tp-hero p {
+      font-size: 17px;
+      color: rgba(255,255,255,0.7);
+      max-width: 500px;
+      margin: 0 auto 32px;
+      line-height: 1.65;
+    }
+    .tp-price-pill {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 6px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 40px;
+      padding: 10px 24px;
+      margin-bottom: 24px;
+    }
+    .tp-price-pill .price { font-size: 32px; font-weight: 700; color: #fff; }
+    .tp-price-pill .period { font-size: 14px; color: rgba(255,255,255,0.55); }
+    .tp-hero-cta { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+    .btn-tp {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      background: var(--tagz); color: #fff;
+      font-size: 16px; font-weight: 700;
+      padding: 16px 36px; border-radius: 12px;
+      border: none; cursor: pointer; min-height: 52px;
+      transition: opacity 0.15s;
+    }
+    .btn-tp:hover { opacity: 0.88; }
+    .btn-tp:disabled { opacity: 0.5; cursor: not-allowed; }
+    .tp-hero-note { font-size: 13px; color: rgba(255,255,255,0.45); }
+
+    /* ── Section layout ── */
+    .tp-section { padding: 64px 20px; }
+    .tp-section-inner { max-width: 860px; margin: 0 auto; }
+    .tp-section-title { font-size: 26px; font-weight: 700; color: var(--ink); margin: 0 0 8px; }
+    .tp-section-sub { font-size: 16px; color: var(--ink-2); margin: 0 0 40px; }
+
+    /* ── Who it's for ── */
+    .tp-for-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 16px;
+    }
+    .tp-for-card {
+      background: var(--warm);
+      border-radius: var(--r-lg);
+      padding: 20px;
+      box-shadow: var(--shadow-card);
+    }
+    .tp-for-icon { font-size: 28px; margin-bottom: 10px; }
+    .tp-for-label { font-weight: 700; font-size: 15px; color: var(--ink); margin-bottom: 4px; }
+    .tp-for-desc { font-size: 13px; color: var(--ink-3); line-height: 1.6; }
+
+    /* ── Benefits ── */
+    .tp-benefits-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 20px;
+    }
+    .tp-benefit {
+      background: var(--warm);
+      border-radius: var(--r-lg);
+      padding: 24px;
+      box-shadow: var(--shadow-card);
+    }
+    .tp-benefit-num {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 36px; height: 36px; border-radius: 10px;
+      background: var(--tagz-lt); color: var(--tagz);
+      font-weight: 700; font-size: 15px; margin-bottom: 14px;
+    }
+    .tp-benefit h3 { font-size: 16px; font-weight: 700; color: var(--ink); margin: 0 0 6px; }
+    .tp-benefit p { font-size: 13px; color: var(--ink-2); line-height: 1.6; margin: 0; }
+
+    /* ── Calculator ── */
+    .calc-card {
+      background: var(--warm);
+      border-radius: var(--r-xl);
+      box-shadow: var(--shadow-strong);
+      padding: 36px;
+      max-width: 560px;
+    }
+    .calc-label { font-size: 14px; font-weight: 600; color: var(--ink-2); margin-bottom: 8px; display: block; }
+    .calc-input-wrap { display: flex; align-items: center; gap: 0; margin-bottom: 24px; }
+    .calc-prefix {
+      background: var(--paper); border: 1.5px solid var(--paper); border-right: none;
+      border-radius: var(--r) 0 0 var(--r); padding: 11px 14px;
+      font-size: 16px; font-weight: 600; color: var(--ink-3);
+    }
+    .calc-input {
+      flex: 1; padding: 11px 14px; border: 1.5px solid var(--paper); border-radius: 0 var(--r) var(--r) 0;
+      background: var(--cream); color: var(--ink); font-size: 18px; font-weight: 600;
+      font-family: var(--ff-body);
+    }
+    .calc-input:focus { outline: none; border-color: var(--tagz); }
+    .calc-results { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+    .calc-result { background: var(--paper); border-radius: var(--r); padding: 14px 16px; }
+    .calc-result-label { font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--ink-3); margin-bottom: 4px; }
+    .calc-result-value { font-size: 20px; font-weight: 700; color: var(--ink); }
+    .calc-result.highlight { background: var(--tagz-lt); }
+    .calc-result.highlight .calc-result-value { color: var(--tagz); }
+    .calc-note { font-size: 12px; color: var(--ink-3); line-height: 1.55; }
+
+    /* ── Credit explainer ── */
+    .credit-card {
+      background: linear-gradient(135deg, #1a1a1a 0%, #2d1a0e 100%);
+      border-radius: var(--r-xl);
+      padding: 36px;
+      color: #fff;
+      position: relative;
+      overflow: hidden;
+    }
+    .credit-card::before {
+      content: '₹500';
+      position: absolute; top: 20px; right: 24px;
+      font-size: 56px; font-weight: 700; opacity: 0.08; line-height: 1;
+    }
+    .credit-card h3 { font-size: 22px; font-weight: 700; color: #fff; margin: 0 0 12px; }
+    .credit-card p { font-size: 15px; color: rgba(255,255,255,0.7); line-height: 1.65; margin: 0 0 20px; }
+    .credit-steps { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+    .credit-steps li {
+      display: flex; align-items: flex-start; gap: 12px;
+      font-size: 14px; color: rgba(255,255,255,0.8); line-height: 1.5;
+    }
+    .credit-steps li::before {
+      content: attr(data-n);
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 22px; height: 22px; border-radius: 50%;
+      background: var(--tagz); color: #fff; font-size: 11px; font-weight: 700; flex-shrink: 0;
+    }
+
+    /* ── Pricing comparison ── */
+    .pricing-notice {
+      background: #FFF8F0; border: 1px solid #FFD9B3; border-radius: var(--r);
+      padding: 14px 16px; font-size: 13px; color: #7A4A1A;
+      margin-bottom: 24px; display: flex; gap: 10px; align-items: flex-start;
+    }
+    .pricing-notice strong { display: block; margin-bottom: 2px; color: #5C3210; }
+    .category-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .category-table th {
+      text-align: left; padding: 10px 12px;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase;
+      color: var(--ink-3); border-bottom: 2px solid var(--paper);
+    }
+    .category-table th:not(:first-child) { text-align: center; }
+    .category-table td { padding: 12px 12px; border-bottom: 1px solid var(--paper); color: var(--ink-2); vertical-align: middle; }
+    .category-table td:not(:first-child) { text-align: center; }
+    .category-table tr:last-child td { border-bottom: none; }
+    .member-price { color: var(--tagz); font-weight: 700; }
+    .pending-tag {
+      display: inline-block; font-size: 11px; font-weight: 600;
+      padding: 2px 8px; border-radius: 10px;
+      background: #F0F0F0; color: var(--ink-3);
+    }
+
+    /* ── Exclusions ── */
+    .exclusion-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+    .exclusion-list li {
+      display: flex; align-items: flex-start; gap: 10px;
+      font-size: 14px; color: var(--ink-2); line-height: 1.5;
+    }
+    .exclusion-list li::before {
+      content: '×';
+      color: var(--tagz); font-weight: 700; font-size: 16px; line-height: 1.3; flex-shrink: 0;
+    }
+
+    /* ── FAQs ── */
+    .faq-list { display: flex; flex-direction: column; gap: 2px; }
+    .faq-item {
+      background: var(--warm); border-radius: var(--r); overflow: hidden;
+    }
+    .faq-q {
+      width: 100%; background: none; border: none; text-align: left;
+      padding: 16px 20px; font-size: 15px; font-weight: 600; color: var(--ink);
+      cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 16px;
+      font-family: var(--ff-body);
+    }
+    .faq-q::after { content: '+'; font-size: 20px; color: var(--tagz); flex-shrink: 0; transition: transform 0.2s; }
+    .faq-item.open .faq-q::after { transform: rotate(45deg); }
+    .faq-a {
+      display: none; padding: 0 20px 16px; font-size: 14px; color: var(--ink-2); line-height: 1.7;
+    }
+    .faq-item.open .faq-a { display: block; }
+
+    /* ── Guarantee strip ── */
+    .guarantee-strip {
+      background: var(--paper);
+      border-radius: var(--r-lg);
+      padding: 24px 28px;
+      display: flex; flex-wrap: wrap; gap: 24px; align-items: center;
+      justify-content: space-between;
+    }
+    .guarantee-item { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--ink-2); }
+    .guarantee-item strong { color: var(--ink); display: block; font-size: 14px; }
+
+    /* ── Final CTA ── */
+    .tp-cta-section {
+      background: var(--ink);
+      padding: 72px 20px;
+      text-align: center;
+    }
+    .tp-cta-section h2 { font-size: 30px; font-weight: 700; color: #fff; margin: 0 0 12px; }
+    .tp-cta-section p { font-size: 16px; color: rgba(255,255,255,0.6); margin: 0 0 32px; }
+
+    /* ── Membership active state ── */
+    .already-member {
+      display: none;
+      background: #F0FDF4; border: 1.5px solid #86EFAC;
+      border-radius: var(--r-lg); padding: 20px 24px; margin-top: 20px;
+      font-size: 15px; color: #166534; font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <script src="../js/component-loader.js"></script>
+
+  <!-- ── Hero ── -->
+  <section class="tp-hero">
+    <div class="tp-badge">NTAGZ Trade Pass</div>
+    <h1>Buy smarter. Build your NFC business with NTAGZ.</h1>
+    <p>One annual membership that pays for itself — member pricing, a ₹500 welcome credit, and priority quotes for resellers, agencies and serious buyers.</p>
+    <div class="tp-price-pill">
+      <span class="price">₹999</span>
+      <span class="period">/ year · incl. GST</span>
+    </div>
+    <div class="tp-hero-cta">
+      <button class="btn-tp" id="heroCtaBtn" onclick="initPurchase()">Get Trade Pass →</button>
+      <div class="already-member" id="heroMemberNote"></div>
+      <span class="tp-hero-note">Membership valid for 12 months from purchase date.</span>
+    </div>
+  </section>
+
+  <main>
+    <!-- ── Who it's for ── -->
+    <section class="tp-section" style="background:var(--cream);">
+      <div class="tp-section-inner">
+        <h2 class="tp-section-title">Who benefits most</h2>
+        <p class="tp-section-sub">Trade Pass is designed for buyers who order regularly and want predictable, lower prices.</p>
+        <div class="tp-for-grid">
+          <div class="tp-for-card">
+            <div class="tp-for-icon">🏪</div>
+            <div class="tp-for-label">NFC Resellers</div>
+            <div class="tp-for-desc">Stock and resell NFC cards, tags and programmed products to your own clients.</div>
+          </div>
+          <div class="tp-for-card">
+            <div class="tp-for-icon">🖨️</div>
+            <div class="tp-for-label">Print Shops</div>
+            <div class="tp-for-desc">Add NFC printing to your service offering with consistent wholesale pricing.</div>
+          </div>
+          <div class="tp-for-card">
+            <div class="tp-for-icon">📣</div>
+            <div class="tp-for-label">Marketing Agencies</div>
+            <div class="tp-for-desc">Source Google review stands, NFC cards and custom products for your clients.</div>
+          </div>
+          <div class="tp-for-card">
+            <div class="tp-for-icon">⚙️</div>
+            <div class="tp-for-label">Tech Integrators</div>
+            <div class="tp-for-desc">Build NFC into access control, attendance and loyalty systems at scale.</div>
+          </div>
+          <div class="tp-for-card">
+            <div class="tp-for-icon">🏢</div>
+            <div class="tp-for-label">Businesses</div>
+            <div class="tp-for-desc">Corporate buyers placing repeat orders for internal use or client gifting.</div>
+          </div>
+          <div class="tp-for-card">
+            <div class="tp-for-icon">🔁</div>
+            <div class="tp-for-label">Repeat Buyers</div>
+            <div class="tp-for-desc">Anyone who orders at least ₹5,000/year in NFC products from ntagz.com.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Benefits ── -->
+    <section class="tp-section" style="background:var(--warm);">
+      <div class="tp-section-inner">
+        <h2 class="tp-section-title">What's included</h2>
+        <p class="tp-section-sub">Four tangible benefits, no filler.</p>
+        <div class="tp-benefits-grid">
+          <div class="tp-benefit">
+            <div class="tp-benefit-num">1</div>
+            <h3>Member pricing on NFC consumables</h3>
+            <p>Lower prices on raw NFC tags, stickers, cards and coins. Member prices are set by category and applied automatically at checkout.</p>
+          </div>
+          <div class="tp-benefit">
+            <div class="tp-benefit-num">2</div>
+            <h3>₹500 welcome credit</h3>
+            <p>A one-time ₹500 credit applied to your first eligible order of ₹4,999 or more, placed while your membership is active.</p>
+          </div>
+          <div class="tp-benefit">
+            <div class="tp-benefit-num">3</div>
+            <h3>Priority quotations</h3>
+            <p>Bulk quote requests from Trade Pass members are reviewed and responded to first, with dedicated pricing for high-volume orders.</p>
+          </div>
+          <div class="tp-benefit">
+            <div class="tp-benefit-num">4</div>
+            <h3>Artwork and QR setup</h3>
+            <p>Limited complimentary artwork resizing and QR code programming on eligible custom-print orders. Subject to fair-use limits.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Break-even calculator ── -->
+    <section class="tp-section" style="background:var(--cream);">
+      <div class="tp-section-inner">
+        <h2 class="tp-section-title">Will it pay off for you?</h2>
+        <p class="tp-section-sub">Estimate your savings based on your typical monthly NFC spend. Uses indicative member pricing — actual rates applied at checkout may vary.</p>
+        <div class="calc-card">
+          <label class="calc-label" for="calcSpend">Your average monthly NFC spend</label>
+          <div class="calc-input-wrap">
+            <span class="calc-prefix">₹</span>
+            <input class="calc-input" id="calcSpend" inputmode="numeric" max="500000" min="0" placeholder="5000" type="number" value="5000" />
+          </div>
+          <div class="calc-results">
+            <div class="calc-result">
+              <div class="calc-result-label">Annual spend</div>
+              <div class="calc-result-value" id="calcAnnual">₹60,000</div>
+            </div>
+            <div class="calc-result">
+              <div class="calc-result-label">Est. savings (5–8%)</div>
+              <div class="calc-result-value" id="calcSavings">₹3,600</div>
+            </div>
+            <div class="calc-result">
+              <div class="calc-result-label">Pass cost</div>
+              <div class="calc-result-value">₹999</div>
+            </div>
+            <div class="calc-result highlight">
+              <div class="calc-result-label">Net benefit</div>
+              <div class="calc-result-value" id="calcNet">₹2,601</div>
+            </div>
+          </div>
+          <p class="calc-note" id="calcBreakeven">Break-even at ₹1,665/month. At your current spend, Trade Pass pays for itself and returns ₹2,601. Includes indicative ₹500 welcome credit on first qualifying order.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Welcome credit ── -->
+    <section class="tp-section" style="background:var(--warm);">
+      <div class="tp-section-inner">
+        <h2 class="tp-section-title">Your ₹500 welcome credit</h2>
+        <p class="tp-section-sub">Here is exactly how it works — no surprises.</p>
+        <div class="credit-card">
+          <h3>One-time ₹500 credit, straightforward conditions</h3>
+          <p>Automatically applied to your first eligible order after joining. The credit reduces the amount you pay — it is not a cashback.</p>
+          <ul class="credit-steps">
+            <li data-n="1">Buy NTAGZ Trade Pass (₹999). Your membership starts immediately.</li>
+            <li data-n="2">Place an order of ₹4,999 or more on eligible products while your membership is active.</li>
+            <li data-n="3">The ₹500 credit is applied at checkout on that order — automatically, no code needed.</li>
+            <li data-n="4">Credit is used once and then expires. It does not carry forward to future orders.</li>
+          </ul>
+        </div>
+        <div style="margin-top:20px;padding:16px 20px;background:var(--paper);border-radius:var(--r);font-size:13px;color:var(--ink-3);line-height:1.65;">
+          <strong style="color:var(--ink);display:block;margin-bottom:4px;">Eligibility conditions</strong>
+          The ₹500 credit applies to NFC consumable and select finished-product orders of ₹4,999 or more (before shipping, after member pricing). It cannot be combined with other promotional discounts unless stated. Orders placed after membership expiry do not qualify. Credit has no cash value and cannot be transferred.
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Pricing comparison ── -->
+    <section class="tp-section" style="background:var(--cream);">
+      <div class="tp-section-inner">
+        <h2 class="tp-section-title">Pricing by category</h2>
+        <p class="tp-section-sub">Member prices are set per product category and validated at checkout.</p>
+        <div class="pricing-notice">
+          <span>⚠</span>
+          <div><strong>Member pricing is being finalised</strong>The indicative discounts below are pending cost review and margin approval. Standard prices remain in effect for all buyers until member pricing is activated. This page will be updated once approved.</div>
+        </div>
+        <table class="category-table">
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Standard</th>
+              <th>Trade Pass (indicative)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Raw NFC tags, stickers, coins, cards</td>
+              <td>Listed price</td>
+              <td><span class="member-price">~5% off</span></td>
+            </tr>
+            <tr>
+              <td>Printed & programmed NFC cards</td>
+              <td>Listed price</td>
+              <td><span class="member-price">~5% off</span></td>
+            </tr>
+            <tr>
+              <td>Google Review products & QR stands</td>
+              <td>Listed price</td>
+              <td><span class="member-price">~8% off</span></td>
+            </tr>
+            <tr>
+              <td>Acrylic & customised products</td>
+              <td>Listed price</td>
+              <td><span class="pending-tag">Quote-based</span></td>
+            </tr>
+            <tr>
+              <td>Bulk supply & OEM orders</td>
+              <td>Quote only</td>
+              <td><span class="member-price">Priority + custom pricing</span></td>
+            </tr>
+          </tbody>
+        </table>
+        <p style="margin-top:14px;font-size:12px;color:var(--ink-3);">All prices ex-GST. GST at 18% applies on NFC products. Quantity-based tier pricing applies on top of member discounts where eligible. Minimum order quantities unchanged.</p>
+      </div>
+    </section>
+
+    <!-- ── Exclusions ── -->
+    <section class="tp-section" style="background:var(--warm);">
+      <div class="tp-section-inner">
+        <h2 class="tp-section-title">What's not included</h2>
+        <p class="tp-section-sub">Clearly stated before you buy.</p>
+        <ul class="exclusion-list">
+          <li>Sample kits and trial orders — standard pricing always applies</li>
+          <li>Custom manufacturing, tooling and mould costs for OEM orders</li>
+          <li>Express or premium shipping upgrades</li>
+          <li>Orders placed after membership expiry — renew before ordering to keep member pricing</li>
+          <li>Third-party resale of the ₹500 welcome credit or membership itself</li>
+          <li>Products explicitly marked as excluded from membership pricing</li>
+          <li>Orders already discounted under a separate promotional code (unless stated otherwise)</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ── FAQs ── -->
+    <section class="tp-section" style="background:var(--cream);">
+      <div class="tp-section-inner">
+        <h2 class="tp-section-title">Frequently asked questions</h2>
+        <p class="tp-section-sub"></p>
+        <div class="faq-list" id="faqList">
+          <div class="faq-item">
+            <button class="faq-q">When does my membership start?</button>
+            <div class="faq-a">Immediately on successful payment. Your account dashboard will show your expiry date and credit status within seconds of purchase.</div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q">Can I share the membership with my team or business partners?</button>
+            <div class="faq-a">The membership is tied to one account email. Orders must be placed from that account to receive member pricing. Contact us if you need a multi-seat arrangement.</div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q">What if member pricing hasn't been activated yet?</button>
+            <div class="faq-a">Member pricing is shown as "indicative" until officially approved and activated. If you purchase Trade Pass before activation, you will receive full member pricing once it goes live — your membership date and credit are unaffected.</div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q">How does the ₹500 welcome credit appear at checkout?</button>
+            <div class="faq-a">It is applied automatically when you place a qualifying order of ₹4,999 or more. No code needed. You will see the deduction in the order summary before you pay.</div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q">What is the refund policy?</button>
+            <div class="faq-a">If you have not redeemed the welcome credit and have not placed any orders under member pricing, you may request a full refund within 7 days of purchase. Partial-use memberships are not refundable. Contact hello@ntagz.com with your order ID.</div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q">Does the membership auto-renew?</button>
+            <div class="faq-a">No. Trade Pass does not auto-renew. You will receive a reminder before expiry. Renewing buys another 12 months from the date of renewal and restores member pricing, but does not issue a second welcome credit.</div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q">I'm a GST-registered business. Do I get a tax invoice for the membership?</button>
+            <div class="faq-a">Yes. A GST-compliant tax invoice for the ₹999 membership fee (incl. 18% GST) is generated on purchase and available in your account dashboard.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Guarantee / trust ── -->
+    <section class="tp-section" style="background:var(--warm);padding-top:0;">
+      <div class="tp-section-inner">
+        <div class="guarantee-strip">
+          <div class="guarantee-item">
+            <span style="font-size:22px;">🔒</span>
+            <div><strong>Secure payment</strong>via Razorpay</div>
+          </div>
+          <div class="guarantee-item">
+            <span style="font-size:22px;">🧾</span>
+            <div><strong>GST invoice</strong>on purchase</div>
+          </div>
+          <div class="guarantee-item">
+            <span style="font-size:22px;">↩️</span>
+            <div><strong>7-day refund</strong>if unused</div>
+          </div>
+          <div class="guarantee-item">
+            <span style="font-size:22px;">📞</span>
+            <div><strong>Direct support</strong>hello@ntagz.com</div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ── Final CTA ── -->
+  <section class="tp-cta-section">
+    <h2>Ready to buy smarter?</h2>
+    <p>Join other NFC businesses that order from ntagz.com at member pricing.</p>
+    <button class="btn-tp" id="bottomCtaBtn" onclick="initPurchase()">Get NTAGZ Trade Pass · ₹999/year →</button>
+    <div class="already-member" id="bottomMemberNote" style="max-width:400px;margin:20px auto 0;"></div>
+    <p style="margin-top:20px;font-size:13px;color:rgba(255,255,255,0.35);">GST invoice issued on purchase. 7-day refund if unused.</p>
+  </section>
+
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <script>
+    var API = '/api';
+    var user = null;
+    var membership = null;
+
+    // ── FAQ accordion ────────────────────────────────────────────────────────
+    document.querySelectorAll('.faq-q').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var item = btn.closest('.faq-item');
+        var wasOpen = item.classList.contains('open');
+        document.querySelectorAll('.faq-item.open').forEach(function(i) { i.classList.remove('open'); });
+        if (!wasOpen) item.classList.add('open');
+      });
+    });
+
+    // ── Break-even calculator ─────────────────────────────────────────────────
+    function fmt(n) { return '₹' + Math.round(n).toLocaleString('en-IN'); }
+
+    function calcUpdate() {
+      var monthly = parseFloat(document.getElementById('calcSpend').value) || 0;
+      var annual = monthly * 12;
+      var savings = annual * 0.065; // 6.5% blended indicative rate
+      var credit = monthly >= 4999 ? 500 : 0;
+      var net = savings + credit - 999;
+      var breakeven = 999 / (0.065 * 12);
+
+      document.getElementById('calcAnnual').textContent  = fmt(annual);
+      document.getElementById('calcSavings').textContent = fmt(savings);
+      document.getElementById('calcNet').textContent     = net >= 0 ? fmt(net) : '–₹' + Math.round(-net).toLocaleString('en-IN');
+      document.getElementById('calcNet').style.color     = net >= 0 ? 'var(--tagz)' : 'var(--ink)';
+
+      var msg = 'Break-even at ' + fmt(breakeven) + '/month. ';
+      if (monthly < breakeven) {
+        msg += 'At your current spend, Trade Pass costs more than the savings. You need to spend at least ' + fmt(breakeven) + '/month to break even.';
+      } else {
+        msg += 'At your current spend, Trade Pass pays for itself and returns ' + fmt(net) + ' (incl. indicative ₹500 welcome credit if first order ≥ ₹4,999).';
+      }
+      document.getElementById('calcBreakeven').textContent = msg;
+    }
+
+    document.getElementById('calcSpend').addEventListener('input', calcUpdate);
+    calcUpdate();
+
+    // ── Auth + membership check ───────────────────────────────────────────────
+    async function checkStatus() {
+      try {
+        var r = await fetch('/api/accounts/me', { credentials: 'include' });
+        if (r.ok) {
+          user = (await r.json()).user;
+          var mr = await fetch('/api/membership/status', { credentials: 'include' });
+          if (mr.ok) membership = (await mr.json()).membership;
+        }
+      } catch(e) {}
+
+      if (membership && membership.active) {
+        var expiry = new Date(membership.expiresAt * 1000).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
+        var msg = 'Your Trade Pass is active until ' + expiry + '. Visit your account dashboard to view credit and savings.';
+        ['heroMemberNote', 'bottomMemberNote'].forEach(function(id) {
+          var el = document.getElementById(id);
+          el.textContent = msg; el.style.display = 'block';
+        });
+        document.getElementById('heroCtaBtn').textContent = 'Manage membership →';
+        document.getElementById('heroCtaBtn').onclick = function() { location.href = '/account/'; };
+        document.getElementById('bottomCtaBtn').textContent = 'Manage membership →';
+        document.getElementById('bottomCtaBtn').onclick = function() { location.href = '/account/'; };
+      }
+    }
+
+    checkStatus();
+
+    // ── Purchase flow ─────────────────────────────────────────────────────────
+    async function initPurchase() {
+      if (membership && membership.active) { location.href = '/account/'; return; }
+      if (!user) {
+        location.href = '/account/login.html?next=' + encodeURIComponent('/membership/');
+        return;
+      }
+
+      var btn = document.getElementById('heroCtaBtn');
+      btn.disabled = true; btn.textContent = 'Setting up…';
+
+      try {
+        var r = await fetch(API + '/membership/create-order', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' } });
+        var data = await r.json();
+        if (!r.ok) { alert(data.error || 'Could not start payment. Try again.'); btn.disabled = false; btn.textContent = 'Get Trade Pass →'; return; }
+
+        var rzp = new Razorpay({
+          key: data.keyId,
+          order_id: data.id,
+          amount: data.amount,
+          currency: data.currency,
+          name: 'nTagz',
+          description: 'NTAGZ Trade Pass — 12-month membership',
+          prefill: { email: user.email, contact: user.phone || '' },
+          theme: { color: '#FF4500' },
+          handler: async function(resp) {
+            btn.textContent = 'Verifying…';
+            var vr = await fetch(API + '/membership/verify-payment', {
+              method: 'POST', credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                razorpay_payment_id: resp.razorpay_payment_id,
+                razorpay_order_id:   resp.razorpay_order_id,
+                razorpay_signature:  resp.razorpay_signature,
+              }),
+            });
+            var vd = await vr.json();
+            if (vr.ok && vd.ok) {
+              location.href = '/account/?membership=activated';
+            } else {
+              alert('Payment verification failed. Contact hello@ntagz.com with your payment ID: ' + resp.razorpay_payment_id);
+              btn.disabled = false; btn.textContent = 'Get Trade Pass →';
+            }
+          },
+          modal: { ondismiss: function() { btn.disabled = false; btn.textContent = 'Get Trade Pass →'; } },
+        });
+        rzp.open();
+      } catch(e) {
+        alert('Something went wrong. Please try again.');
+        btn.disabled = false; btn.textContent = 'Get Trade Pass →';
+      }
+    }
+  </script>
+</body>
+</html>
