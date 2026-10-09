@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NFC Cards & Tags — Product Catalog | ntagz</title>
+  <meta name="description" content="Browse all NFC cards, tags, and RFID labels. Black NFC cards, white business cards, anti-metal tags, coin tags, Google Review stands, and more. Bulk pricing from ₹12/pc." />
+  <link rel="canonical" href="https://www.ntagz.com/product/" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=Manrope:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/base.css" />
+  <style>
+    .catalog-hero {
+      padding: 72px 20px 40px;
+      text-align: center;
+    }
+    .catalog-hero h1 {
+      font-size: clamp(28px, 5vw, 42px);
+      font-weight: 700;
+      color: var(--ink);
+      margin: 0 0 12px;
+    }
+    .catalog-hero p {
+      color: var(--ink-2);
+      font-size: 17px;
+      max-width: 480px;
+      margin: 0 auto 28px;
+    }
+    .filter-bar {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      flex-wrap: wrap;
+      padding: 0 20px 32px;
+    }
+    .filter-btn {
+      padding: 10px 18px;
+      min-height: 40px;
+      border-radius: 999px;
+      border: 1.5px solid var(--paper);
+      background: var(--warm);
+      color: var(--ink-2);
+      font-family: var(--ff-body);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.18s var(--ease);
+    }
+    .filter-btn:hover { border-color: var(--tagz); color: var(--tagz); }
+    .filter-btn.active {
+      background: var(--tagz);
+      border-color: var(--tagz);
+      color: #fff;
+    }
+    .catalog-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 20px 80px;
+    }
+    .prod-card {
+      background: var(--warm);
+      border-radius: var(--r-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-card);
+      transition: transform 0.22s var(--ease), box-shadow 0.22s var(--ease);
+      text-decoration: none;
+      color: inherit;
+      display: flex;
+      flex-direction: column;
+    }
+    .prod-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-strong);
+    }
+    .prod-card-img {
+      aspect-ratio: 4/3;
+      background: var(--paper);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .prod-card-img img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .prod-card-img .img-placeholder {
+      width: 56px;
+      height: 56px;
+      opacity: 0.18;
+    }
+    .prod-card-body {
+      padding: 16px 18px 20px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    .prod-card-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: var(--tagz-lt);
+      color: var(--tagz);
+      margin-bottom: 8px;
+      align-self: flex-start;
+    }
+    .prod-card-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--ink);
+      margin: 0 0 6px;
+      line-height: 1.35;
+    }
+    .prod-card-price {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--ink);
+      margin: auto 0 0;
+      padding-top: 12px;
+    }
+    .prod-card-price span {
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--ink-3);
+    }
+    .prod-card-moq {
+      font-size: 12px;
+      color: var(--ink-3);
+      margin-top: 4px;
+    }
+    .catalog-empty {
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--ink-3);
+    }
+    @media (max-width: 480px) {
+      .catalog-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+      .prod-card-price { font-size: 18px; }
+    }
+  </style>
+</head>
+<body>
+  <script src="../js/component-loader.js"></script>
+
+  <main>
+    <section class="catalog-hero">
+      <h1>NFC Products</h1>
+      <p>Cards, tags, stands, and kits — all with bulk pricing and fast delivery across India.</p>
+    </section>
+
+    <div class="filter-bar" role="group" aria-label="Filter products">
+      <button class="filter-btn active" data-filter="all">All Products</button>
+      <button class="filter-btn" data-filter="nfc">NFC Cards</button>
+      <button class="filter-btn" data-filter="rfid">RFID & Tags</button>
+    </div>
+
+    <div class="catalog-grid" id="catalogGrid" role="list">
+      <div class="catalog-empty">Loading products…</div>
+    </div>
+  </main>
+
+  <script src="../js/catalog.js"></script>
+  <script>
+    const grid = document.getElementById('catalogGrid');
+    const filters = document.querySelectorAll('.filter-btn');
+    let activeFilter = 'all';
+
+    function renderGrid() {
+      const catalog = window.NTAGZ_CATALOG;
+      const items = catalog
+        ? catalog.products.filter(p => p.detail && (activeFilter === 'all' || p.category === activeFilter))
+        : [];
+
+      if (!items.length) {
+        grid.innerHTML = '<div class="catalog-empty">No products found.</div>';
+        return;
+      }
+
+      grid.innerHTML = items.map(p => {
+        const imgHtml = p.image
+          ? `<img alt="${p.name}" loading="lazy" src="../${p.image}" />`
+          : `<svg class="img-placeholder" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="48" height="48" rx="8" fill="currentColor"/><path d="M24 12C24 12 15 17.5 15 24C15 30.5 24 36 24 36M24 12C24 12 33 17.5 33 24C33 30.5 24 36 24 36M24 18C24 18 19.5 20.5 19.5 24C19.5 27.5 24 30 24 30M24 18C24 18 28.5 20.5 28.5 24C28.5 27.5 24 30 24 30" stroke="white" stroke-width="2" stroke-linecap="round"/></svg>`;
+
+        const priceLabel = p.allInclusive
+          ? `₹${p.price} <span>all-inclusive</span>`
+          : `₹${p.price} <span>/ ${p.unit || 'pc'} ex-GST</span>`;
+
+        const moqLabel = p.moq ? `MOQ ${p.moq} pcs` : (p.fixed ? '' : 'MOQ 10 pcs');
+
+        const badgeHtml = p.badge ? `<span class="prod-card-badge">${p.badge}</span>` : '';
+
+        return `<a class="prod-card" href="../${p.detail}" role="listitem">
+          <div class="prod-card-img">${imgHtml}</div>
+          <div class="prod-card-body">
+            ${badgeHtml}
+            <p class="prod-card-name">${p.name}</p>
+            <p class="prod-card-price">${priceLabel}</p>
+            ${moqLabel ? `<p class="prod-card-moq">${moqLabel}</p>` : ''}
+          </div>
+        </a>`;
+      }).join('');
+    }
+
+    filters.forEach(btn => {
+      btn.addEventListener('click', () => {
+        filters.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        activeFilter = btn.dataset.filter;
+        renderGrid();
+      });
+    });
+
+    renderGrid();
+  </script>
+</body>
+</html>

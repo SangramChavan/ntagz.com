@@ -1,37 +1,11 @@
 /* ═══════════════════════════════════════════════════════
    ntagz — SHARED BASE STYLES
-   Design tokens, reset, top strip, nav, buttons.
+   Reset, top strip, nav, buttons.
+   Tokens (colors, type, shape, dark mode) live in tokens.css.
    Loaded on every page before the page-specific stylesheet.
    ═══════════════════════════════════════════════════════ */
 
-:root {
-  --cream: #FAF7F2;
-  --warm: #F2EDE4;
-  --paper: #ECEADF;
-  --ink: #1A1714;
-  --ink-2: #4A4540;
-  --ink-3: #8A837A;
-  --tagz: #FF4500;
-  --tagz-lt: #FFF0EB;
-  --tagz-dk: #CC3700;
-  --teal: #007A6B;
-  --teal-lt: #E6F4F2;
-  --gold: #C8960C;
-  --green: #16A34A;
-  --green-lt: #F0FDF4;
-
-  --ff-head: 'Familjen Grotesk', sans-serif;
-  --ff-serif: 'Instrument Serif', serif;
-  --ff-body: 'Manrope', sans-serif;
-
-  --ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --r: 14px;
-  --r-lg: 22px;
-  --r-xl: 32px;
-  --shadow-card: 0 1px 3px rgba(0, 0, 0, .06), 0 8px 32px rgba(0, 0, 0, .07);
-  --shadow-strong: 0 4px 12px rgba(0, 0, 0, .1), 0 20px 60px rgba(0, 0, 0, .1);
-}
+@import url('./tokens.css');
 
 *,
 *::before,
@@ -109,7 +83,7 @@ nav {
   position: sticky;
   top: 0;
   z-index: 800;
-  background: rgba(250, 247, 242, 0.92);
+  background: var(--nav-bg);
   backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--paper);
 }
@@ -196,7 +170,8 @@ nav {
   font-family: var(--ff-head);
   font-weight: 600;
   font-size: 14px;
-  padding: 12px 20px;
+  padding: 13px 22px;
+  min-height: 44px;
   border-radius: var(--r);
   transition: all 0.3s var(--ease-bounce);
   letter-spacing: 0.01em;
@@ -440,8 +415,8 @@ button.add-btn.is-added {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   border: 1.5px solid var(--paper);
   background: #fff;
@@ -719,8 +694,8 @@ body.cart-open-lock {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   border: 1.5px solid var(--paper);
   background: #fff;

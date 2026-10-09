@@ -1,0 +1,95 @@
+/* ═══════════════════════════════════════════════════════
+   ntagz — DESIGN TOKENS
+   Single source of truth for colors, type, shape, motion.
+   Imported by base.css — loaded automatically on every page.
+   ═══════════════════════════════════════════════════════ */
+
+:root {
+  /* ── SURFACES ── */
+  --cream:   #FAF7F2;
+  --warm:    #F2EDE4;
+  --paper:   #ECEADF;
+  --nav-bg:  rgba(250, 247, 242, 0.92);
+
+  /* ── CONTENT ── */
+  --ink:   #1A1714;
+  --ink-2: #4A4540;
+  --ink-3: #8A837A;
+
+  /* ── BRAND ── */
+  --tagz:    #FF4500;
+  --tagz-lt: #FFF0EB;
+  --tagz-dk: #CC3700;
+
+  /* ── SEMANTIC ── */
+  --teal:     #007A6B;
+  --teal-lt:  #E6F4F2;
+  --gold:     #C8960C;
+  --green:    #16A34A;
+  --green-lt: #F0FDF4;
+
+  /* ── TYPOGRAPHY ── */
+  --ff-head:  'Familjen Grotesk', sans-serif;
+  --ff-serif: 'Instrument Serif', serif;
+  --ff-body:  'Manrope', sans-serif;
+
+  /* ── MOTION ── */
+  --ease:        cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ── SHAPE ── */
+  --r:           14px;
+  --r-lg:        22px;
+  --r-xl:        32px;
+  --shadow-card: 0 1px 3px rgba(0,0,0,.06), 0 8px 32px rgba(0,0,0,.07);
+  --shadow-strong: 0 4px 12px rgba(0,0,0,.1), 0 20px 60px rgba(0,0,0,.1);
+}
+
+/* ── DARK MODE ─────────────────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --cream:  #100F0C;
+    --warm:   #1A1714;
+    --paper:  #252118;
+    --nav-bg: rgba(16, 15, 12, 0.93);
+
+    --ink:   #F0EDE8;
+    --ink-2: #C4BCAD;
+    --ink-3: #8A837A;
+
+    --tagz:    #FF5722;
+    --tagz-lt: rgba(255, 69, 0, 0.14);
+    --tagz-dk: #FF7043;
+
+    --teal:     #00A082;
+    --teal-lt:  rgba(0, 122, 107, 0.14);
+    --gold:     #E0A80E;
+    --green:    #22C55E;
+    --green-lt: rgba(22, 163, 74, 0.14);
+
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --cream:  #100F0C;
+  --warm:   #1A1714;
+  --paper:  #252118;
+  --nav-bg: rgba(16, 15, 12, 0.93);
+
+  --ink:   #F0EDE8;
+  --ink-2: #C4BCAD;
+  --ink-3: #8A837A;
+
+  --tagz:    #FF5722;
+  --tagz-lt: rgba(255, 69, 0, 0.14);
+  --tagz-dk: #FF7043;
+
+  --teal:     #00A082;
+  --teal-lt:  rgba(0, 122, 107, 0.14);
+  --gold:     #E0A80E;
+  --green:    #22C55E;
+  --green-lt: rgba(22, 163, 74, 0.14);
+
+  color-scheme: dark;
+}
