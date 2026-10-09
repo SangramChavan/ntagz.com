@@ -984,6 +984,14 @@
       color: #1a56db;
     }
 
+    .pay-tab.active[data-paytab="razorpay"] { color: #2458a6; }
+    .pay-tab.active[data-paytab="payu"] { color: #0879bd; }
+
+    @media (max-width: 420px) {
+      .pay-tabs { flex-wrap: wrap; }
+      .pay-tab { flex: 1 1 calc(50% - 4px); }
+    }
+
     .pay-panel {
       display: none;
     }

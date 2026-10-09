@@ -47,6 +47,7 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Instrument+Serif:ital@0;1&family=Manrope:wght@300;400;500;600&display=swap"
     rel="stylesheet">
+  <script src="https://checkout.razorpay.com/v1/checkout.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/order.css">
@@ -693,6 +694,10 @@
                 </svg>
                 Bank Transfer
               </button>
+              <button type="button" class="pay-tab" id="tabRazorpay" data-paytab="razorpay" role="tab"
+                aria-selected="false" aria-controls="panelRazorpay">Razorpay</button>
+              <button type="button" class="pay-tab" id="tabPayu" data-paytab="payu" role="tab"
+                aria-selected="false" aria-controls="panelPayu">PayU</button>
             </div>
 
             <!-- UPI limit warning (shows when total > 1,00,000) -->
@@ -723,14 +728,22 @@
 
             <!-- Razorpay Panel -->
             <div class="pay-panel" id="panelRazorpay" role="tabpanel" aria-labelledby="tabRazorpay">
-              <div class="razorpay-qr-wrapper">
-                <div id="rzp-qrcode"></div>
-                <p>Scan QR to pay via Razorpay</p>
+              <div class="quote-actions">
+                <button type="button" id="rzpPayNow" class="btn btn-razorpay btn-lg btn-block">
+                  Pay via Razorpay
+                </button>
+              </div>
+            </div>
+
+            <!-- PayU Panel -->
+            <div class="pay-panel" id="panelPayu" role="tabpanel" aria-labelledby="tabPayu">
+              <p class="field-note">Pay securely with cards, UPI, net banking, and more via PayU.</p>
+              <div class="form-group">
+                <label for="payuEmail">Email address <span class="req-star">*</span></label>
+                <input type="email" id="payuEmail" class="form-control" autocomplete="email" required maxlength="254">
               </div>
               <div class="quote-actions">
-                <a href="#" id="rzpPayNow" class="btn btn-razorpay btn-lg btn-block">
-                  Pay via Razorpay
-                </a>
+                <button type="button" id="payuPayNow" class="btn btn-razorpay btn-lg btn-block">Continue to PayU</button>
               </div>
             </div>
 
@@ -808,7 +821,6 @@
   </section>
 
   <div id="footer-placeholder"></div>
-
   <!-- Bump ?v= to today's date whenever js/catalog.js changes — it's cached
        4h at the edge with no other cache-busting, so a stale query string
        means returning visitors see old prices/products until it expires. -->
@@ -825,57 +837,56 @@
   <script src="js/cart-ui.js" defer></script>
   <script src="js/order-log.js?v=20260907b" defer></script>
   <script src="js/order.js?v=20260908d" defer></script>
-<script defer="" src="js/component-loader.js"></script>
+  <script defer="" src="js/component-loader.js"></script>
   <script>
-    // Razorpay checkout initialization
-    document.getElementById("rzpPayNow").addEventListener("click", function() {
-      var total = parseInt(document.getElementById("outTotal").innerText.replace(/[^\d]/g, ''));
-      if (total <= 0) {
-        alert("Please add products to your order first.");
-        return;
-      }
-      
-      // Create Razorpay order via our server
-      fetch("/api/create-order", {
+    var paymentApi = "https://ntagz-payments.ambivert.workers.dev/api";
+    var orderItems = function() {
+      var cart = window.NTAGZ_CART.read();
+      return Object.keys(cart).map(function(id) { return { id: id, qty: cart[id] }; });
+    };
+    var paymentDetails = function() {
+      return {
+        items: orderItems(),
+        state: document.getElementById("customerState").value,
+        quoteRef: document.getElementById("quoteNum").innerText
+      };
+    };
+    var postPayment = function(path, payload) {
+      return fetch(paymentApi + path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: total })
-      })
-      .then(res => res.json())
+        body: JSON.stringify(payload)
+      }).then(function(res) { return res.json().then(function(data) {
+        if (!res.ok) throw new Error(data.error || "Payment request failed");
+        return data;
+      }); });
+    };
+    var rzpButton = document.getElementById("rzpPayNow");
+    rzpButton.addEventListener("click", function() {
+      if (!orderItems().length) { alert("Please add products to your order first."); return; }
+      var button = this;
+      button.setAttribute("aria-disabled", "true");
+      postPayment("/create-order", paymentDetails())
       .then(data => {
-        if (data.error) {
-          alert(data.error);
-          return;
-        }
-        
         var options = {
-          key: "rzp_test_your_razorpay_key_id", // Replace with your Razorpay key ID
-          amount: data.amount * 100, // amount in paise
-          currency: "INR",
+          key: data.keyId,
+          order_id: data.id,
+          amount: data.amount,
+          currency: data.currency,
           name: "nTagz",
           description: "Order payment - " + (document.getElementById("quoteNum") ? document.getElementById("quoteNum").innerText : "QT-000000"),
           image: "/img/favicon.svg",
-          handler: function (response) {
-            // Send payment success to our webhook
-            fetch("/api/payment-success", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
+          handler: function(response) {
+            postPayment("/verify-payment", {
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_order_id: response.razorpay_order_id,
-                razorpay_signature: response.razorpay_signature,
-                order_amount: total
+                razorpay_signature: response.razorpay_signature
               })
-            })
-            .then(res => res.text())
-            .then(text => {
-              // Show success message
+            .then(function() {
               alert("Payment successful! Order ID: " + response.razorpay_payment_id);
-              // Reload or redirect to success page
-              window.location.href = "/success.html";
-            })
-            .catch(err => console.error("Error:", err));
+            }).catch(function(err) { alert(err.message + ". Contact nTagz before retrying."); });
           },
+          modal: { ondismiss: function() { button.removeAttribute("aria-disabled"); } },
           prefill: {
             name: "",
             email: "",
@@ -889,11 +900,42 @@
         var rzp = new Razorpay(options);
         rzp.open();
       })
-      .catch(err => {
-        console.error("Error:", err);
-        alert("Failed to create order. Please try again.");
+      .catch(function(err) {
+        button.removeAttribute("aria-disabled");
+        alert(err.message || "Failed to create order. Please try again.");
       });
     });
+
+    document.getElementById("payuPayNow").addEventListener("click", function() {
+      var items = orderItems();
+      var email = document.getElementById("payuEmail");
+      var name = document.getElementById("customerName").value.trim();
+      var phone = document.getElementById("customerNumber").value.trim();
+      if (!items.length) { alert("Please add products to your order first."); return; }
+      if (!name || !/^\d{10}$/.test(phone.replace(/\D/g, "").slice(-10)) || !email.reportValidity()) {
+        if (!name || !phone) alert("Enter your name and 10-digit phone number before paying.");
+        return;
+      }
+      var button = this;
+      button.disabled = true;
+      postPayment("/payu/checkout", Object.assign(paymentDetails(), { name: name, phone: phone, email: email.value.trim() }))
+        .then(function(data) {
+          var form = document.createElement("form");
+          form.method = "POST";
+          form.action = data.action;
+          Object.keys(data.fields).forEach(function(key) {
+            var input = document.createElement("input");
+            input.type = "hidden";
+            input.name = key;
+            input.value = data.fields[key];
+            form.appendChild(input);
+          });
+          document.body.appendChild(form);
+          form.submit();
+        })
+        .catch(function(err) { button.disabled = false; alert(err.message || "Could not start PayU checkout."); });
+    });
+
   </script>
 </body>
 

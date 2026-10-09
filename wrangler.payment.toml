@@ -1,0 +1,6 @@
+name = "ntagz-payments"
+main = "payment-worker.mjs"
+compatibility_date = "2026-10-08"
+
+[vars]
+PAYU_ENV = "production"

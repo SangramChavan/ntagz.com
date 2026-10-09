@@ -587,10 +587,16 @@
   function switchPayTab(tab) {
     $('tabUpi').classList.toggle('active', tab === 'upi');
     $('tabBank').classList.toggle('active', tab === 'bank');
+    $('tabRazorpay').classList.toggle('active', tab === 'razorpay');
+    $('tabPayu').classList.toggle('active', tab === 'payu');
     $('tabUpi').setAttribute('aria-selected', tab === 'upi' ? 'true' : 'false');
     $('tabBank').setAttribute('aria-selected', tab === 'bank' ? 'true' : 'false');
+    $('tabRazorpay').setAttribute('aria-selected', tab === 'razorpay' ? 'true' : 'false');
+    $('tabPayu').setAttribute('aria-selected', tab === 'payu' ? 'true' : 'false');
     $('panelUpi').classList.toggle('active', tab === 'upi');
     $('panelBank').classList.toggle('active', tab === 'bank');
+    $('panelRazorpay').classList.toggle('active', tab === 'razorpay');
+    $('panelPayu').classList.toggle('active', tab === 'payu');
   }
 
   /* ── COPY BANK DETAIL ─────────────────────────────────────── */

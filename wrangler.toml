@@ -1,0 +1,11 @@
+name = "ntagz-payments"
+compatibility_date = "2026-10-08"
+pages_build_output_dir = "."
+
+[[routes]]
+pattern = "www.ntagz.com/api/*"
+zone_name = "ntagz.com"
+
+[[routes]]
+pattern = "ntagz.com/api/*"
+zone_name = "ntagz.com"

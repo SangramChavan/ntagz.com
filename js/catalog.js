@@ -22,8 +22,9 @@
 
    Exception: products flagged  allInclusive: true  are priced as a
    final, all-inclusive amount (GST + shipping absorbed), e.g. the
-   Google Review NFC Stands at ₹149 (9×9) / ₹199 (12×12) per pc. The quote builder (order.js)
-   does not add GST or shipping on top of those products.
+   Google Review NFC Stands at ₹99 (5×5) / ₹149 (9×9) / ₹199 (12×12)
+   per pc. The quote builder (order.js) does not add GST or shipping
+   on top of those products.
 
    ── AFTER EDITING THIS FILE ──
    This file is cached 4h at the edge with no other cache-busting.
@@ -139,11 +140,27 @@
       home: true
     },
 
-    /* ── GOOGLE REVIEW NFC STAND (tabletop, one product, two SKUs)
-       The QR fallback is size-locked, not a free choice: the 9×9
-       is NFC-only (smaller panel, no room for a QR block) and the
-       12×12 is NFC + a printed QR fallback. Two SKUs, one page.
+    /* ── GOOGLE REVIEW NFC STAND (tabletop, one product, three SKUs)
+       The QR fallback is size-locked, not a free choice: the 5×5 and
+       9×9 are NFC-only (smaller panels, no room for a QR block) and
+       the 12×12 is NFC + a printed QR fallback. Three SKUs, one page.
        home:false — order page only, no homepage tile. */
+    {
+      id: 'google-review-nfc-stand-5x5',
+      sku: 'GRS99',
+      name: 'Google Review NFC Stand — 5×5 cm (NFC only)',
+      price: 99,
+      unit: 'pc',
+      moq: 10,
+      allInclusive: true,
+      image: 'images/google-review-stand-10x10.jpg',
+      detail: 'product/google-review-nfc-stand/',
+      category: 'nfc',
+      homeCategory: 'nfc',
+      tags: ['NFC', 'Tabletop Stand', '5×5 cm'],
+      desc: 'Tap-to-review counter stand, 5×5 cm, NFC only. Pre-programmed with your Google review link before dispatch.',
+      home: false
+    },
     {
       id: 'google-review-nfc-stand-10x10',
       sku: 'GRS150',
