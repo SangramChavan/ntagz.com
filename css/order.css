@@ -2266,3 +2266,57 @@
         border-color: #ddd;
       }
     }
+
+/* ═══ ORDER PAGE · Apple-inspired light skin ═══ */
+:root[data-theme="light"] {
+  --cream: #FFFFFF;
+  --warm: #F5F5F7;
+  --paper: #E5E5EA;
+  --ink: #1D1D1F;
+  --ink-2: #424245;
+  --ink-3: #6E6E73;
+}
+body { background: #fff; color: var(--ink); }
+section#products { background: var(--warm); padding: 24px 0 56px; }
+.page-header { margin-bottom: 20px; text-align: left; }
+.page-header h1 { font-size: clamp(26px, 6vw, 40px); margin-bottom: 6px; }
+.page-header p { margin: 0; max-width: 560px; font-size: 15px; }
+.calc-form-card, .quote-card { border-radius: 20px; box-shadow: 0 1px 2px rgba(0,0,0,.04); border-color: var(--paper); }
+.calc-form-card { padding: 16px; }
+@media (min-width: 768px) { .calc-form-card { padding: 28px; } .page-header { text-align: center; } .page-header p { margin: 0 auto; } }
+.prod-card { border-radius: 16px; border-width: 1.5px; background: #fff; color: var(--ink); }
+.prod-card.selected { border-color: var(--tagz); background: #fff; box-shadow: 0 0 0 3px rgba(255, 90, 31, .14); }
+.cat-toggle { background: #E8E8ED; }
+.cat-tab { min-height: 44px; padding: 0; }
+.cat-tab-slider { background: #fff; }
+
+/* Quantity controls: 44px targets */
+.item-row .qty-ctrl { gap: 6px; }
+.qty-btn { width: 44px; height: 44px; border-radius: 12px; font-size: 20px; background: #fff; }
+.qty-input { width: 64px; height: 44px; font-size: 16px; border-radius: 12px; padding: 0 4px; }
+.item-remove { min-width: 44px; min-height: 44px; }
+.form-control { min-height: 48px; font-size: 16px; border-radius: 12px; }
+.form-control:focus-visible, .qty-input:focus-visible { outline: 2px solid var(--tagz); outline-offset: 1px; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--tagz); outline-offset: 2px; }
+@media (max-width: 767px) {
+  .item-row { flex-wrap: wrap; row-gap: 10px; }
+  .item-row .item-label { flex: 1 1 calc(100% - 64px); min-width: 0; }
+  .item-row .item-total { margin-left: auto; }
+}
+
+/* Sticky mobile order bar */
+.order-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 900;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  background: rgba(255, 255, 255, .92); backdrop-filter: saturate(180%) blur(16px);
+  border-top: 1px solid var(--paper);
+}
+.order-bar[hidden] { display: none; }
+.order-bar-total { font-family: var(--ff-head); font-size: 20px; font-weight: 800; color: var(--ink); line-height: 1.1; }
+.order-bar-count { font-size: 12px; color: var(--ink-3); }
+.order-bar .btn { min-height: 44px; padding: 0 22px; display: inline-flex; align-items: center; }
+body.has-order-bar { padding-bottom: 76px; }
+body.has-order-bar .wa-float { bottom: 88px; }
+@media (min-width: 1024px) { .order-bar { display: none !important; } body.has-order-bar { padding-bottom: 0; } }
+@media (prefers-reduced-motion: reduce) { .prod-card, .product-grid { animation: none; transition: none; } }

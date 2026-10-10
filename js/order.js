@@ -728,6 +728,32 @@
   renderSelectedItems();
   calculateQuote();
 
+
+  /* ── Sticky mobile order bar: mirrors the quote total, hides when the quote card is
+     on screen or a field has focus (so it never covers the keyboard / inputs). ── */
+  (function () {
+    var bar = $('orderBar'), quote = $('quote-card');
+    if (!bar || !quote) return;
+    var inView = false, typing = false;
+    function sync() {
+      var inputs = document.querySelectorAll('#selectedItems .qty-input');
+      var pcs = 0;
+      inputs.forEach(function (i) { pcs += parseInt(i.value, 10) || 0; });
+      var n = selectedIds.length;
+      $('obTotal').textContent = $('outTotal').textContent;
+      $('obCount').textContent = n + (n === 1 ? ' product' : ' products') + (pcs ? ' · ' + pcs + ' pcs' : '');
+      bar.hidden = !n || inView || typing;
+      document.body.classList.toggle('has-order-bar', !bar.hidden);
+    }
+    new MutationObserver(sync).observe($('outTotal'), { childList: true, characterData: true, subtree: true });
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (e) { inView = e[0].isIntersecting; sync(); }).observe(quote);
+    }
+    document.addEventListener('focusin', function (e) { typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName); sync(); });
+    document.addEventListener('focusout', function () { typing = false; setTimeout(sync, 0); });
+    sync();
+  })();
+
   if (selectedIds.length) {
     var target = document.getElementById('products');
     if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
