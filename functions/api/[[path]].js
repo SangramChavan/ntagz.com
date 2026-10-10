@@ -32,7 +32,36 @@ function json(data, status = 200, origin) {
   });
 }
 
-function calculateTotal(items, state, memberDiscounts) {
+// Live pricing from the admin's D1 catalogue. Cached 30s per isolate; any failure falls back to the table above.
+let pricingCache = { db: null, at: 0, map: null };
+async function loadPricing(env) {
+  if (!env.DB) return null;
+  const nowMs = Date.now();
+  if (pricingCache.db === env.DB && nowMs - pricingCache.at < 30000) return pricingCache.map;
+  try {
+    const { results } = await env.DB.prepare("SELECT id,name,price_paise,active,track_stock,stock_qty,low_stock_threshold FROM products").all();
+    const map = {};
+    for (const r of results) map[r.id] = r;
+    pricingCache = { db: env.DB, at: nowMs, map };
+    return map;
+  } catch (e) { console.error("loadPricing failed:", e && e.message); return null; }
+}
+const resetPricingCache = () => { pricingCache = { db: null, at: 0, map: null }; };
+
+// Returns a customer-facing message if any item can't be sold right now, else null.
+function unavailableReason(items, pricing) {
+  if (!pricing || !Array.isArray(items)) return null;
+  for (const item of items) {
+    const row = pricing[item && item.id];
+    if (!row) continue;
+    const name = row.name || item.id;
+    if (!row.active) return `${name} is currently unavailable`;
+    if (row.track_stock && Number.isInteger(item.qty) && item.qty > row.stock_qty) return row.stock_qty > 0 ? `Only ${row.stock_qty} of ${name} available` : `${name} is out of stock`;
+  }
+  return null;
+}
+
+function calculateTotal(items, state, memberDiscounts, pricing) {
   if (!Array.isArray(items) || items.length < 1 || items.length > 30) return null;
   let regular = 0;
   let inclusive = 0;
@@ -46,7 +75,8 @@ function calculateTotal(items, state, memberDiscounts) {
     const linePieces = qty * (product.packSize || 1);
     const discount = product.fixed ? 0 : linePieces >= 5000 ? 25 : linePieces >= 1000 ? 15 : linePieces >= 500 ? 10 : 0;
     const memberDisc = memberDiscounts && product.category ? (memberDiscounts[product.category] || 0) : 0;
-    const net = product.price * qty * (100 - discount) / 100 * (100 - memberDisc) / 100;
+    const livePrice = pricing && pricing[item.id] ? pricing[item.id].price_paise / 100 : product.price;
+    const net = livePrice * qty * (100 - discount) / 100 * (100 - memberDisc) / 100;
     if (product.allInclusive) inclusive += net;
     else regular += net;
     pieces += product.fixed ? 70 : linePieces;
@@ -420,6 +450,27 @@ async function handleAccounts(url, request, env, allowedOrigin) {
 // amount or a "paid" flag. Recording is best-effort: a D1 problem must never break a payment, so every call is guarded.
 const OFFLINE_METHODS = ["upi", "bank", "whatsapp"];
 
+// Statements that deduct sold quantities from tracked products, each guarded by "this order row exists" so a repeat or an
+// ignored insert deducts nothing. Deduction is clamped at zero (never negative) and every change gets a movement row.
+function stockStatements(env, orderId, txnId, items) {
+  const out = [];
+  for (const it of items) {
+    if (!it || typeof it.id !== "string" || !Number.isInteger(it.qty) || it.qty < 1) continue;
+    out.push(
+      env.DB.prepare(
+        `INSERT INTO inventory_movements (id,product_id,type,qty_change,prev_stock,new_stock,reason,reference,admin,idempotency_key)
+         SELECT ?1,id,'out',-min(stock_qty,?2),stock_qty,max(stock_qty-?2,0),'Order sale',?3,'system',?4
+         FROM products WHERE id=?5 AND track_stock=1 AND stock_qty>0 AND EXISTS (SELECT 1 FROM orders WHERE id=?4)`
+      ).bind(crypto.randomUUID(), it.qty, txnId, orderId, it.id),
+      env.DB.prepare(
+        `UPDATE products SET stock_qty=max(stock_qty-?1,0), updated_at=unixepoch()
+         WHERE id=?2 AND track_stock=1 AND EXISTS (SELECT 1 FROM orders WHERE id=?3)`
+      ).bind(it.qty, it.id, orderId),
+    );
+  }
+  return out;
+}
+
 function cleanDetails(b) {
   const str = (v, max) => (typeof v === "string" ? v.trim().slice(0, max) : "");
   const gstin = str(b.gstin, 15).toUpperCase();
@@ -478,6 +529,7 @@ async function finalizeOrder(env, txnId, paymentRef, verifiedPaise) {
         "UPDATE users SET loyalty_spend=loyalty_spend+?1, loyalty_tier=CASE WHEN loyalty_spend+?1>=1000000 THEN 'pro' ELSE loyalty_tier END WHERE id=?2 AND changes()=1"
       ).bind(intent.amount_paise, intent.user_id),
       env.DB.prepare("DELETE FROM checkout_intents WHERE txn_id=?").bind(txnId),
+      ...stockStatements(env, oid, txnId, JSON.parse(intent.items_json || "[]")),
     ]);
   } catch (e) { console.error("finalizeOrder failed:", e && e.message); }
 }
@@ -494,7 +546,10 @@ async function recordOfflineOrder(request, env, body, origin) {
   const d = cleanDetails(body);
   if (d.name.length < 2 || d.phone.length !== 10 || d.address.length < 5 || !d.pincode || !d.quoteRef) return json({ error: "Missing or invalid customer details" }, 400, origin);
   const memberDiscounts = await getMemberDiscounts(request, env);
-  const total = calculateTotal(body.items, d.state, memberDiscounts);
+  const pricing = await loadPricing(env);
+  const blocked = unavailableReason(body.items, pricing);
+  if (blocked) return json({ error: blocked }, 409, origin);
+  const total = calculateTotal(body.items, d.state, memberDiscounts, pricing);
   if (!total) return json({ error: "Invalid order" }, 400, origin);
   const ipHash = await sha256Hex(`ntagz:${request.headers.get("CF-Connecting-IP") || "unknown"}`);
   const recent = await env.DB.prepare("SELECT count(*) c FROM order_attempts WHERE ip_hash=? AND created_at>unixepoch()-600").bind(ipHash).first();
@@ -503,14 +558,16 @@ async function recordOfflineOrder(request, env, body, origin) {
   const txnId = `OFF-${d.quoteRef}-${d.phone}`; // the same quote re-submitted (e.g. a repeated WhatsApp tap) maps to the same order
   const items = body.items.map((i) => ({ id: String(i.id).slice(0, 64), qty: i.qty }));
   const amountPaise = total.amount * 100, gstPaise = total.gst * 100;
+  const orderIdOffline = crypto.randomUUID();
   await env.DB.batch([
     env.DB.prepare("DELETE FROM order_attempts WHERE created_at < unixepoch() - 86400"),
     env.DB.prepare("INSERT INTO order_attempts (ip_hash) VALUES (?)").bind(ipHash),
     env.DB.prepare(
       `INSERT OR IGNORE INTO orders (id,user_id,txn_id,gateway,quote_ref,items_json,name,phone,email,address,pincode,state,gstin,subtotal,gst,total,payment_method,payment_status,paid_paise)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'unpaid', 0)`
-    ).bind(crypto.randomUUID(), u ? u.user_id : null, txnId, method, d.quoteRef, JSON.stringify(items), d.name, d.phone, d.email, d.address, d.pincode,
+    ).bind(orderIdOffline, u ? u.user_id : null, txnId, method, d.quoteRef, JSON.stringify(items), d.name, d.phone, d.email, d.address, d.pincode,
            d.state, d.gstin, amountPaise - gstPaise, gstPaise, amountPaise, method),
+    ...stockStatements(env, orderIdOffline, txnId, items),
   ]);
   return json({ ok: true, orderRef: txnId, total: total.amount }, 200, origin);
 }
@@ -521,6 +578,20 @@ async function onRequest({ request, env }) {
   const allowedOrigin = origin === "https://ntagz.com" ? origin : "https://www.ntagz.com";
   const responseHeaders = { ...corsHeaders, "Access-Control-Allow-Origin": allowedOrigin };
   if (request.method === "OPTIONS") return new Response(null, { headers: responseHeaders });
+
+  // ── Public live catalogue: GET /api/catalog (price + availability only; no exact stock counts) ──
+  if (url.pathname.endsWith("/catalog") && !url.pathname.includes("/accounts/")) {
+    if (request.method !== "GET") return json({ error: "Method not allowed" }, 405, origin);
+    const pricing = await loadPricing(env);
+    if (!pricing) return json({ error: "Catalogue unavailable" }, 503, origin);
+    const items = Object.values(pricing).map((r) => ({
+      id: r.id, price: r.price_paise / 100, active: !!r.active,
+      available: !r.track_stock || r.stock_qty > 0, low: !!r.track_stock && r.stock_qty > 0 && r.stock_qty <= r.low_stock_threshold,
+    }));
+    const res = json(items, 200, origin);
+    res.headers.set("Cache-Control", "public, max-age=60");
+    return res;
+  }
 
   // ── Accounts routes (/api/accounts/*) ──────────────────────────────────
   if (url.pathname.includes("/accounts/")) {
@@ -620,7 +691,10 @@ async function onRequest({ request, env }) {
   try {
     if (url.pathname.endsWith("/create-order")) {
       const memberDiscounts = await getMemberDiscounts(request, env);
-      const total = calculateTotal(body.items, body.state, memberDiscounts);
+      const pricing = await loadPricing(env);
+      const blocked = unavailableReason(body.items, pricing);
+      if (blocked) return json({ error: blocked }, 409, origin);
+      const total = calculateTotal(body.items, body.state, memberDiscounts, pricing);
       if (!total) return json({ error: "Invalid order" }, 400, origin);
       const order = await razorpayRequest("/orders", env, {
         amount: total.amount * 100,
@@ -650,7 +724,10 @@ async function onRequest({ request, env }) {
     if (url.pathname.endsWith("/payu/checkout")) {
       if (!env.PAYU_KEY || !env.PAYU_SALT) return json({ error: "PayU is not configured" }, 503, origin);
       const memberDiscounts = await getMemberDiscounts(request, env);
-      const total = calculateTotal(body.items, body.state, memberDiscounts);
+      const pricing = await loadPricing(env);
+      const blocked = unavailableReason(body.items, pricing);
+      if (blocked) return json({ error: blocked }, 409, origin);
+      const total = calculateTotal(body.items, body.state, memberDiscounts, pricing);
       if (!total) return json({ error: "Invalid order" }, 400, origin);
       const firstName = typeof body.name === "string" ? body.name.trim().split(/\s+/)[0].slice(0, 60) : "";
       const email = typeof body.email === "string" ? body.email.trim().slice(0, 254) : "";
@@ -704,4 +781,4 @@ async function onRequest({ request, env }) {
   }
 }
 
-if (typeof module !== "undefined") module.exports = { onRequest, calculateTotal, verifySignature, payuHash, verifyPayuResponse };
+if (typeof module !== "undefined") module.exports = { onRequest, resetPricingCache, calculateTotal, verifySignature, payuHash, verifyPayuResponse };

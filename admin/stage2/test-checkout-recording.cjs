@@ -3,34 +3,11 @@
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const fs = require("node:fs");
-const { DatabaseSync } = require("node:sqlite");
 const root = path.join(__dirname, "..", "..");
 const worker = require(process.env.WORKER || path.join(root, "functions", "api", "[[path]].js"));
 
-const sqlite = new DatabaseSync(":memory:");
-for (const f of ["db/schema.sql", "db/membership-schema.sql", "admin/migrations/0001_admin.sql", "admin/migrations/0002_products.sql", "admin/migrations/0003_checkout.sql"])
-  sqlite.exec(fs.readFileSync(path.join(root, f), "utf8"));
-
-// Minimal D1 shim: prepare().bind().first/all/run + atomic batch()
-const bound = (sql, a) => {
-  const st = sqlite.prepare(sql);
-  return {
-    async first() { return st.get(...a) ?? null; },
-    async all() { return { results: st.all(...a) }; },
-    async run() { const r = st.run(...a); return { meta: { changes: Number(r.changes) } }; },
-    _exec() { if (/^\s*(select|with)/i.test(sql)) { st.all(...a); return { meta: { changes: 0 } }; } const r = st.run(...a); return { meta: { changes: Number(r.changes) } }; },
-  };
-};
-const D1 = {
-  prepare(sql) { return { ...bound(sql, []), bind: (...a) => bound(sql, a) }; },
-  async batch(stmts) {
-    sqlite.exec("BEGIN");
-    try { const out = stmts.map((s) => s._exec()); sqlite.exec("COMMIT"); return out; }
-    catch (e) { sqlite.exec("ROLLBACK"); throw e; }
-  },
-};
-const q = (sql, ...a) => sqlite.prepare(sql).all(...a);
-const one = (sql, ...a) => sqlite.prepare(sql).get(...a);
+const { makeDb } = require("./d1shim.cjs");
+const { sqlite, D1, q, one } = makeDb();
 
 const env = { DB: D1, RAZORPAY_KEY_ID: "rzp_test", RAZORPAY_KEY_SECRET: "rzp_secret", PAYU_KEY: "payu_key", PAYU_SALT: "payu_salt", PAYU_ENV: "test" };
 const ORIGIN = "https://www.ntagz.com";

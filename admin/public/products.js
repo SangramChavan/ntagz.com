@@ -6,7 +6,7 @@ const rupees = (paise) => (paise / 100).toFixed(2);
 const STATUS = { in: "In stock", low: "Low stock", out: "Out of stock" };
 
 function thumb(p) { return p.image_url ? el("img", { class: "thumb", src: imgSrc(p.image_url), alt: "", loading: "lazy", width: "44", height: "44" }) : el("span", { class: "thumb" }); }
-const statusPills = (p) => [el("span", { class: "pill " + p.stock_status }, STATUS[p.stock_status]), el("span", { class: "pill " + (p.active ? "paid" : "off") }, p.active ? "Active" : "Inactive")];
+const statusPills = (p) => [...(p.track_stock ? [el("span", { class: "pill" }, "Tracked")] : []), el("span", { class: "pill " + p.stock_status }, STATUS[p.stock_status]), el("span", { class: "pill " + (p.active ? "paid" : "off") }, p.active ? "Active" : "Inactive")];
 
 function pparams() {
   const q = new URLSearchParams();
@@ -62,7 +62,7 @@ function ask(title, lines, okLabel) {
 
 async function toggleActive(p) {
   const to = !p.active;
-  if (!to && !(await ask("Deactivate product?", [`${p.name} (${p.sku}) will be hidden from sales once the storefront uses admin data. History and orders are kept.`], "Deactivate"))) return;
+  if (!to && !(await ask("Deactivate product?", [`${p.name} (${p.sku}) will disappear from the storefront and checkout. History and past orders are kept.`], "Deactivate"))) return;
   try { await api(`/api/products/${p.id}/active`, { active: to }); refresh(); } catch (e) { alert(e.message); }
 }
 
@@ -88,6 +88,7 @@ async function editProduct(id) {
   const gst = el("select", { id: "gst_rate" }, [0, 5, 12, 18, 28].map((r) => { const o = el("option", { value: String(r) }, r + "%"); if (r === (p ? p.gst_rate : 18)) o.selected = true; return o; }));
   const thr = el("input", { id: "low_stock_threshold", value: v("low_stock_threshold", "10"), inputmode: "numeric" });
   const open = el("input", { id: "opening_stock", value: "0", inputmode: "numeric" });
+  const track = el("input", { id: "track_stock", type: "checkbox" }); track.checked = !!(p && p.track_stock);
   const act = el("select", { id: "active" }, [["1", "Active"], ["0", "Inactive"]].map(([val, l]) => { const o = el("option", { value: val }, l); if (val === (p && !p.active ? "0" : "1")) o.selected = true; return o; }));
   const form = el("form", { class: "form", novalidate: "" },
     field("name", "Product name", name), field("sku", "SKU / product code", sku), field("description", "Description", desc),
@@ -95,19 +96,21 @@ async function editProduct(id) {
     el("div", { class: "two" }, field("price", "Selling price (₹, ex-GST)", price), field("mrp", "MRP / list price (₹, optional)", mrp)),
     el("div", { class: "two" }, field("gst_rate", "GST rate", gst), field("low_stock_threshold", "Low-stock alert at", thr)),
     p ? el("p", { class: "sub" }, `Current stock ${p.stock_qty} ${p.unit}. Change it with “Update stock”, so every change is recorded.`) : field("opening_stock", "Opening stock", open),
-    field("active", "Status", act), dl,
+    field("active", "Status", act),
+    el("div", { class: "field" }, el("label", { class: "check" }, track, " Track stock on the storefront"), el("div", { class: "sub" }, "On: checkout blocks quantities above stock and deducts sold units. Leave off until you have done a stock count.")), dl,
     el("div", { class: "msg", id: "pmsg", role: "alert" }),
     el("div", { class: "actions" }, el("button", { class: "btn primary", id: "psave", type: "submit" }, p ? "Save changes" : "Add product"), el("button", { class: "btn", type: "button", onclick: () => $("pdlg").close() }, "Cancel")));
   form.addEventListener("submit", async (e) => {
     e.preventDefault(); $("pmsg").textContent = ""; showErrors({});
-    const body = { name: name.value, sku: sku.value, description: desc.value, category: cat.value, image_url: img.value, price: price.value, mrp: mrp.value, gst_rate: Number(gst.value), low_stock_threshold: thr.value, active: act.value === "1" };
+    const body = { name: name.value, sku: sku.value, description: desc.value, category: cat.value, image_url: img.value, price: price.value, mrp: mrp.value, gst_rate: Number(gst.value), low_stock_threshold: thr.value, active: act.value === "1", track_stock: track.checked };
     if (!p) body.opening_stock = open.value;
     if (p) {
       const notes = [];
       const np = Number(price.value);
       if (price.value.trim() !== "" && Number.isFinite(np) && np >= 0 && Math.round(np * 100) !== p.price_paise) notes.push(`Price: ${inr(p.price_paise)} → ${inr(Math.round(np * 100))}. Applies to future purchases only; past orders keep their prices.`);
       if (sku.value.trim().toUpperCase() !== p.sku) notes.push(`SKU: ${p.sku} → ${sku.value.trim().toUpperCase()}.`);
-      if (!body.active && p.active) notes.push("The product will be marked inactive.");
+      if (!body.active && p.active) notes.push("The product will be marked inactive and disappear from the storefront and checkout.");
+      if (body.track_stock && !p.track_stock) notes.push(`Stock tracking will be turned on. Customers will be blocked from ordering more than the current stock (${p.stock_qty}).`);
       if (notes.length && !(await ask("Confirm changes", notes, "Save changes"))) return;
     }
     $("psave").disabled = true;

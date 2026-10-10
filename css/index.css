@@ -2657,3 +2657,7 @@
       .wa-float { width: 48px; height: 48px; bottom: 16px; right: 16px; }
       .wa-float svg { width: 24px; height: 24px; }
     }
+
+    /* Live catalogue overlay */
+    .product-card.live-hidden { display: none !important; }
+    .add-btn-off { opacity: .6; pointer-events: none; }

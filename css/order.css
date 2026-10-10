@@ -2320,3 +2320,6 @@ body.has-order-bar { padding-bottom: 76px; }
 body.has-order-bar .wa-float { bottom: 88px; }
 @media (min-width: 1024px) { .order-bar { display: none !important; } body.has-order-bar { padding-bottom: 0; } }
 @media (prefers-reduced-motion: reduce) { .prod-card, .product-grid { animation: none; transition: none; } }
+
+.prod-card:disabled { opacity: .55; cursor: not-allowed; }
+.prod-oos { display: block; margin-top: 4px; font-size: 12px; font-weight: 700; color: var(--ink-3); }

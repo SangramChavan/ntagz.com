@@ -253,12 +253,12 @@ async function exportCsv(sp, env) {
 
 // ── Products & inventory ──────────────────────────────────────────────
 const PSORTS = { name: "name", price: "price_paise", stock: "stock_qty", updated: "updated_at" };
-const PCOLS = "id,sku,name,description,category,image_url,price_paise,mrp_paise,gst_rate,all_inclusive,unit,stock_qty,low_stock_threshold,active,created_at,updated_at";
+const PCOLS = "id,sku,name,description,category,image_url,price_paise,mrp_paise,gst_rate,all_inclusive,unit,stock_qty,low_stock_threshold,active,track_stock,created_at,updated_at";
 const GST_RATES = [0, 5, 12, 18, 28];
 const IMAGE_OK = /^(https:\/\/(www\.)?ntagz\.com\/|images\/)[\w\-./]{1,200}$/;
 
 const stockStatus = (p) => (p.stock_qty <= 0 ? "out" : p.stock_qty <= p.low_stock_threshold ? "low" : "in");
-const pshape = (p) => ({ ...p, active: !!p.active, all_inclusive: !!p.all_inclusive, stock_status: stockStatus(p) });
+const pshape = (p) => ({ ...p, active: !!p.active, track_stock: !!p.track_stock, all_inclusive: !!p.all_inclusive, stock_status: stockStatus(p) });
 
 function rupeesToPaise(v) {
   const n = typeof v === "string" ? Number(v.trim()) : v;
@@ -317,6 +317,7 @@ function validateProduct(b, partial) {
     if (v === null) errors.low_stock_threshold = "Threshold must be a whole number, 0 or more"; else f.low_stock_threshold = v;
   }
   if (b.active !== undefined) f.active = b.active ? 1 : 0;
+  if (b.track_stock !== undefined) f.track_stock = b.track_stock ? 1 : 0; // 1 = checkout enforces and deducts stock
   return { f, errors };
 }
 
@@ -378,9 +379,9 @@ async function createProduct(body, actor, env) {
   if (await env.DB.prepare("SELECT 1 FROM products WHERE lower(sku)=lower(?)").bind(f.sku).first()) return json({ error: "SKU already exists", fields: { sku: "This SKU is already in use" } }, 409);
   const thr = f.low_stock_threshold ?? 10;
   const stmts = [env.DB.prepare(
-    `INSERT INTO products (id,sku,name,description,category,image_url,price_paise,mrp_paise,gst_rate,unit,stock_qty,low_stock_threshold,active)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
-  ).bind(pid, f.sku, f.name, f.description ?? "", f.category, f.image_url ?? null, f.price_paise, f.mrp_paise ?? null, f.gst_rate ?? 18, f.unit ?? "pc", opening, thr, f.active ?? 1)];
+    `INSERT INTO products (id,sku,name,description,category,image_url,price_paise,mrp_paise,gst_rate,unit,stock_qty,low_stock_threshold,active,track_stock)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+  ).bind(pid, f.sku, f.name, f.description ?? "", f.category, f.image_url ?? null, f.price_paise, f.mrp_paise ?? null, f.gst_rate ?? 18, f.unit ?? "pc", opening, thr, f.active ?? 1, f.track_stock ?? 0)];
   if (opening > 0) stmts.push(env.DB.prepare(
     "INSERT INTO inventory_movements (id,product_id,type,qty_change,prev_stock,new_stock,reason,admin,idempotency_key) VALUES (?,?,'opening',?,0,?,'Opening stock',?,?)"
   ).bind(crypto.randomUUID(), pid, opening, opening, actor, "opening"));

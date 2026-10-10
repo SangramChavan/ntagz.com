@@ -148,3 +148,39 @@
     card.addEventListener('keydown', open);
   });
 })();
+
+/* ── Live overlay: admin price / active / availability on every card (hand-written and injected) ──
+   Server charges the admin price, so the page must show it. No-op if the live request fails. */
+(function () {
+  'use strict';
+  var L = window.NTAGZ_LIVE, C = window.NTAGZ_CATALOG;
+  if (!L || !C) return;
+  var money = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  L.ready.then(function (data) {
+    if (!data) return;
+    L.apply(C, data);
+    Array.prototype.forEach.call(document.querySelectorAll('.product-card[data-product-id]'), function (card) {
+      var p = C.byId(card.getAttribute('data-product-id'));
+      if (!p || !p.live) return;
+      if (!p.live.active) { card.classList.add('live-hidden'); return; }
+      if (!card.querySelector('.dual-price-meta')) {
+        var priceEl = card.querySelector('.product-price');
+        if (priceEl) Array.prototype.some.call(priceEl.childNodes, function (n) {
+          if (n.nodeType === 3 && /₹\s*[\d,]+(\.\d+)?/.test(n.textContent)) {
+            n.textContent = n.textContent.replace(/₹\s*[\d,]+(\.\d+)?/, '₹' + money.format(p.price));
+            return true;
+          }
+          return false;
+        });
+      }
+      if (!p.live.available) {
+        Array.prototype.forEach.call(card.querySelectorAll('.add-btn'), function (btn) {
+          var off = document.createElement('span');
+          off.className = 'add-btn add-btn-off';
+          off.textContent = 'Out of stock';
+          btn.replaceWith(off);
+        });
+      }
+    });
+  });
+})();

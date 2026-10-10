@@ -52,3 +52,4 @@ nav { display:flex; gap:4px; } nav a { padding:8px 14px; border-radius:99px; col
 @media (min-width:900px) { .tiles { grid-template-columns:repeat(4,1fr); } .pfilters { grid-template-columns:2fr 1fr 1fr 1fr 1fr auto; } .ptable { display:table; } #plist { display:none; } }
 header .btn { white-space:nowrap; min-height:40px; padding:0 12px; }
 @media (max-width:520px) { header { gap:6px; padding:10px 12px; } nav a { padding:8px 10px; } header b span { display:none; } }
+.check { display:flex; align-items:center; gap:8px; } .check input { width:20px; height:20px; }

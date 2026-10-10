@@ -61,6 +61,10 @@ assert.equal(p.stock_status, "low"); await adj(p.id, { type: "out", quantity: 5 
 await adj(p.id, { type: "in", quantity: 100 }); p = await (await call("/api/products/" + p.id)).json(); assert.equal(p.stock_status, "in");
 assert.ok((await (await call("/api/products?stock=out")).json()).total >= 17); assert.equal((await (await call("/api/products?stock=low")).json()).total, 0); ok("low / out / in stock indicators and filters");
 
+// storefront tracking flag
+r = await call("/api/products/" + p.id, { track_stock: true }); p = await r.json(); assert.equal(p.track_stock, true);
+d = await (await call("/api/products?q=keychain")).json(); assert.equal(d.products[0].track_stock, true);
+r = await call("/api/products/" + p.id, { track_stock: false }); assert.equal((await r.json()).track_stock, false); ok("track_stock flag round-trips");
 // active
 r = await call(`/api/products/${p.id}/active`, { active: false }); p = await r.json(); assert.equal(p.active, false);
 assert.equal((await (await call("/api/products?active=0")).json()).total, 1); ok("deactivate / filter inactive (archived, never deleted)");

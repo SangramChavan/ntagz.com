@@ -116,16 +116,17 @@
   function renderGrid() {
     var grid = $('productGrid');
     var visible = PRODUCTS.filter(function (p) {
-      return p.category === activeCategory || p.category === 'both';
+      return (p.category === activeCategory || p.category === 'both') && !(p.live && p.live.active === false);
     });
 
     grid.innerHTML = visible.map(function (p) {
       var selected = selectedIds.indexOf(p.id) > -1;
       var unit = p.unitLabel || p.unit || 'pc';
+      var soldOut = p.live && p.live.available === false;
       return '' +
         '<button type="button" class="prod-card' + (p.fixed ? ' bundle-card' : '') +
         (selected ? ' selected' : '') + '" data-id="' + esc(p.id) + '" aria-pressed="' +
-        (selected ? 'true' : 'false') + '">' +
+        (selected ? 'true' : 'false') + '"' + (soldOut ? ' disabled' : '') + '>' +
         '<span class="check" aria-hidden="true">' +
         '<svg viewBox="0 0 10 8"><path d="M1 4L3.5 6.5L9 1" stroke="#fff" stroke-width="1.8" ' +
         'stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></span>' +
@@ -135,6 +136,7 @@
         '<span class="prod-name">' + esc(p.name) + '</span>' +
         '<span class="prod-code">' + esc(p.sku) + (p.fixed ? ' · 70 pcs' : '') + '</span>' +
         '<span class="prod-price">' + fmtRate(p.price) + '<span>/' + esc(unit) + '</span></span>' +
+        (soldOut ? '<span class="prod-oos">Out of stock</span>' : '') +
         '</span>' +
         '</button>';
     }).join('');
@@ -769,6 +771,21 @@
     document.addEventListener('focusout', function () { typing = false; setTimeout(sync, 0); });
     sync();
   })();
+
+  /* Live prices / availability from the admin catalogue (same numbers the server charges). Falls back silently. */
+  if (window.NTAGZ_LIVE) {
+    window.NTAGZ_LIVE.ready.then(function (data) {
+      if (!data || !window.NTAGZ_LIVE.apply(CATALOG, data)) return;
+      selectedIds = selectedIds.filter(function (id) {
+        var p = CATALOG.byId(id);
+        return !(p && p.live && (p.live.active === false || p.live.available === false));
+      });
+      renderGrid();
+      renderSelectedItems();
+      calculateQuote();
+      syncCart();
+    });
+  }
 
   if (selectedIds.length) {
     var target = document.getElementById('products');
