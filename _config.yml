@@ -1,0 +1,15 @@
+# GitHub Pages serves the whole repo. Keep server-side code, DB files and tooling out of the published site.
+exclude:
+  - admin
+  - db
+  - functions
+  - scripts
+  - server.js
+  - payment-worker.mjs
+  - wrangler.toml
+  - wrangler.payment.toml
+  - package.json
+  - package-lock.json
+  - opencode.jsonc
+  - SHEET-TEMPLATE.md
+  - .dev.vars.example

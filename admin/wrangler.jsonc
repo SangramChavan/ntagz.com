@@ -18,8 +18,7 @@
       "migrations_dir": "migrations"
     }
   ],
-  "vars": { "ENVIRONMENT": "production" }
+  "vars": { "ENVIRONMENT": "production" },
+  "routes": [{ "pattern": "admin.ntagz.com", "custom_domain": true }]
   // Secrets (never committed):  wrangler secret put ADMIN_EMAILS | RESEND_API_KEY
-  // Custom domain is attached at deploy time, only after DNS approval:
-  // "routes": [{ "pattern": "admin.ntagz.com", "custom_domain": true }]
 }
