@@ -9,8 +9,8 @@
      TIERS_CSV_URL     →  replaces the DISCOUNT_TIERS array
 
    After patching it bumps the `?v=YYYYMMDD` cache-buster on the
-   catalog.js <script> tags in index.html, order.html and
-   pricing.html (the documented 4h edge-cache convention).
+   catalog.js <script> tags in index.html and order.html
+   (the documented 4h edge-cache convention).
 
    It never edits names, skus, images or descriptions — those stay in
    catalog.js. Exit code 1 on any validation failure (fail cheaply),
@@ -27,7 +27,7 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 const CATALOG = path.join(ROOT, 'js', 'catalog.js');
-const PAGES = ['index.html', 'order.html', 'pricing.html']
+const PAGES = ['index.html', 'order.html']
   .map((p) => path.join(ROOT, p));
 
 const PRODUCTS_URL = process.env.PRODUCTS_CSV_URL || '';

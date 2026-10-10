@@ -4,8 +4,8 @@ This repo keeps **`js/catalog.js` as the single source of truth** for products. 
 sheet is an editing layer **and** a live order ledger:
 
 - the GitHub Action `sync-sheet` reads two published tabs, patches the numbers into
-  `catalog.js`, bumps the cache-buster, and commits back — prices on the site and on
-  `pricing.html` follow automatically;
+  `catalog.js`, bumps the cache-buster, and commits back — prices on the site follow
+  automatically;
 - an **`orders` tab** captures every "Confirm Order via WhatsApp" click straight from
   `order.html` (via a one-time Apps Script web-app deployment).
 
