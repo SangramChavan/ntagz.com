@@ -453,7 +453,12 @@
       return {
         items: orderItems(),
         state: document.getElementById("customerState").value,
-        quoteRef: document.getElementById("quoteNum").innerText
+        quoteRef: document.getElementById("quoteNum").innerText,
+        name: document.getElementById("customerName").value.trim(),
+        phone: document.getElementById("customerNumber").value.trim(),
+        address: document.getElementById("customerAddress").value.trim(),
+        pincode: document.getElementById("customerPincode").value.trim(),
+        gstin: document.getElementById("customerGST").value.trim()
       };
     };
     var postPayment = function(path, payload) {

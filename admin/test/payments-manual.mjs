@@ -1,0 +1,21 @@
+// UPI / bank / WhatsApp order payment recording. Run after smoke.mjs + products.mjs on a fresh local DB.
+import assert from "node:assert/strict";
+const BASE = process.env.BASE || "http://localhost:8799";
+const H = { "Content-Type": "application/json", "X-Requested-With": "ntagz-admin" };
+let cookie = ""; let n = 0; const ok = (m) => console.log(`ok ${++n} ${m}`);
+const call = (p, b) => fetch(BASE + p, { method: b === undefined ? "GET" : "POST", headers: { ...(b === undefined ? {} : H), Cookie: cookie }, body: b === undefined ? undefined : JSON.stringify(b) });
+let r = await call("/api/auth/request", { email: "admin@example.test" }); const { dev_otp } = await r.json();
+r = await call("/api/auth/verify", { email: "admin@example.test", otp: dev_otp }); cookie = r.headers.get("set-cookie").split(";")[0];
+const U = "55555555-aaaa-bbbb-cccc-000000000005", W = "66666666-aaaa-bbbb-cccc-000000000006", ONLINE = "11111111-aaaa-bbbb-cccc-000000000001";
+const pay = (id, b) => call(`/api/orders/${id}/payment-received`, { idempotency_key: crypto.randomUUID(), ...b });
+assert.equal((await pay(U, { confirm_amount_paise: 23600 })).status, 400); ok("UPI order needs method + reference");
+assert.equal((await pay(U, { confirm_amount_paise: 23600, method: "cash", reference: "x1234" })).status, 400); ok("UPI orders cannot be recorded as cash");
+assert.equal((await pay(U, { confirm_amount_paise: 23600, method: "upi", reference: "ab" })).status, 400); ok("reference must be meaningful");
+assert.equal((await pay(U, { confirm_amount_paise: 100, method: "upi", reference: "UTR123456" })).status, 409); ok("wrong amount rejected");
+assert.equal((await pay(ONLINE, { confirm_amount_paise: 35400, method: "upi", reference: "UTR123456" })).status, 409); ok("gateway-paid order cannot be re-recorded");
+r = await pay(U, { confirm_amount_paise: 23600, method: "upi", reference: "UTR123456" }); assert.equal(r.status, 200); let d = await r.json();
+assert.equal(d.payment_status, "paid"); assert.equal(d.payment_method, "upi"); assert.equal(d.payments[0].reference, "UTR123456"); assert.equal(d.payments[0].recorded_by, "admin@example.test"); ok("UPI payment recorded with reference and admin identity");
+assert.equal((await pay(U, { confirm_amount_paise: 23600, method: "upi", reference: "UTR123456" })).status, 409); ok("second confirmation rejected");
+r = await pay(W, { confirm_amount_paise: 18880, method: "bank", reference: "NEFT998877" }); d = await r.json(); assert.equal(r.status, 200); assert.equal(d.payment_method, "bank"); ok("WhatsApp order recorded as bank transfer (method updated to actual)");
+d = await (await call("/api/orders?payment_method=whatsapp")).json(); assert.equal(d.total, 0); ok("whatsapp filter accepted (order now recorded as bank)");
+console.log(`\nall ${n} manual-payment checks passed`);

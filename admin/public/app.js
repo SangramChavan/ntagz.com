@@ -57,13 +57,13 @@ async function open(id) {
   const ful = el("select", { id: "fsel", "aria-label": "Fulfilment status" }, ["confirmed", "packed", "shipped", "delivered", "cancelled"].map((s) => { const x = el("option", { value: s }, s); if (s === o.status) x.selected = true; return x; }));
   const trk = el("input", { id: "trk", placeholder: "Tracking ID", value: o.tracking_id || "", maxlength: "64" });
   const cour = el("input", { id: "cour", placeholder: "Courier", value: o.courier || "", maxlength: "64" });
-  const eligible = ["cash", "cod"].includes(o.payment_method) && o.payment_status === "unpaid" && o.status !== "cancelled" && (o.payment_method !== "cod" || o.status === "delivered");
+  const eligible = ["cash", "cod", "upi", "bank", "whatsapp"].includes(o.payment_method) && o.payment_status === "unpaid" && o.status !== "cancelled" && (o.payment_method !== "cod" || o.status === "delivered");
   const actions = [
     el("div", { class: "field" }, el("label", { for: "fsel" }, "Fulfilment"), ful, trk, cour,
       el("button", { class: "btn", type: "button", onclick: async () => { try { await api(`/api/orders/${id}/fulfilment`, { status: ful.value, tracking_id: trk.value, courier: cour.value }); await open(id); load(); } catch (e) { msg.textContent = e.message; } } }, "Update fulfilment")),
   ];
-  if (eligible) actions.push(el("button", { class: "btn primary", type: "button", onclick: () => confirmCash(o) }, "Mark cash as received"));
-  else if (o.payment_status === "unpaid") actions.push(el("p", { class: "sub" }, o.payment_method === "cod" ? "Cash on delivery can be recorded once the order is delivered." : "Online/other payments cannot be marked received here."));
+  if (eligible) actions.push(el("button", { class: "btn primary", type: "button", onclick: () => confirmCash(o) }, ["cash", "cod"].includes(o.payment_method) ? "Mark cash as received" : "Record payment received"));
+  else if (o.payment_status === "unpaid") actions.push(el("p", { class: "sub" }, o.payment_method === "cod" ? "Cash on delivery can be recorded once the order is delivered." : "Online gateway payments are confirmed automatically and cannot be marked received here."));
   dlg.replaceChildren(
     el("h2", { id: "dtitle", class: "h0" }, "Order " + o.id.slice(0, 8)), el("div", {}, pills(o)),
     el("dl", {},
@@ -79,16 +79,22 @@ async function open(id) {
 
 function confirmCash(o) {
   const c = $("cdlg"), key = crypto.randomUUID(); // one key per dialog: a double click can never record twice
+  const manual = !["cash", "cod"].includes(o.payment_method); // upi / bank / whatsapp orders need the actual method + reference
   const msg = el("div", { class: "msg", role: "alert" });
+  const method = el("select", { id: "pm", "aria-label": "Received by" }, [["upi", "UPI"], ["bank", "Bank transfer"]].map(([v, l]) => el("option", { value: v }, l)));
+  const ref = el("input", { id: "pref", maxlength: "64", placeholder: "Payment reference / UTR", "aria-label": "Payment reference" });
   const go = el("button", { class: "btn primary", type: "button" }, "Confirm " + inr(o.outstanding_paise) + " received");
   go.addEventListener("click", async () => {
     go.disabled = true;
-    try { await api(`/api/orders/${o.id}/cash-received`, { confirm_amount_paise: o.outstanding_paise, idempotency_key: key }); c.close(); await open(o.id); load(); }
+    const body = { confirm_amount_paise: o.outstanding_paise, idempotency_key: key };
+    if (manual) { body.method = method.value; body.reference = ref.value; }
+    try { await api(`/api/orders/${o.id}/payment-received`, body); c.close(); await open(o.id); load(); }
     catch (e) { msg.textContent = e.message; go.disabled = false; }
   });
-  c.replaceChildren(el("h2", { id: "ctitle", class: "h0" }, "Confirm cash received"),
+  c.replaceChildren(el("h2", { id: "ctitle", class: "h0" }, manual ? "Confirm payment received" : "Confirm cash received"),
     el("p", {}, `Order ${o.id}`), el("p", {}, "Outstanding amount: ", el("b", {}, inr(o.outstanding_paise))),
-    el("p", { class: "sub" }, "Only confirm after you have physically received this cash. This is recorded against your account and cannot be undone."),
+    ...(manual ? [el("div", { class: "field" }, el("label", { for: "pm" }, "Received by"), method), el("div", { class: "field" }, el("label", { for: "pref" }, "Reference (required)"), ref)] : []),
+    el("p", { class: "sub" }, "Only confirm after the money has actually arrived. This is recorded against your account and cannot be undone."),
     msg, el("div", { class: "actions" }, go, el("button", { class: "btn", type: "button", onclick: () => c.close() }, "Cancel")));
   c.showModal();
 }

@@ -690,8 +690,24 @@
       lastQuote.source = 'order.html';
       window.NTAGZ_LOG_ORDER(lastQuote); /* fire-and-forget, never blocks WA */
     }
+    recordOfflineOrder(); /* server prices + stores it as an UNPAID order; never blocks WA */
     if (CART && selectedIds.length) CART.clear();
   });
+
+  function recordOfflineOrder() {
+    if (!selectedIds.length) return;
+    var tab = document.querySelector('.pay-tab.active');
+    var pay = tab && tab.getAttribute('data-paytab');
+    var items = selectedIds.map(function (id) { return { id: id, qty: CATALOG.byId(id).fixed ? 1 : (quantities[id] || 0) }; });
+    fetch((window.paymentApi || 'https://ntagz-payments.ambivert.workers.dev/api') + '/orders/offline', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true,
+      body: JSON.stringify({
+        method: pay === 'bank' ? 'bank' : pay === 'upi' ? 'upi' : 'whatsapp', items: items, quoteRef: $('quoteNum').textContent,
+        name: $('customerName').value.trim(), phone: $('customerNumber').value.trim(), address: $('customerAddress').value.trim(),
+        pincode: $('customerPincode').value.trim(), state: $('customerState').value, gstin: $('customerGST').value.trim()
+      })
+    }).catch(function () { /* the WhatsApp message + sheet ledger remain the fallback record */ });
+  }
 
   /* ── INITIAL SELECTION ──────────────────────────────────────
      This page is the cart's checkout step: whatever the customer

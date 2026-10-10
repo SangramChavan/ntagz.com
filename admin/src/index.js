@@ -141,7 +141,7 @@ function filters(sp) {
     if (v && allowed.includes(v)) { bind.push(v); where.push(`${col}=?${bind.length}`); }
   };
   eq("payment_status", "payment_status", ["unpaid", "paid"]);
-  eq("payment_method", "payment_method", ["razorpay", "payu", "cash", "cod", "upi", "bank"]);
+  eq("payment_method", "payment_method", ["razorpay", "payu", "cash", "cod", "upi", "bank", "whatsapp"]);
   eq("fulfilment", "status", FULFILMENT);
   const from = dayStart(sp.get("from"), false), to = dayStart(sp.get("to"), true);
   if (from !== null) { bind.push(from); where.push(`created_at>=?${bind.length}`); }
@@ -164,41 +164,52 @@ async function listOrders(sp, env) {
 async function getOrder(id, env) {
   const o = await env.DB.prepare(`SELECT ${COLS} FROM orders WHERE id=?`).bind(id).first();
   if (!o) return null;
-  const pays = await env.DB.prepare("SELECT method,amount_paise,recorded_by,created_at FROM payments WHERE order_id=? ORDER BY created_at")
+  const pays = await env.DB.prepare("SELECT method,amount_paise,recorded_by,reference,created_at FROM payments WHERE order_id=? ORDER BY created_at")
     .bind(id).all();
   return { ...shape(o), payments: pays.results };
 }
 
-async function cashReceived(id, body, actor, env) {
+const MANUAL_ORDER_METHODS = ["cash", "cod", "upi", "bank", "whatsapp"];
+
+// Records money received outside the gateways. Cash/COD: confirm the exact outstanding amount. UPI/bank/WhatsApp orders:
+// also say which of upi|bank it arrived by and give a reference (e.g. UTR). Gateway (razorpay/payu) orders are never eligible.
+async function paymentReceived(id, body, actor, env) {
   const confirmed = Number(body.confirm_amount_paise);
   const key = typeof body.idempotency_key === "string" ? body.idempotency_key.slice(0, 64) : "";
   if (!Number.isInteger(confirmed) || confirmed <= 0 || !key) return fail(400, "Missing confirmation");
   const o = await env.DB.prepare("SELECT total,paid_paise,status,payment_method,payment_status FROM orders WHERE id=?").bind(id).first();
   if (!o) return fail(404, "Order not found");
-  const method = (o.payment_method || "").toLowerCase();
-  if (!["cash", "cod"].includes(method)) return fail(409, "Only cash or cash-on-delivery orders can be marked received here");
+  const orderMethod = (o.payment_method || "").toLowerCase();
+  if (!MANUAL_ORDER_METHODS.includes(orderMethod)) return fail(409, "Online gateway payments cannot be marked received here");
   if (o.status === "cancelled") return fail(409, "Order is cancelled");
   if (o.payment_status === "paid") return fail(409, "Order is already fully paid");
-  if (method === "cod" && o.status !== "delivered") return fail(409, "Cash on delivery can only be recorded after delivery");
+  if (orderMethod === "cod" && o.status !== "delivered") return fail(409, "Cash on delivery can only be recorded after delivery");
+  let method = orderMethod, reference = null;
+  if (["upi", "bank", "whatsapp"].includes(orderMethod)) {
+    method = typeof body.method === "string" ? body.method.toLowerCase() : "";
+    if (!["upi", "bank"].includes(method)) return json({ error: "Choose UPI or bank transfer", fields: { method: "Choose UPI or bank transfer" } }, 400);
+    reference = sanitiseText(body.reference, 64);
+    if (reference.length < 3) return json({ error: "Enter the payment reference (e.g. UTR)", fields: { reference: "Reference is required" } }, 400);
+  } else reference = sanitiseText(body.reference, 64) || null;
   const outstanding = o.total - o.paid_paise;
   if (outstanding <= 0 || outstanding !== confirmed) return fail(409, "Outstanding amount has changed. Refresh and confirm again.");
 
   const pid = crypto.randomUUID();
-  // One atomic batch; every statement is guarded by the same trusted-row conditions, so a concurrent or
-  // repeated confirmation inserts nothing (and the unique cash index backs this up at the schema level).
+  // One atomic batch; every statement is guarded by the same trusted-row conditions, so a concurrent or repeated
+  // confirmation inserts nothing (and the unique manual-payment index backs this up at the schema level).
   const guard = `FROM orders WHERE id=?1 AND payment_status='unpaid' AND paid_paise=?2 AND total-paid_paise=?3
-                   AND status<>'cancelled' AND lower(payment_method) IN ('cash','cod')
+                   AND status<>'cancelled' AND lower(payment_method) IN ('cash','cod','upi','bank','whatsapp')
                    AND (lower(payment_method)<>'cod' OR status='delivered')`;
   const res = await env.DB.batch([
-    env.DB.prepare(`INSERT INTO payments (id,order_id,method,amount_paise,recorded_by,idempotency_key)
-                    SELECT ?4, id, lower(payment_method), total-paid_paise, ?5, ?6 ${guard}`)
-      .bind(id, o.paid_paise, confirmed, pid, actor, key),
-    env.DB.prepare(`UPDATE orders SET paid_paise=total, payment_status='paid', updated_at=unixepoch()
+    env.DB.prepare(`INSERT INTO payments (id,order_id,method,amount_paise,recorded_by,idempotency_key,reference)
+                    SELECT ?4, id, ?7, total-paid_paise, ?5, ?6, ?8 ${guard}`)
+      .bind(id, o.paid_paise, confirmed, pid, actor, key, method, reference),
+    env.DB.prepare(`UPDATE orders SET paid_paise=total, payment_status='paid', payment_method=?4, updated_at=unixepoch()
                     WHERE id=?1 AND payment_status='unpaid' AND paid_paise=?2 AND EXISTS (SELECT 1 FROM payments WHERE id=?3)`)
-      .bind(id, o.paid_paise, pid),
+      .bind(id, o.paid_paise, pid, method),
     env.DB.prepare(`INSERT INTO audit_log (id,actor,action,order_id,detail)
-                    SELECT ?1,?2,'cash_received',?3,?4 WHERE EXISTS (SELECT 1 FROM payments WHERE id=?5)`)
-      .bind(crypto.randomUUID(), actor, id, JSON.stringify({ amount_paise: confirmed }), pid),
+                    SELECT ?1,?2,'payment_received',?3,?4 WHERE EXISTS (SELECT 1 FROM payments WHERE id=?5)`)
+      .bind(crypto.randomUUID(), actor, id, JSON.stringify({ amount_paise: confirmed, method, reference }), pid),
   ]).catch(() => null);
   if (!res || res[0].meta.changes !== 1) return fail(409, "Payment was not recorded. It may already have been confirmed.");
   return json(await getOrder(id, env));
@@ -511,14 +522,14 @@ export default {
       if (method === "GET" && path === "/api/orders") return await listOrders(url.searchParams, env);
       if (method === "GET" && path === "/api/orders.csv") return await exportCsv(url.searchParams, env);
 
-      const m = path.match(/^\/api\/orders\/([0-9a-fA-F-]{8,64})(\/cash-received|\/fulfilment)?$/);
+      const m = path.match(/^\/api\/orders\/([0-9a-fA-F-]{8,64})(\/cash-received|\/payment-received|\/fulfilment)?$/);
       if (m) {
         const id = m[1];
         if (!m[2] && method === "GET") {
           const o = await getOrder(id, env);
           return o ? json(o) : fail(404, "Order not found");
         }
-        if (m[2] === "/cash-received" && method === "POST") return await cashReceived(id, body, actor, env);
+        if ((m[2] === "/cash-received" || m[2] === "/payment-received") && method === "POST") return await paymentReceived(id, body, actor, env);
         if (m[2] === "/fulfilment" && method === "POST") return await setFulfilment(id, body, actor, env);
       }
       if (method === "GET" && path === "/api/products") return await listProducts(url.searchParams, env);

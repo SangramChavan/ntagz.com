@@ -31,15 +31,15 @@ assert.equal((await call("/api/auth/verify", { email: "admin@example.test", otp:
 assert.match(await (await call("/app.js")).text(), /confirmCash/); ok("app bundle served after login");
 
 // listing, search, filters
-let d = await (await call("/api/orders")).json(); assert.equal(d.total, 4); ok("lists all orders");
+let d = await (await call("/api/orders")).json(); assert.equal(d.total, 6); ok("lists all orders");
 d = await (await call("/api/orders?q=9000000002")).json(); assert.equal(d.total, 1); assert.equal(d.orders[0].id, ids.cash); ok("search by phone");
 d = await (await call("/api/orders?q=ravi@example")).json(); assert.equal(d.total, 1); ok("search by email");
 d = await (await call("/api/orders?q=" + encodeURIComponent("100%"))).json(); assert.equal(d.total, 0); ok("LIKE wildcards are escaped");
-d = await (await call("/api/orders?payment_status=unpaid")).json(); assert.equal(d.total, 2); ok("payment status filter");
+d = await (await call("/api/orders?payment_status=unpaid")).json(); assert.equal(d.total, 4); ok("payment status filter");
 d = await (await call("/api/orders?payment_method=payu&fulfilment=delivered")).json(); assert.equal(d.total, 1); ok("method + fulfilment filters");
 d = await (await call("/api/orders?from=2020-01-01&to=2020-01-02")).json(); assert.equal(d.total, 0); ok("date filter");
 d = await (await call("/api/orders?sort=total&dir=asc")).json(); assert.equal(d.orders[0].total, 11800); ok("sort whitelist works");
-d = await (await call("/api/orders?sort=name;DROP TABLE orders")).json(); assert.equal(d.total, 4); ok("unsafe sort value ignored");
+d = await (await call("/api/orders?sort=name;DROP TABLE orders")).json(); assert.equal(d.total, 6); ok("unsafe sort value ignored");
 d = await (await call("/api/orders/" + ids.cash)).json(); assert.equal(d.address, "2 Lake Rd"); assert.equal(d.items[0].qty, 20); ok("order detail with address + items");
 
 // cash confirmation rules

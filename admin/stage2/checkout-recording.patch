@@ -1,0 +1,251 @@
+--- a/functions/api/[[path]].js	2026-10-10 20:55:15
++++ b/functions/api/[[path]].js	2026-10-10 20:57:44
+@@ -58,7 +58,7 @@
+     : 0;
+   const amount = Math.round(regular + Math.round(regular * 0.18) + inclusive + shipping);
+   if (!Number.isSafeInteger(amount) || amount < 1 || amount > 10000000) return null;
+-  return { amount, pieces };
++  return { amount, pieces, gst: Math.round(regular * 0.18) };
+ }
+ 
+ async function razorpayRequest(path, env, body) {
+@@ -367,32 +367,13 @@
+     return jsonAuth({ ok: true }, 200, allowedOrigin);
+   }
+ 
+-  // POST /api/accounts/orders  — record a completed order
++  // POST /api/accounts/orders — kept so order/confirm.html keeps working, but it no longer writes anything:
++  // paid orders are created server-side when the gateway payment is verified (see finalizeOrder).
+   if (method === "POST" && path.endsWith("/accounts/orders")) {
+-    const u = await getSession(request, env);
+-    const userId = u ? u.user_id : null;
+     const txnId = typeof body.txnId === "string" ? body.txnId.slice(0, 128) : "";
+     if (!txnId) return jsonAuth({ error: "Missing txnId" }, 400, allowedOrigin);
+     const existing = await env.DB.prepare("SELECT id FROM orders WHERE txn_id=?").bind(txnId).first();
+-    if (existing) return jsonAuth({ id: existing.id }, 200, allowedOrigin);
+-    const oid = crypto.randomUUID();
+-    const totalPaise = Math.round((parseFloat(body.total) || 0) * 100);
+-    const subtotalPaise = Math.round((parseFloat(body.subtotal) || 0) * 100);
+-    const gstPaise = totalPaise - subtotalPaise;
+-    await env.DB.prepare(
+-      `INSERT INTO orders (id,user_id,txn_id,gateway,quote_ref,items_json,name,phone,email,address,pincode,state,gstin,subtotal,gst,total)
+-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+-    ).bind(oid, userId, txnId, (body.gateway||"").slice(0,20), (body.quoteRef||"").slice(0,32),
+-           JSON.stringify(Array.isArray(body.items) ? body.items : []),
+-           (body.name||"").slice(0,100), (body.phone||"").slice(0,20), (body.email||"").slice(0,254),
+-           (body.address||"").slice(0,500), (body.pincode||"").slice(0,10), (body.state||"").slice(0,50),
+-           (body.gstin||"").slice(0,15), subtotalPaise, gstPaise, totalPaise).run();
+-    if (userId && totalPaise > 0) {
+-      await env.DB.prepare(
+-        "UPDATE users SET loyalty_spend=loyalty_spend+?, loyalty_tier=CASE WHEN loyalty_spend+?>=1000000 THEN 'pro' ELSE loyalty_tier END WHERE id=?"
+-      ).bind(totalPaise, totalPaise, userId).run();
+-    }
+-    return jsonAuth({ id: oid }, 201, allowedOrigin);
++    return existing ? jsonAuth({ id: existing.id }, 200, allowedOrigin) : jsonAuth({ pending: true }, 202, allowedOrigin);
+   }
+ 
+   // GET /api/accounts/orders
+@@ -432,7 +413,108 @@
+ }
+ 
+ // ── Payment routes ─────────────────────────────────────────────────────────
++
++// ── Trusted order recording ───────────────────────────────────────────────
++// Orders are only ever written by this Worker from amounts it computed itself (checkout_intents) and a payment it
++// verified with the gateway, or as UNPAID offline orders priced by calculateTotal. The browser never supplies an
++// amount or a "paid" flag. Recording is best-effort: a D1 problem must never break a payment, so every call is guarded.
++const OFFLINE_METHODS = ["upi", "bank", "whatsapp"];
++
++function cleanDetails(b) {
++  const str = (v, max) => (typeof v === "string" ? v.trim().slice(0, max) : "");
++  const gstin = str(b.gstin, 15).toUpperCase();
++  return {
++    name: str(b.name, 100),
++    phone: typeof b.phone === "string" ? b.phone.replace(/\D/g, "").slice(-10) : "",
++    email: str(b.email, 254),
++    address: str(b.address, 500),
++    pincode: /^\d{6}$/.test(str(b.pincode, 6)) ? str(b.pincode, 6) : "",
++    state: str(b.state, 50),
++    gstin: /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(gstin) ? gstin : "",
++    quoteRef: /^[\w-]{1,32}$/.test(str(b.quoteRef, 32)) ? str(b.quoteRef, 32) : "",
++  };
++}
+ 
++async function recordIntent(env, request, txnId, gateway, body, total) {
++  if (!env.DB || !txnId) return;
++  try {
++    const u = await getSession(request, env);
++    const d = cleanDetails(body);
++    const items = (Array.isArray(body.items) ? body.items : []).map((i) => ({ id: String(i.id).slice(0, 64), qty: i.qty }));
++    const amountPaise = total.amount * 100, gstPaise = total.gst * 100;
++    await env.DB.batch([
++      env.DB.prepare("DELETE FROM checkout_intents WHERE created_at < unixepoch() - 604800"),
++      env.DB.prepare(
++        `INSERT OR REPLACE INTO checkout_intents (txn_id,gateway,user_id,items_json,name,phone,email,address,pincode,state,gstin,quote_ref,subtotal_paise,gst_paise,amount_paise)
++         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
++      ).bind(txnId, gateway, u ? u.user_id : null, JSON.stringify(items), d.name, d.phone, d.email, d.address, d.pincode, d.state, d.gstin, d.quoteRef,
++             amountPaise - gstPaise, gstPaise, amountPaise),
++    ]);
++  } catch (e) { console.error("recordIntent failed:", e && e.message); }
++}
++
++async function finalizeOrder(env, txnId, paymentRef, verifiedPaise) {
++  if (!env.DB || !txnId) return;
++  try {
++    const intent = await env.DB.prepare("SELECT * FROM checkout_intents WHERE txn_id=?").bind(txnId).first();
++    if (!intent) return; // unknown, or already finalised
++    if (verifiedPaise !== null && verifiedPaise !== intent.amount_paise) {
++      console.error("finalizeOrder: verified amount does not match intent", txnId);
++      return;
++    }
++    const oid = crypto.randomUUID();
++    await env.DB.batch([
++      env.DB.prepare(
++        `INSERT OR IGNORE INTO orders (id,user_id,txn_id,gateway,quote_ref,items_json,name,phone,email,address,pincode,state,gstin,subtotal,gst,total,payment_method,payment_status,paid_paise)
++         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'paid', ?)`
++      ).bind(oid, intent.user_id, txnId, intent.gateway, intent.quote_ref, intent.items_json, intent.name, intent.phone, intent.email,
++             intent.address, intent.pincode, intent.state, intent.gstin, intent.subtotal_paise, intent.gst_paise, intent.amount_paise,
++             intent.gateway, intent.amount_paise),
++      env.DB.prepare(
++        `INSERT INTO payments (id,order_id,method,amount_paise,recorded_by,idempotency_key,reference)
++         SELECT ?,id,?,?,'gateway',?,? FROM orders WHERE id=? AND changes()=1`
++      ).bind(crypto.randomUUID(), intent.gateway, intent.amount_paise, String(paymentRef || txnId).slice(0, 64), String(paymentRef || "").slice(0, 128) || null, oid),
++      env.DB.prepare(
++        "UPDATE users SET loyalty_spend=loyalty_spend+?1, loyalty_tier=CASE WHEN loyalty_spend+?1>=1000000 THEN 'pro' ELSE loyalty_tier END WHERE id=?2 AND changes()=1"
++      ).bind(intent.amount_paise, intent.user_id),
++      env.DB.prepare("DELETE FROM checkout_intents WHERE txn_id=?").bind(txnId),
++    ]);
++  } catch (e) { console.error("finalizeOrder failed:", e && e.message); }
++}
++
++async function sha256Hex(text) {
++  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
++  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
++}
++
++async function recordOfflineOrder(request, env, body, origin) {
++  if (!env.DB) return json({ error: "Orders are temporarily unavailable" }, 503, origin);
++  const method = typeof body.method === "string" ? body.method.toLowerCase() : "";
++  if (!OFFLINE_METHODS.includes(method)) return json({ error: "Invalid payment method" }, 400, origin);
++  const d = cleanDetails(body);
++  if (d.name.length < 2 || d.phone.length !== 10 || d.address.length < 5 || !d.pincode || !d.quoteRef) return json({ error: "Missing or invalid customer details" }, 400, origin);
++  const memberDiscounts = await getMemberDiscounts(request, env);
++  const total = calculateTotal(body.items, d.state, memberDiscounts);
++  if (!total) return json({ error: "Invalid order" }, 400, origin);
++  const ipHash = await sha256Hex(`ntagz:${request.headers.get("CF-Connecting-IP") || "unknown"}`);
++  const recent = await env.DB.prepare("SELECT count(*) c FROM order_attempts WHERE ip_hash=? AND created_at>unixepoch()-600").bind(ipHash).first();
++  if (recent.c >= 5) return json({ error: "Too many orders from this connection. Please try again later or contact us on WhatsApp." }, 429, origin);
++  const u = await getSession(request, env);
++  const txnId = `OFF-${d.quoteRef}-${d.phone}`; // the same quote re-submitted (e.g. a repeated WhatsApp tap) maps to the same order
++  const items = body.items.map((i) => ({ id: String(i.id).slice(0, 64), qty: i.qty }));
++  const amountPaise = total.amount * 100, gstPaise = total.gst * 100;
++  await env.DB.batch([
++    env.DB.prepare("DELETE FROM order_attempts WHERE created_at < unixepoch() - 86400"),
++    env.DB.prepare("INSERT INTO order_attempts (ip_hash) VALUES (?)").bind(ipHash),
++    env.DB.prepare(
++      `INSERT OR IGNORE INTO orders (id,user_id,txn_id,gateway,quote_ref,items_json,name,phone,email,address,pincode,state,gstin,subtotal,gst,total,payment_method,payment_status,paid_paise)
++       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'unpaid', 0)`
++    ).bind(crypto.randomUUID(), u ? u.user_id : null, txnId, method, d.quoteRef, JSON.stringify(items), d.name, d.phone, d.email, d.address, d.pincode,
++           d.state, d.gstin, amountPaise - gstPaise, gstPaise, amountPaise, method),
++  ]);
++  return json({ ok: true, orderRef: txnId, total: total.amount }, 200, origin);
++}
++
+ async function onRequest({ request, env }) {
+   const url = new URL(request.url);
+   const origin = request.headers.get("Origin");
+@@ -448,6 +530,19 @@
+     return handleAccounts(url, request, env, allowedOrigin);
+   }
+ 
++  // ── Offline (UPI / bank / WhatsApp) orders: POST /api/orders/offline ──────────────────
++  if (url.pathname.endsWith("/orders/offline")) {
++    if (request.method !== "POST") return json({ error: "Method not allowed" }, 405, origin);
++    if (origin && !["https://www.ntagz.com", "https://ntagz.com"].includes(origin)) return json({ error: "Origin not allowed" }, 403, origin);
++    let offlineBody;
++    try {
++      if (Number(request.headers.get("Content-Length")) > 10000) return json({ error: "Request too large" }, 413, origin);
++      offlineBody = await request.json();
++    } catch { return json({ error: "Invalid JSON" }, 400, origin); }
++    try { return await recordOfflineOrder(request, env, offlineBody || {}, origin); }
++    catch (e) { console.error("offline order failed:", e && e.message); return json({ error: "Could not record order" }, 500, origin); }
++  }
++
+   // ── Membership routes (/api/membership/*) ──────────────────────────────
+   if (url.pathname.includes("/membership/")) {
+     if (origin && !["https://www.ntagz.com", "https://ntagz.com"].includes(origin)) {
+@@ -508,6 +603,7 @@
+         transaction = { status: body.status };
+       }
+       const isSuccess = body.status === "success";
++      if (isSuccess) await finalizeOrder(env, body.txnid, String(body.mihpayid || "").slice(0, 128), Math.round(parseFloat(body.amount) * 100));
+       const confirmParams = new URLSearchParams({
+         status: isSuccess ? "success" : "failed",
+         gateway: "payu",
+@@ -535,6 +631,7 @@
+           pieces: String(total.pieces),
+         },
+       });
++      await recordIntent(env, request, order.id, "razorpay", body, total);
+       return json({ id: order.id, amount: order.amount, currency: order.currency, keyId: env.RAZORPAY_KEY_ID, memberPricing: !!memberDiscounts }, 200, origin);
+     }
+ 
+@@ -546,6 +643,7 @@
+       if (!await verifySignature(orderId, paymentId, signature, env.RAZORPAY_KEY_SECRET)) {
+         return json({ error: "Invalid payment signature" }, 400, origin);
+       }
++      await finalizeOrder(env, orderId, paymentId, null);
+       return json({ status: "verified", paymentId, orderId }, 200, origin);
+     }
+ 
+@@ -573,6 +671,7 @@
+         curl: "https://ntagz-payments.ambivert.workers.dev/api/payu/failure",
+       };
+       fields.hash = await payuHash(fields, env.PAYU_SALT);
++      await recordIntent(env, request, fields.txnid, "payu", body, total);
+       return json({ action: env.PAYU_ENV === "test" ? "https://test.payu.in/_payment" : "https://secure.payu.in/_payment", fields }, 200, origin);
+     }
+ 
+--- a/order.html	2026-10-10 08:36:32
++++ b/order.html	2026-10-10 20:57:44
+@@ -453,7 +453,12 @@
+       return {
+         items: orderItems(),
+         state: document.getElementById("customerState").value,
+-        quoteRef: document.getElementById("quoteNum").innerText
++        quoteRef: document.getElementById("quoteNum").innerText,
++        name: document.getElementById("customerName").value.trim(),
++        phone: document.getElementById("customerNumber").value.trim(),
++        address: document.getElementById("customerAddress").value.trim(),
++        pincode: document.getElementById("customerPincode").value.trim(),
++        gstin: document.getElementById("customerGST").value.trim()
+       };
+     };
+     var postPayment = function(path, payload) {
+--- a/js/order.js	2026-10-10 08:36:32
++++ b/js/order.js	2026-10-10 20:57:44
+@@ -690,8 +690,24 @@
+       lastQuote.source = 'order.html';
+       window.NTAGZ_LOG_ORDER(lastQuote); /* fire-and-forget, never blocks WA */
+     }
++    recordOfflineOrder(); /* server prices + stores it as an UNPAID order; never blocks WA */
+     if (CART && selectedIds.length) CART.clear();
+   });
++
++  function recordOfflineOrder() {
++    if (!selectedIds.length) return;
++    var tab = document.querySelector('.pay-tab.active');
++    var pay = tab && tab.getAttribute('data-paytab');
++    var items = selectedIds.map(function (id) { return { id: id, qty: CATALOG.byId(id).fixed ? 1 : (quantities[id] || 0) }; });
++    fetch((window.paymentApi || 'https://ntagz-payments.ambivert.workers.dev/api') + '/orders/offline', {
++      method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true,
++      body: JSON.stringify({
++        method: pay === 'bank' ? 'bank' : pay === 'upi' ? 'upi' : 'whatsapp', items: items, quoteRef: $('quoteNum').textContent,
++        name: $('customerName').value.trim(), phone: $('customerNumber').value.trim(), address: $('customerAddress').value.trim(),
++        pincode: $('customerPincode').value.trim(), state: $('customerState').value, gstin: $('customerGST').value.trim()
++      })
++    }).catch(function () { /* the WhatsApp message + sheet ledger remain the fallback record */ });
++  }
+ 
+   /* ── INITIAL SELECTION ──────────────────────────────────────
+      This page is the cart's checkout step: whatever the customer
