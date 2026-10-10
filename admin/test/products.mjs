@@ -27,7 +27,7 @@ r = await call("/api/products", { name: "Test Keychain", sku: "kc-001", category
 assert.equal(r.status, 201); let p = await r.json(); assert.equal(p.sku, "KC-001"); assert.equal(p.price_paise, 4950); assert.equal(p.stock_qty, 20); assert.equal(p.movements[0].type, "opening"); ok("add product with opening stock + opening movement");
 d = await (await call("/api/products?q=keychain")).json(); assert.equal(d.total, 1); ok("new product appears in catalogue");
 r = await call("/api/products", { name: "Dup", sku: "kc-001", category: "nfc", price: "10" }); assert.equal(r.status, 409); assert.ok((await r.json()).fields.sku); ok("duplicate SKU rejected (case-insensitive)");
-for (const [bad, field] of [[{ price: "abc" }, "price"], [{ price: "-5" }, "price"], [{ price: "10.555" }, "price"], [{ name: "" }, "name"], [{ opening_stock: -3 }, "opening_stock"], [{ mrp: "5", price: "10" }, "mrp"], [{ gst_rate: 7 }, "gst_rate"], [{ image_url: "http://evil.test/x.png" }, "image_url"]]) {
+for (const [bad, field] of [[{ price: "abc" }, "price"], [{ price: "" }, "price"], [{ price: "-5" }, "price"], [{ price: "10.555" }, "price"], [{ name: "" }, "name"], [{ opening_stock: -3 }, "opening_stock"], [{ mrp: "5", price: "10" }, "mrp"], [{ gst_rate: 7 }, "gst_rate"], [{ image_url: "http://evil.test/x.png" }, "image_url"]]) {
   r = await call("/api/products", { name: "Valid", sku: "OK-" + key().slice(0, 6), category: "nfc", price: "10", ...bad }); const j = await r.json();
   assert.equal(r.status, 400, JSON.stringify(bad)); assert.ok(j.fields[field], field);
 } ok("invalid price, name, negative opening stock, MRP<price, GST, image URL all rejected server-side");
@@ -71,4 +71,25 @@ assert.equal((await (await call("/api/products?active=0")).json()).total, 1); ok
 assert.equal((await call(`/api/products/${p.id}/active`, { active: "no" })).status, 400);
 r = await call("/api/products?sort=name;DROP&dir=asc&page=abc"); assert.equal(r.status, 200); ok("unsafe sort/page values safely ignored");
 s = await (await call("/api/products/summary")).json(); assert.equal(s.total, 18); assert.equal(s.active, 17); ok("summary counts");
+
+// ── redesign additions: cost price, auto SKU, duplicate, safe delete, category search, newest sort ──
+r = await call("/api/products", { name: "Smart Plaque Large", category: "review", price: "120", cost: "70", opening_stock: 5 }); p = await r.json();
+assert.equal(r.status, 201); assert.match(p.sku, /^SPL-\d{3}$/); assert.equal(p.cost_paise, 7000); assert.equal(p.id, "smart-plaque-large"); ok("add product with only name/price/stock: SKU auto-generated, cost price saved");
+r = await call("/api/products", { name: "Smart Plaque Large", category: "review", price: "125" }); const p2 = await r.json(); assert.equal(r.status, 201); assert.equal(p2.id, "smart-plaque-large-2"); assert.notEqual(p2.sku, p.sku); ok("same name gets a unique id and a different SKU");
+r = await call("/api/products", { name: "Cost Test", sku: "ct-1", category: "nfc", price: "10", cost: "-4" }); assert.equal(r.status, 400); assert.ok((await r.json()).fields.cost); ok("invalid cost price rejected");
+r = await call("/api/products/" + p.id, { cost: "" }); assert.equal((await r.json()).cost_paise, null); ok("cost price can be cleared");
+d = await (await call("/api/products?q=review")).json(); assert.ok(d.total >= 2); ok("search matches category");
+d = await (await call("/api/products?sort=newest&dir=desc")).json(); assert.equal(d.products[0].created_at >= d.products[d.products.length - 1].created_at, true); ok("sort by newest");
+
+r = await call(`/api/products/${p.id}/duplicate`, {}); const dup = await r.json();
+assert.equal(r.status, 201); assert.equal(dup.stock_qty, 0); assert.equal(dup.active, false); assert.equal(dup.price_paise, p.price_paise); assert.equal(dup.cost_paise, null); assert.notEqual(dup.sku, p.sku); assert.equal(dup.name, "Smart Plaque Large (copy)"); assert.equal(dup.movements.length, 0); ok("duplicate copies details, new SKU, stock 0, inactive");
+assert.equal((await call("/api/products/nope-nothing/duplicate", {})).status, 404); ok("duplicating a missing product is a 404");
+
+r = await call(`/api/products/${dup.id}/delete`, {}); assert.equal((await r.json()).deleted, true); assert.equal((await call("/api/products/" + dup.id)).status, 404); ok("unused product is deleted");
+r = await call(`/api/products/${p.id}/delete`, {}); let del = await r.json(); assert.equal(del.deleted, true); ok("product with only an opening-stock entry is deleted with its history");
+r = await call("/api/products", { name: "Moved Item", sku: "mv-1", category: "nfc", price: "10", opening_stock: 5 }); const mv2 = await r.json();
+await call(`/api/products/${mv2.id}/stock`, { type: "out", quantity: 1, reason: "Damaged", idempotency_key: crypto.randomUUID() });
+r = await call(`/api/products/${mv2.id}/delete`, {}); del = await r.json(); assert.equal(del.deactivated, true); assert.equal((await (await call("/api/products/" + mv2.id)).json()).active, false); ok("product with stock history is deactivated, not deleted");
+r = await call("/api/products/black-nfc-card/delete", {}); assert.equal(r.status, 409); assert.equal((await (await call("/api/products/black-nfc-card")).json()).built_in, true); ok("built-in storefront products cannot be deleted");
+assert.equal((await call("/api/products/black-nfc-card/delete")).status, 404); ok("delete requires POST");
 console.log(`\nall ${n} product checks passed`);

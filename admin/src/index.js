@@ -252,15 +252,16 @@ async function exportCsv(sp, env) {
 }
 
 // ── Products & inventory ──────────────────────────────────────────────
-const PSORTS = { name: "name", price: "price_paise", stock: "stock_qty", updated: "updated_at" };
-const PCOLS = "id,sku,name,description,category,image_url,price_paise,mrp_paise,gst_rate,all_inclusive,unit,stock_qty,low_stock_threshold,active,track_stock,created_at,updated_at";
+const PSORTS = { name: "name", price: "price_paise", stock: "stock_qty", updated: "updated_at", newest: "created_at" };
+const PCOLS = "id,sku,name,description,category,image_url,price_paise,mrp_paise,gst_rate,all_inclusive,unit,stock_qty,low_stock_threshold,active,track_stock,cost_paise,built_in,created_at,updated_at";
 const GST_RATES = [0, 5, 12, 18, 28];
 const IMAGE_OK = /^(https:\/\/(www\.)?ntagz\.com\/|images\/)[\w\-./]{1,200}$/;
 
 const stockStatus = (p) => (p.stock_qty <= 0 ? "out" : p.stock_qty <= p.low_stock_threshold ? "low" : "in");
-const pshape = (p) => ({ ...p, active: !!p.active, track_stock: !!p.track_stock, all_inclusive: !!p.all_inclusive, stock_status: stockStatus(p) });
+const pshape = (p) => ({ ...p, active: !!p.active, track_stock: !!p.track_stock, built_in: !!p.built_in, all_inclusive: !!p.all_inclusive, stock_status: stockStatus(p) });
 
 function rupeesToPaise(v) {
+  if (typeof v === "string" && v.trim() === "") return null; // blank is "missing", not zero
   const n = typeof v === "string" ? Number(v.trim()) : v;
   if (typeof n !== "number" || !Number.isFinite(n) || n < 0 || n > 10_000_000) return null;
   const paise = Math.round(n * 100);
@@ -303,6 +304,10 @@ function validateProduct(b, partial) {
     if (b.mrp === null || b.mrp === "") f.mrp_paise = null;
     else { const p = rupeesToPaise(b.mrp); if (p === null) errors.mrp = "Enter a valid MRP"; else f.mrp_paise = p; }
   }
+  if (b.cost !== undefined) {
+    if (b.cost === null || b.cost === "") f.cost_paise = null;
+    else { const p = rupeesToPaise(b.cost); if (p === null) errors.cost = "Enter a valid cost price"; else f.cost_paise = p; }
+  }
   if (f.mrp_paise !== undefined && f.mrp_paise !== null && f.price_paise !== undefined && f.mrp_paise < f.price_paise) errors.mrp = "MRP cannot be lower than the selling price";
   if (has("gst_rate")) {
     const v = intIn(b.gst_rate ?? 18, 0, 28);
@@ -324,7 +329,7 @@ function validateProduct(b, partial) {
 function productFilters(sp) {
   const where = [], bind = [];
   const q = (sp.get("q") || "").trim().slice(0, 100);
-  if (q) { bind.push(`%${q.replace(/[\\%_]/g, "\\$&")}%`); where.push("(name LIKE ?1 ESCAPE '\\' OR sku LIKE ?1 ESCAPE '\\' OR id LIKE ?1 ESCAPE '\\')"); }
+  if (q) { bind.push(`%${q.replace(/[\\%_]/g, "\\$&")}%`); where.push("(name LIKE ?1 ESCAPE '\\' OR sku LIKE ?1 ESCAPE '\\' OR id LIKE ?1 ESCAPE '\\' OR category LIKE ?1 ESCAPE '\\')"); }
   const cat = (sp.get("category") || "").trim().toLowerCase().slice(0, 40);
   if (cat) { bind.push(cat); where.push(`category=?${bind.length}`); }
   const st = sp.get("stock");
@@ -368,26 +373,88 @@ async function getProduct(id, env) {
 
 function sanitiseText(v, max) { return typeof v === "string" ? v.trim().slice(0, max) : ""; }
 
+async function genSku(env, name) {
+  const initials = (String(name).toUpperCase().match(/[A-Z0-9]+/g) || []).map((w) => w[0]).join("").slice(0, 4);
+  const base = initials.length >= 2 ? initials : "PRD";
+  for (let i = 0; i < 20; i++) {
+    const sku = `${base}-${100 + (crypto.getRandomValues(new Uint32Array(1))[0] % 900)}`;
+    if (!(await env.DB.prepare("SELECT 1 FROM products WHERE lower(sku)=lower(?)").bind(sku).first())) return sku;
+  }
+  return `${base}-${Date.now().toString(36).toUpperCase()}`;
+}
+
+async function uniqueProductId(env, name) {
+  const slug = String(name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 56) || "product";
+  for (let i = 1; i < 50; i++) {
+    const id = i === 1 ? slug : `${slug}-${i}`;
+    if (!(await env.DB.prepare("SELECT 1 FROM products WHERE id=?").bind(id).first())) return id;
+  }
+  return `${slug}-${crypto.randomUUID().slice(0, 8)}`;
+}
+
 async function createProduct(body, actor, env) {
-  const { f, errors } = validateProduct(body, false);
-  const opening = intIn(body.opening_stock ?? 0, 0, 1_000_000);
-  if (opening === null) errors.opening_stock = "Opening stock must be a whole number, 0 or more";
+  const b = { ...body };
+  if (typeof b.sku !== "string" || !b.sku.trim()) b.sku = await genSku(env, typeof b.name === "string" ? b.name : ""); // SKU is optional: generated when blank
+  const { f, errors } = validateProduct(b, false);
+  const opening = intIn(b.opening_stock ?? 0, 0, 1_000_000);
+  if (opening === null) errors.opening_stock = "Stock must be a whole number, 0 or more";
   if (Object.keys(errors).length) return json({ error: "Please fix the highlighted fields", fields: errors }, 400);
-  const id = typeof body.id === "string" && /^[a-z0-9][a-z0-9-]{1,63}$/.test(body.id) ? body.id : null;
-  const pid = id || f.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || crypto.randomUUID();
-  if (await env.DB.prepare("SELECT 1 FROM products WHERE id=?").bind(pid).first()) return json({ error: "A product with this ID already exists", fields: { name: "Name is already used by another product" } }, 409);
   if (await env.DB.prepare("SELECT 1 FROM products WHERE lower(sku)=lower(?)").bind(f.sku).first()) return json({ error: "SKU already exists", fields: { sku: "This SKU is already in use" } }, 409);
+  const pid = await uniqueProductId(env, f.name);
   const thr = f.low_stock_threshold ?? 10;
   const stmts = [env.DB.prepare(
-    `INSERT INTO products (id,sku,name,description,category,image_url,price_paise,mrp_paise,gst_rate,unit,stock_qty,low_stock_threshold,active,track_stock)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
-  ).bind(pid, f.sku, f.name, f.description ?? "", f.category, f.image_url ?? null, f.price_paise, f.mrp_paise ?? null, f.gst_rate ?? 18, f.unit ?? "pc", opening, thr, f.active ?? 1, f.track_stock ?? 0)];
+    `INSERT INTO products (id,sku,name,description,category,image_url,price_paise,mrp_paise,cost_paise,gst_rate,unit,stock_qty,low_stock_threshold,active,track_stock)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+  ).bind(pid, f.sku, f.name, f.description ?? "", f.category, f.image_url ?? null, f.price_paise, f.mrp_paise ?? null, f.cost_paise ?? null, f.gst_rate ?? 18, f.unit ?? "pc", opening, thr, f.active ?? 1, f.track_stock ?? 0)];
   if (opening > 0) stmts.push(env.DB.prepare(
     "INSERT INTO inventory_movements (id,product_id,type,qty_change,prev_stock,new_stock,reason,admin,idempotency_key) VALUES (?,?,'opening',?,0,?,'Opening stock',?,?)"
   ).bind(crypto.randomUUID(), pid, opening, opening, actor, "opening"));
   stmts.push(env.DB.prepare("INSERT INTO audit_log (id,actor,action,detail) VALUES (?,?,'product_create',?)").bind(crypto.randomUUID(), actor, JSON.stringify({ id: pid, sku: f.sku })));
   try { await env.DB.batch(stmts); } catch { return json({ error: "SKU already exists", fields: { sku: "This SKU is already in use" } }, 409); }
   return json(await getProduct(pid, env), 201);
+}
+
+// Copy details into a new INACTIVE product with a fresh SKU and zero stock, so a half-finished copy can never be sold by accident.
+async function duplicateProduct(id, actor, env) {
+  const src = await env.DB.prepare(`SELECT ${PCOLS} FROM products WHERE id=?`).bind(id).first();
+  if (!src) return fail(404, "Product not found");
+  const name = `${src.name} (copy)`.slice(0, 120);
+  const pid = await uniqueProductId(env, name), sku = await genSku(env, src.name);
+  try {
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO products (id,sku,name,description,category,image_url,price_paise,mrp_paise,cost_paise,gst_rate,all_inclusive,unit,stock_qty,low_stock_threshold,active,track_stock,built_in)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0,?,0,0,0)`
+      ).bind(pid, sku, name, src.description, src.category, src.image_url, src.price_paise, src.mrp_paise, src.cost_paise, src.gst_rate, src.all_inclusive, src.unit, src.low_stock_threshold),
+      env.DB.prepare("INSERT INTO audit_log (id,actor,action,detail) VALUES (?,?,'product_duplicate',?)").bind(crypto.randomUUID(), actor, JSON.stringify({ from: id, id: pid })),
+    ]);
+  } catch { return fail(409, "Could not create the copy. Try again."); }
+  return json(await getProduct(pid, env), 201);
+}
+
+// Safe delete: only products nothing refers to are removed. Anything with orders, pending checkouts or stock history is
+// deactivated instead (never breaks history). Built-in catalogue products can only be deactivated.
+async function deleteProduct(id, actor, env) {
+  const p = await env.DB.prepare("SELECT id,sku,name,built_in FROM products WHERE id=?").bind(id).first();
+  if (!p) return fail(404, "Product not found");
+  if (p.built_in) return json({ error: "This product is part of the storefront catalogue. Deactivate it instead.", deactivate: true }, 409);
+  const pattern = `%"id":"${id}"%`;
+  const used = (await env.DB.prepare("SELECT 1 FROM orders WHERE items_json LIKE ? LIMIT 1").bind(pattern).first())
+    || (await env.DB.prepare("SELECT 1 FROM checkout_intents WHERE items_json LIKE ? LIMIT 1").bind(pattern).first())
+    || (await env.DB.prepare("SELECT 1 FROM inventory_movements WHERE product_id=? AND type<>'opening' LIMIT 1").bind(id).first());
+  if (used) {
+    await env.DB.batch([
+      env.DB.prepare("UPDATE products SET active=0, updated_at=unixepoch() WHERE id=?").bind(id),
+      env.DB.prepare("INSERT INTO audit_log (id,actor,action,detail) VALUES (?,?,'product_deactivate',?)").bind(crypto.randomUUID(), actor, JSON.stringify({ id, via: "delete" })),
+    ]);
+    return json({ deleted: false, deactivated: true, message: "This product has orders or stock history, so it was deactivated instead of deleted." });
+  }
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM inventory_movements WHERE product_id=?").bind(id),
+    env.DB.prepare("DELETE FROM products WHERE id=?").bind(id),
+    env.DB.prepare("INSERT INTO audit_log (id,actor,action,detail) VALUES (?,?,'product_delete',?)").bind(crypto.randomUUID(), actor, JSON.stringify({ id, sku: p.sku, name: p.name })),
+  ]);
+  return json({ deleted: true });
 }
 
 async function updateProduct(id, body, actor, env) {
@@ -536,13 +603,15 @@ export default {
       if (method === "GET" && path === "/api/products") return await listProducts(url.searchParams, env);
       if (method === "GET" && path === "/api/products/summary") return await productSummary(env);
       if (method === "POST" && path === "/api/products") return await createProduct(body, actor, env);
-      const pm = path.match(/^\/api\/products\/([a-z0-9][a-z0-9-]{0,63})(\/stock|\/active)?$/);
+      const pm = path.match(/^\/api\/products\/([a-z0-9][a-z0-9-]{0,63})(\/stock|\/active|\/duplicate|\/delete)?$/);
       if (pm) {
         const pid = pm[1];
         if (!pm[2] && method === "GET") { const p = await getProduct(pid, env); return p ? json(p) : fail(404, "Product not found"); }
         if (!pm[2] && method === "POST") return await updateProduct(pid, body, actor, env);
         if (pm[2] === "/stock" && method === "POST") return await adjustStock(pid, body, actor, env);
         if (pm[2] === "/active" && method === "POST") return await setActive(pid, body, actor, env);
+        if (pm[2] === "/duplicate" && method === "POST") return await duplicateProduct(pid, actor, env);
+        if (pm[2] === "/delete" && method === "POST") return await deleteProduct(pid, actor, env);
       }
       return fail(404, "Not found");
     } catch (e) {
