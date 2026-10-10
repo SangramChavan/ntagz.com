@@ -100,3 +100,28 @@ dialog.panel[open] { display:flex; } dialog.panel::backdrop { background:rgba(0,
 .btn.primary:disabled { opacity:.6; }
 .ptable .rowact { flex-wrap:nowrap; } .ptable td:last-child { white-space:nowrap; } .ptable td { vertical-align:middle; }
 #padd { white-space:nowrap; } dialog.panel { max-width:100vw; }
+
+/* ═══ Orders ═══ */
+.chips { display:flex; gap:6px; overflow-x:auto; padding:2px 0 10px; scrollbar-width:none; } .chips::-webkit-scrollbar { display:none; }
+.chip { flex:none; min-height:36px; padding:0 14px; border:1px solid var(--line); border-radius:99px; background:#fff; color:var(--ink2); font:inherit; font-size:13px; cursor:pointer; white-space:nowrap; }
+.chip[aria-pressed=true] { background:var(--ink); border-color:var(--ink); color:#fff; }
+.ofilters { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px; } .ofilters #q { grid-column:1/-1; }
+.ofilters input, .ofilters select { width:100%; min-height:42px; padding:0 12px; border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--ink); font:inherit; }
+@media (min-width:900px) { .ofilters { grid-template-columns:2.4fr 1.2fr 1fr 1fr auto; } .ofilters #q { grid-column:auto; } }
+.ocard { display:block; width:100%; text-align:left; cursor:pointer; background:#fff; border:1px solid var(--line); border-radius:12px; padding:12px; }
+.ocard .row { display:flex; justify-content:space-between; gap:8px; } .ocard .id { font-weight:600; }
+.otable tbody tr { cursor:pointer; }
+.pill.pre { background:#efe8ff; color:#5b3fb5; }
+.pill.st-placed, .pill.st-confirmed { background:#e8f0fe; color:#1d4fb8; } .pill.st-processing, .pill.st-packed { background:#fff1e0; color:var(--warn); }
+.pill.st-shipped, .pill.st-out_for_delivery { background:#e6f4ff; color:#0b5cad; } .pill.st-delivered { background:#e7f6ec; color:var(--ok); }
+.pill.st-on_hold, .pill.st-delivery_failed { background:#fff6d6; color:#8a6500; } .pill.st-cancelled, .pill.st-returned { background:#fdeaea; color:var(--bad); }
+.opanel-body { padding:16px 20px 24px; overflow:auto; flex:1; } dialog#opanel .panel-head > div > div { margin-top:6px; }
+.next { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
+h3.sec { margin:18px 0 8px; font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink2); }
+.ship { border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin-bottom:8px; } .ship-top { display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+.awb { display:flex; align-items:center; gap:8px; margin:6px 0; flex-wrap:wrap; } .awb .mono { font-size:15px; color:var(--ink); user-select:all; }
+.timeline { list-style:none; margin:0; padding:0 0 0 14px; border-left:2px solid var(--line); }
+.tl { position:relative; padding:0 0 14px 14px; } .tl::before { content:""; position:absolute; left:-21px; top:3px; width:10px; height:10px; border-radius:50%; background:var(--ok); }
+.tl.now::before { background:var(--accent); box-shadow:0 0 0 3px #ffe3d6; } .tl-title { font-weight:600; } .tl-note { font-size:13px; color:var(--ink); background:var(--soft); border-radius:8px; padding:4px 8px; margin-top:4px; }
+dialog#adlg { width:min(480px, calc(100vw - 24px)); }
+#csv { white-space:nowrap; }

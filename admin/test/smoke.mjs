@@ -13,7 +13,7 @@ let n = 0; const ok = (name) => console.log(`ok ${++n} ${name}`);
 
 // unauthenticated
 assert.equal((await call("/api/orders")).status, 401); ok("API requires login");
-assert.equal((await call("/app.js")).status, 404); ok("app bundle hidden before login");
+assert.equal((await call("/app.js")).status, 404); assert.equal((await call("/orders.js")).status, 404); ok("app scripts hidden before login");
 const login = await (await call("/")).text(); assert.match(login, /Sign in|Send code/); ok("root serves login page when signed out");
 assert.equal((await fetch(BASE + "/api/auth/request", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })).status, 403); ok("POST without CSRF header rejected");
 
@@ -28,7 +28,7 @@ assert.equal((await call("/api/auth/verify", { email: "admin@example.test", otp:
 r = await call("/api/auth/verify", { email: "admin@example.test", otp: dev_otp }); assert.equal(r.status, 200);
 cookie = r.headers.get("set-cookie").split(";")[0]; assert.match(r.headers.get("set-cookie"), /HttpOnly; Secure; SameSite=Strict/); ok("login sets HttpOnly Secure SameSite=Strict cookie");
 assert.equal((await call("/api/auth/verify", { email: "admin@example.test", otp: dev_otp })).status, 401); ok("code is single-use");
-assert.match(await (await call("/app.js")).text(), /confirmCash/); ok("app bundle served after login");
+assert.match(await (await call("/orders.js")).text(), /startAction/); assert.match(await (await call("/app.js")).text(), /function el/); ok("app scripts served after login");
 
 // listing, search, filters
 let d = await (await call("/api/orders")).json(); assert.equal(d.total, 6); ok("lists all orders");

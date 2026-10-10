@@ -5,16 +5,19 @@
 <header><b>NTAGZ <span>Admin</span></b>
 <nav aria-label="Sections"><a href="#/orders" id="nav-orders">Orders</a><a href="#/products" id="nav-products">Products</a></nav><span><span id="who" class="sub"></span> <button class="btn" id="out" type="button">Sign out</button></span></header>
 <main id="view-orders">
-  <form class="filters" id="filters" role="search">
-    <input class="wide" id="q" type="search" placeholder="Search order ID, name, phone, email" aria-label="Search orders">
-    <select id="payment_status" aria-label="Payment status"><option value="">Any payment</option><option value="paid">Paid</option><option value="unpaid">Unpaid</option></select>
-    <select id="payment_method" aria-label="Payment method"><option value="">Any method</option><option>razorpay</option><option>payu</option><option>cash</option><option>cod</option><option>upi</option><option>bank</option><option>whatsapp</option></select>
-    <select id="fulfilment" aria-label="Fulfilment status"><option value="">Any fulfilment</option><option>confirmed</option><option>packed</option><option>shipped</option><option>delivered</option><option>cancelled</option></select>
-    <input id="from" type="date" aria-label="From date"><input id="to" type="date" aria-label="To date">
+  <div class="pv-head">
+    <div><h1 class="pv-title">Orders</h1><p class="sub">Follow every order from payment to delivery.</p></div>
     <a class="btn" id="csv" href="/api/orders.csv">Export CSV</a>
+  </div>
+  <div class="chips" id="ochips" role="group" aria-label="Order views"></div>
+  <form class="ofilters" id="filters" role="search">
+    <input id="q" type="search" placeholder="Search order ID, name, phone or AWB" aria-label="Search orders" autocomplete="off">
+    <select id="payment_method" aria-label="Payment method"><option value="">Any payment method</option><option>razorpay</option><option>payu</option><option>cash</option><option>cod</option><option>upi</option><option>bank</option><option>whatsapp</option></select>
+    <input id="from" type="date" aria-label="From date"><input id="to" type="date" aria-label="To date">
+    <button class="btn link" id="oclear" type="button">Clear</button>
   </form>
-  <div class="list" id="list" aria-live="polite"></div>
-  <table><thead><tr><th class="sort" data-sort="created_at">Date</th><th>Order</th><th class="sort" data-sort="name">Customer</th><th class="sort" data-sort="total">Total</th><th>Payment</th><th>Fulfilment</th></tr></thead><tbody id="rows"></tbody></table>
+  <div class="plist" id="list" aria-live="polite"></div>
+  <table class="ptable otable"><thead><tr><th>Order</th><th>Date</th><th>Customer</th><th>Payment</th><th>Fulfilment</th><th>Total</th><th>Courier</th><th>AWB</th></tr></thead><tbody id="rows"></tbody></table>
   <div class="pager"><button class="btn" id="prev" type="button">Previous</button><span id="pageInfo"></span><button class="btn" id="next" type="button">Next</button></div>
 </main>
 <main id="view-products" hidden>
@@ -39,6 +42,6 @@
 <dialog id="ppanel" class="panel" aria-labelledby="pptitle"></dialog>
 <dialog id="sdlg" aria-labelledby="sdtitle"></dialog>
 <dialog id="kdlg" aria-labelledby="kdtitle"></dialog>
-<dialog id="dlg" aria-labelledby="dtitle"></dialog>
-<dialog id="cdlg" aria-labelledby="ctitle"></dialog>
-<script src="/app.js"></script><script src="/products.js"></script></body></html>
+<dialog id="opanel" class="panel" aria-labelledby="optitle"></dialog>
+<dialog id="adlg" aria-labelledby="adtitle"></dialog>
+<script src="/app.js"></script><script src="/orders.js"></script><script src="/products.js"></script></body></html>

@@ -1,1 +1,1 @@
-{ "name": "ntagz-admin", "private": true, "type": "module", "scripts": { "test": "node test/smoke.mjs && node test/products.mjs && node test/payments-manual.mjs" } }
+{ "name": "ntagz-admin", "private": true, "type": "module", "scripts": { "test": "bash test/run-all.sh" } }

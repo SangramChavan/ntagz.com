@@ -5,7 +5,40 @@
 const SESSION_TTL = 12 * 3600;
 const OTP_TTL = 600;
 const COOKIE = "ntagz_admin";
-const FULFILMENT = ["confirmed", "packed", "shipped", "delivered", "cancelled"];
+// ── Fulfilment workflow (server-enforced) ────────────────────────────
+// orders.status is the fulfilment status; payment state lives in separate columns and is never changed by these transitions.
+const STATUS_LABEL = {
+  placed: "Order placed", confirmed: "Confirmed", processing: "Processing", packed: "Packed", shipped: "Shipped",
+  out_for_delivery: "Out for delivery", delivered: "Delivered", on_hold: "On hold", cancelled: "Cancelled",
+  delivery_failed: "Delivery failed", returned: "Returned",
+};
+const FULFILMENT = Object.keys(STATUS_LABEL);
+// Orders do not have to pass through every stage: forward skips are allowed where a stage can be unnecessary.
+const TRANSITIONS = {
+  placed: ["confirmed", "on_hold", "cancelled"],
+  confirmed: ["processing", "packed", "shipped", "on_hold", "cancelled"],
+  processing: ["packed", "shipped", "on_hold", "cancelled"],
+  packed: ["shipped", "on_hold", "cancelled"],
+  shipped: ["out_for_delivery", "delivered", "delivery_failed", "returned"],
+  out_for_delivery: ["delivered", "delivery_failed"],
+  delivery_failed: ["out_for_delivery", "shipped", "returned", "cancelled"],
+  delivered: ["returned"],
+  on_hold: ["confirmed", "processing", "packed", "cancelled"],
+  cancelled: [], returned: [],
+};
+const ACTION_LABEL = {
+  confirmed: "Confirm Order", processing: "Mark as Processing", packed: "Mark as Packed", shipped: "Ship Order",
+  out_for_delivery: "Mark as Out for Delivery", delivered: "Mark as Delivered", on_hold: "Put On Hold",
+  cancelled: "Cancel Order", returned: "Mark as Returned", delivery_failed: "Mark Delivery Failed",
+};
+const NEEDS_CONFIRM = ["cancelled", "returned", "delivery_failed", "on_hold"];
+const allowedActions = (status) => (TRANSITIONS[status] || []).map((to) => ({ to, label: ACTION_LABEL[to], confirm: NEEDS_CONFIRM.includes(to), form: to === "shipped" }));
+const VIEWS = { // admin filter chips -> SQL (fixed fragments; never built from request text)
+  new: "status IN ('placed','confirmed')", paid: "payment_status='paid'",
+  payment_pending: "payment_status='unpaid' AND status NOT IN ('cancelled','returned')",
+  processing: "status='processing'", packed: "status='packed'", shipped: "status='shipped'", out_for_delivery: "status='out_for_delivery'",
+  delivered: "status='delivered'", on_hold: "status='on_hold'", cancelled: "status='cancelled'", returned: "status='returned'", preorders: "is_preorder=1",
+};
 const SORTS = { created_at: "created_at", total: "total", name: "name" };
 const PAGE_SIZE = 25;
 const IST_OFFSET = 19800;
@@ -115,7 +148,7 @@ async function authVerify(body, env) {
 
 // ── Orders ────────────────────────────────────────────────────────────
 const COLS = "id,txn_id,quote_ref,name,phone,email,address,pincode,state,gstin,items_json,subtotal,gst,total," +
-  "payment_method,payment_status,paid_paise,status,tracking_id,courier,created_at,updated_at";
+  "payment_method,payment_status,paid_paise,status,tracking_id,courier,is_preorder,created_at,updated_at";
 
 function parseItems(json_) {
   try { const a = JSON.parse(json_); return Array.isArray(a) ? a : []; } catch { return []; }
@@ -133,7 +166,7 @@ function filters(sp) {
   const q = (sp.get("q") || "").trim().slice(0, 100);
   if (q) {
     const like = `%${q.replace(/[\\%_]/g, "\\$&")}%`;
-    where.push("(id LIKE ?1 ESCAPE '\\' OR name LIKE ?1 ESCAPE '\\' OR phone LIKE ?1 ESCAPE '\\' OR email LIKE ?1 ESCAPE '\\' OR txn_id LIKE ?1 ESCAPE '\\' OR quote_ref LIKE ?1 ESCAPE '\\')");
+    where.push("(id LIKE ?1 ESCAPE '\\' OR name LIKE ?1 ESCAPE '\\' OR phone LIKE ?1 ESCAPE '\\' OR email LIKE ?1 ESCAPE '\\' OR txn_id LIKE ?1 ESCAPE '\\' OR quote_ref LIKE ?1 ESCAPE '\\' OR tracking_id LIKE ?1 ESCAPE '\\' OR EXISTS (SELECT 1 FROM shipments sh WHERE sh.order_id=orders.id AND sh.awb LIKE ?1 ESCAPE '\\'))");
     bind.push(like);
   }
   const eq = (param, col, allowed) => {
@@ -143,6 +176,8 @@ function filters(sp) {
   eq("payment_status", "payment_status", ["unpaid", "paid"]);
   eq("payment_method", "payment_method", ["razorpay", "payu", "cash", "cod", "upi", "bank", "whatsapp"]);
   eq("fulfilment", "status", FULFILMENT);
+  const view = sp.get("view");
+  if (view && VIEWS[view]) where.push(`(${VIEWS[view]})`);
   const from = dayStart(sp.get("from"), false), to = dayStart(sp.get("to"), true);
   if (from !== null) { bind.push(from); where.push(`created_at>=?${bind.length}`); }
   if (to !== null) { bind.push(to); where.push(`created_at<?${bind.length}`); }
@@ -164,9 +199,22 @@ async function listOrders(sp, env) {
 async function getOrder(id, env) {
   const o = await env.DB.prepare(`SELECT ${COLS} FROM orders WHERE id=?`).bind(id).first();
   if (!o) return null;
+  const tok = (await env.DB.prepare("SELECT track_token FROM orders WHERE id=?").bind(id).first())?.track_token; // detail only, never in COLS/list/CSV
   const pays = await env.DB.prepare("SELECT method,amount_paise,recorded_by,reference,created_at FROM payments WHERE order_id=? ORDER BY created_at")
     .bind(id).all();
-  return { ...shape(o), payments: pays.results };
+  const ships = await env.DB.prepare("SELECT id,courier,awb,tracking_url,shipped_on,est_delivery,notes,created_by,created_at,updated_at FROM shipments WHERE order_id=? ORDER BY created_at, rowid").bind(id).all();
+  const revs = ships.results.length
+    ? await env.DB.prepare(`SELECT shipment_id,changed_by,changes,created_at FROM shipment_revisions WHERE shipment_id IN (${ships.results.map(() => "?").join(",")}) ORDER BY created_at`).bind(...ships.results.map((x) => x.id)).all()
+    : { results: [] };
+  const events = await env.DB.prepare("SELECT kind,status,note,public_note,customer_visible,actor,created_at FROM order_events WHERE order_id=? ORDER BY created_at, rowid").bind(id).all();
+  const shipments = ships.results.map((x) => ({ ...x, revisions: revs.results.filter((r) => r.shipment_id === x.id).map((r) => ({ changed_by: r.changed_by, changes: JSON.parse(r.changes), created_at: r.created_at })) }));
+  // Timeline = synthesised "placed" + recorded payments + recorded events, oldest first.
+  const timeline = [
+    { kind: "placed", label: "Order placed", at: o.created_at },
+    ...pays.results.map((p) => ({ kind: "payment", label: `Payment received (${p.method})`, at: p.created_at, actor: p.recorded_by })),
+    ...events.results.map((e) => ({ kind: e.kind, status: e.status, label: STATUS_LABEL[e.status] || e.kind, note: e.note, public_note: e.public_note, customer_visible: !!e.customer_visible, actor: e.actor, at: e.created_at })),
+  ].sort((x, y) => x.at - y.at);
+  return { ...shape(o), ...(tok ? { track_url: `https://ntagz.com/track.html?o=${id}&t=${tok}` } : {}), is_preorder: !!o.is_preorder, payments: pays.results, shipments, timeline, actions: allowedActions(o.status), status_label: STATUS_LABEL[o.status] || o.status };
 }
 
 const MANUAL_ORDER_METHODS = ["cash", "cod", "upi", "bank", "whatsapp"];
@@ -215,20 +263,116 @@ async function paymentReceived(id, body, actor, env) {
   return json(await getOrder(id, env));
 }
 
-async function setFulfilment(id, body, actor, env) {
-  const status = body.status;
-  if (!FULFILMENT.includes(status)) return fail(400, "Invalid status");
-  const tracking = typeof body.tracking_id === "string" ? body.tracking_id.trim().slice(0, 64) : null;
-  const courier = typeof body.courier === "string" ? body.courier.trim().slice(0, 64) : null;
+const text = (v, max) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+const validDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) && new Date(`${v}T00:00:00Z`).toISOString().startsWith(v);
+function cleanTrackingUrl(v) {
+  if (v === undefined || v === null || String(v).trim() === "") return { ok: true, value: null };
+  try {
+    const u = new URL(String(v).trim());
+    if (u.protocol !== "https:" || u.username || u.password || !u.hostname.includes(".") || /^[\d.]+$/.test(u.hostname) || u.href.length > 300) return { ok: false };
+    return { ok: true, value: u.href };
+  } catch { return { ok: false }; }
+}
+const AWB_RE = /^[A-Za-z0-9][A-Za-z0-9\-_/ ]{1,38}[A-Za-z0-9]$/;
+const COURIER_RE = /^[A-Za-z0-9][A-Za-z0-9 .&'()-]{1,59}$/;
+
+// Validates shipment fields. `partial` = only the fields present (used for corrections).
+function validateShipment(b, partial) {
+  const f = {}, errors = {};
+  const has = (k) => !partial || b[k] !== undefined;
+  if (has("courier")) { const v = text(b.courier, 60); if (!COURIER_RE.test(v)) errors.courier = "Enter the courier name"; else f.courier = v; }
+  if (has("awb")) { const v = text(b.awb, 40); if (!AWB_RE.test(v)) errors.awb = "Enter a valid AWB / tracking number (3–40 letters, numbers, - _ /)"; else f.awb = v; }
+  if (b.tracking_url !== undefined) { const t = cleanTrackingUrl(b.tracking_url); if (!t.ok) errors.tracking_url = "Paste a full https:// tracking link from the courier"; else f.tracking_url = t.value; }
+  if (has("shipped_on")) { const v = text(b.shipped_on, 10); if (!validDate(v)) errors.shipped_on = "Enter the shipping date"; else f.shipped_on = v; }
+  if (b.est_delivery !== undefined) { const v = text(b.est_delivery, 10); if (v && !validDate(v)) errors.est_delivery = "Enter a valid date"; else f.est_delivery = v || null; }
+  if (b.notes !== undefined) f.notes = text(b.notes, 500) || null;
+  if (f.shipped_on && f.est_delivery && f.est_delivery < f.shipped_on) errors.est_delivery = "Estimated delivery cannot be before the shipping date";
+  return { f, errors };
+}
+const dupKey = async (env, orderId, key) => !!(await env.DB.prepare("SELECT 1 FROM order_events WHERE order_id=? AND idempotency_key=?").bind(orderId, key).first());
+const keyOf = (b) => (typeof b.idempotency_key === "string" && b.idempotency_key ? b.idempotency_key.slice(0, 64) : "");
+
+// Status change (everything except shipping, which needs the shipment form). Guarded by the status we validated against and by
+// a unique idempotency key, so repeated submits and races cannot create duplicate timeline events.
+async function changeStatus(id, body, actor, env) {
+  const to = body.to ?? body.status;
+  if (!FULFILMENT.includes(to)) return fail(400, "Invalid status");
+  if (to === "shipped") return fail(400, "Use the shipment form to ship an order");
+  const key = keyOf(body) || crypto.randomUUID();
   const o = await env.DB.prepare("SELECT status FROM orders WHERE id=?").bind(id).first();
   if (!o) return fail(404, "Order not found");
-  if (o.status === "cancelled" && status !== "cancelled") return fail(409, "Cancelled orders cannot be reopened");
-  await env.DB.batch([
-    env.DB.prepare("UPDATE orders SET status=?, tracking_id=COALESCE(?,tracking_id), courier=COALESCE(?,courier), updated_at=unixepoch() WHERE id=?")
-      .bind(status, tracking || null, courier || null, id),
-    env.DB.prepare("INSERT INTO audit_log (id,actor,action,order_id,detail) VALUES (?,?,?,?,?)")
-      .bind(crypto.randomUUID(), actor, "fulfilment", id, JSON.stringify({ from: o.status, to: status })),
-  ]);
+  if (await dupKey(env, id, key)) return json(await getOrder(id, env)); // same request replayed
+  if (!(TRANSITIONS[o.status] || []).includes(to)) return fail(409, `An order that is ${STATUS_LABEL[o.status] || o.status} cannot be changed to ${STATUS_LABEL[to]}`);
+  if (["cancelled", "returned"].includes(to) && body.confirm !== true) return fail(400, "Please confirm this action");
+  const note = text(body.note, 500) || null, pub = text(body.public_note, 300) || null;
+  const eid = crypto.randomUUID();
+  let res;
+  try {
+    res = await env.DB.batch([
+      env.DB.prepare(`INSERT INTO order_events (id,order_id,kind,status,note,public_note,actor,idempotency_key)
+                      SELECT ?1,id,'status',?2,?3,?4,?5,?6 FROM orders WHERE id=?7 AND status=?8`).bind(eid, to, note, pub, actor, key, id, o.status),
+      env.DB.prepare("UPDATE orders SET status=?1, updated_at=unixepoch() WHERE id=?2 AND status=?3 AND EXISTS (SELECT 1 FROM order_events WHERE id=?4)").bind(to, id, o.status, eid),
+      env.DB.prepare("INSERT INTO audit_log (id,actor,action,order_id,detail) SELECT ?1,?2,'status',?3,?4 WHERE EXISTS (SELECT 1 FROM order_events WHERE id=?5)").bind(crypto.randomUUID(), actor, id, JSON.stringify({ from: o.status, to }), eid),
+    ]);
+  } catch { return json(await getOrder(id, env)); } // unique-key race: another identical request won
+  if (res[0].meta.changes !== 1) return fail(409, "The order changed while you were working. Refresh and try again.");
+  return json(await getOrder(id, env));
+}
+
+// Ship: creates a shipment (courier + AWB + optional tracking link) and moves the order to Shipped. Another shipment can be
+// added to an order that is already shipped (split shipments). Tracking links are stored exactly as pasted, never invented.
+async function shipOrder(id, body, actor, env) {
+  const { f, errors } = validateShipment(body, false);
+  if (Object.keys(errors).length) return json({ error: "Please fix the highlighted fields", fields: errors }, 400);
+  const key = keyOf(body);
+  if (!key) return fail(400, "Missing idempotency key");
+  const o = await env.DB.prepare("SELECT status FROM orders WHERE id=?").bind(id).first();
+  if (!o) return fail(404, "Order not found");
+  if (await dupKey(env, id, key)) return json(await getOrder(id, env));
+  const addExtra = ["shipped", "out_for_delivery"].includes(o.status); // additional parcel for an order already on its way
+  if (!addExtra && !(TRANSITIONS[o.status] || []).includes("shipped")) return fail(409, `An order that is ${STATUS_LABEL[o.status] || o.status} cannot be shipped`);
+  if (await env.DB.prepare("SELECT 1 FROM shipments WHERE order_id=? AND lower(awb)=lower(?)").bind(id, f.awb).first()) return json({ error: "This AWB is already on the order", fields: { awb: "This AWB is already on the order" } }, 409);
+  const note = text(body.note, 500) || null, pub = text(body.public_note, 300) || null;
+  const eid = crypto.randomUUID(), sid = crypto.randomUUID();
+  const newStatus = addExtra ? o.status : "shipped";
+  let res;
+  try {
+    res = await env.DB.batch([
+      env.DB.prepare(`INSERT INTO order_events (id,order_id,kind,status,note,public_note,actor,idempotency_key)
+                      SELECT ?1,id,'shipment',?2,?3,?4,?5,?6 FROM orders WHERE id=?7 AND status=?8`).bind(eid, newStatus, note, pub, actor, key, id, o.status),
+      env.DB.prepare(`INSERT INTO shipments (id,order_id,courier,awb,tracking_url,shipped_on,est_delivery,notes,created_by)
+                      SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9 WHERE EXISTS (SELECT 1 FROM order_events WHERE id=?10)`).bind(sid, id, f.courier, f.awb, f.tracking_url ?? null, f.shipped_on, f.est_delivery ?? null, f.notes ?? null, actor, eid),
+      env.DB.prepare("UPDATE orders SET status=?1, courier=?2, tracking_id=?3, updated_at=unixepoch() WHERE id=?4 AND EXISTS (SELECT 1 FROM shipments WHERE id=?5)").bind(newStatus, f.courier, f.awb, id, sid),
+      env.DB.prepare("INSERT INTO audit_log (id,actor,action,order_id,detail) SELECT ?1,?2,'ship',?3,?4 WHERE EXISTS (SELECT 1 FROM shipments WHERE id=?5)").bind(crypto.randomUUID(), actor, id, JSON.stringify({ courier: f.courier, awb: f.awb }), sid),
+    ]);
+  } catch { return json(await getOrder(id, env)); }
+  if (res[0].meta.changes !== 1) return fail(409, "The order changed while you were working. Refresh and try again.");
+  return json(await getOrder(id, env));
+}
+
+// Correct courier / AWB / link / dates after shipping. Every change is kept in shipment_revisions (who, when, old -> new).
+async function correctShipment(id, sid, body, actor, env) {
+  const { f, errors } = validateShipment(body, true);
+  if (Object.keys(errors).length) return json({ error: "Please fix the highlighted fields", fields: errors }, 400);
+  const cur = await env.DB.prepare("SELECT * FROM shipments WHERE id=? AND order_id=?").bind(sid, id).first();
+  if (!cur) return fail(404, "Shipment not found");
+  const ord = await env.DB.prepare("SELECT status FROM orders WHERE id=?").bind(id).first();
+  if (["cancelled", "returned"].includes(ord.status)) return fail(409, "This order is closed");
+  const changes = {};
+  for (const k of Object.keys(f)) if ((f[k] ?? null) !== (cur[k] ?? null)) changes[k] = { from: cur[k] ?? null, to: f[k] ?? null };
+  if (!Object.keys(changes).length) return json(await getOrder(id, env));
+  if (changes.awb && await env.DB.prepare("SELECT 1 FROM shipments WHERE order_id=? AND lower(awb)=lower(?) AND id<>?").bind(id, f.awb, sid).first())
+    return json({ error: "This AWB is already on the order", fields: { awb: "This AWB is already on the order" } }, 409);
+  const keys = Object.keys(changes), setSql = keys.map((k) => `${k}=?`).join(","); // column names come from validateShipment's fixed keys
+  const latest = await env.DB.prepare("SELECT id FROM shipments WHERE order_id=? ORDER BY created_at DESC, rowid DESC LIMIT 1").bind(id).first();
+  const stmts = [
+    env.DB.prepare(`UPDATE shipments SET ${setSql}, updated_at=unixepoch() WHERE id=? AND order_id=?`).bind(...keys.map((k) => f[k] ?? null), sid, id),
+    env.DB.prepare("INSERT INTO shipment_revisions (id,shipment_id,changed_by,changes) VALUES (?,?,?,?)").bind(crypto.randomUUID(), sid, actor, JSON.stringify(changes)),
+    env.DB.prepare("INSERT INTO order_events (id,order_id,kind,status,note,customer_visible,actor,idempotency_key) VALUES (?,?,'shipment_update',?,?,0,?,?)")
+      .bind(crypto.randomUUID(), id, ord.status, `Shipment corrected: ${keys.join(", ")}`, actor, `corr-${crypto.randomUUID()}`),
+  ];
+  if (latest && latest.id === sid && (changes.courier || changes.awb)) stmts.push(env.DB.prepare("UPDATE orders SET courier=?, tracking_id=?, updated_at=unixepoch() WHERE id=?").bind(f.courier ?? cur.courier, f.awb ?? cur.awb, id));
+  await env.DB.batch(stmts);
   return json(await getOrder(id, env));
 }
 
@@ -552,7 +696,7 @@ export default {
       if (!asset) {
         const user = await session(request, env);
         if (path === "/") asset = user ? "/app.html" : "/login.html";
-        else if ((path === "/app.js" || path === "/products.js") && user) asset = path;
+        else if ((path === "/app.js" || path === "/orders.js" || path === "/products.js") && user) asset = path;
         else return new Response("Not found", { status: 404, headers: SEC_HEADERS });
       }
       const res = await env.ASSETS.fetch(new Request(new URL(asset, url), { method: "GET" }));
@@ -590,7 +734,7 @@ export default {
       if (method === "GET" && path === "/api/orders") return await listOrders(url.searchParams, env);
       if (method === "GET" && path === "/api/orders.csv") return await exportCsv(url.searchParams, env);
 
-      const m = path.match(/^\/api\/orders\/([0-9a-fA-F-]{8,64})(\/cash-received|\/payment-received|\/fulfilment)?$/);
+      const m = path.match(/^\/api\/orders\/([0-9a-fA-F-]{8,64})(\/cash-received|\/payment-received|\/fulfilment|\/status|\/ship|\/shipments\/[0-9a-fA-F-]{8,64})?$/);
       if (m) {
         const id = m[1];
         if (!m[2] && method === "GET") {
@@ -598,7 +742,9 @@ export default {
           return o ? json(o) : fail(404, "Order not found");
         }
         if ((m[2] === "/cash-received" || m[2] === "/payment-received") && method === "POST") return await paymentReceived(id, body, actor, env);
-        if (m[2] === "/fulfilment" && method === "POST") return await setFulfilment(id, body, actor, env);
+        if ((m[2] === "/fulfilment" || m[2] === "/status") && method === "POST") return await changeStatus(id, body, actor, env);
+        if (m[2] === "/ship" && method === "POST") return await shipOrder(id, body, actor, env);
+        if (m[2] && m[2].startsWith("/shipments/") && method === "POST") return await correctShipment(id, m[2].slice(11), body, actor, env);
       }
       if (method === "GET" && path === "/api/products") return await listProducts(url.searchParams, env);
       if (method === "GET" && path === "/api/products/summary") return await productSummary(env);

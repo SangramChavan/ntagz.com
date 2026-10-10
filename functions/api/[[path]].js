@@ -572,6 +572,39 @@ async function recordOfflineOrder(request, env, body, origin) {
   return json({ ok: true, orderRef: txnId, total: total.amount }, 200, origin);
 }
 
+const STATUS_LABELS = { placed: "Order placed", confirmed: "Confirmed", processing: "Processing", packed: "Packed", shipped: "Shipped", out_for_delivery: "Out for delivery", delivered: "Delivered", on_hold: "On hold", cancelled: "Cancelled", delivery_failed: "Delivery failed", returned: "Returned" };
+
+// Whitelisted customer view of an order. Unknown order and wrong token are indistinguishable (same 404).
+async function trackOrder(url, env, origin) {
+  const notFound = () => json({ error: "Not found" }, 404, origin);
+  const o = url.searchParams.get("o") || "", t = url.searchParams.get("t") || "";
+  if (!/^[0-9a-fA-F-]{8,64}$/.test(o) || !/^[0-9a-f]{32}$/.test(t)) return notFound();
+  if (!env.DB) return json({ error: "Tracking unavailable" }, 503, origin);
+  try {
+    const ord = await env.DB.prepare("SELECT id, status, payment_status, total, items_json, state, pincode, created_at, is_preorder, track_token FROM orders WHERE id = ?").bind(o).first();
+    if (!ord || !safeEqual(String(ord.track_token || ""), t)) return notFound();
+    const [pays, evs, ships, prods] = await Promise.all([
+      env.DB.prepare("SELECT created_at FROM payments WHERE order_id = ?").bind(ord.id).all(),
+      env.DB.prepare("SELECT kind, status, public_note, created_at FROM order_events WHERE order_id = ? AND customer_visible = 1 AND kind IN ('status','shipment')").bind(ord.id).all(),
+      env.DB.prepare("SELECT courier, awb, tracking_url, shipped_on, est_delivery FROM shipments WHERE order_id = ? ORDER BY created_at").bind(ord.id).all(),
+      env.DB.prepare("SELECT id, name FROM products").all(),
+    ]);
+    const names = Object.fromEntries((prods.results || []).map((p) => [p.id, p.name]));
+    let raw = []; try { raw = JSON.parse(ord.items_json || "[]"); } catch {}
+    const items = (Array.isArray(raw) ? raw : []).map((i) => ({ name: names[i.id] || String(i.id), qty: Number(i.qty) || 0 }));
+    const journey = [
+      { kind: "placed", label: "Order placed", at: ord.created_at, note: null },
+      ...(pays.results || []).map((p) => ({ kind: "payment", label: "Payment received", at: p.created_at, note: null })),
+      ...(evs.results || []).map((e) => ({ kind: e.kind, status: e.status, label: STATUS_LABELS[e.status] || e.status || "Update", at: e.created_at, note: e.public_note || null })),
+    ].sort((a, b) => a.at - b.at);
+    return json({
+      ref: ord.id.slice(0, 8), placed_at: ord.created_at, status: ord.status, status_label: STATUS_LABELS[ord.status] || ord.status,
+      payment_status: ord.payment_status, is_preorder: !!ord.is_preorder, items, total_paise: ord.total,
+      ship_to: { state: ord.state, pincode: ord.pincode }, shipments: ships.results || [], journey,
+    }, 200, origin);
+  } catch { return json({ error: "Tracking unavailable" }, 503, origin); }
+}
+
 async function onRequest({ request, env }) {
   const url = new URL(request.url);
   const origin = request.headers.get("Origin");
@@ -590,6 +623,14 @@ async function onRequest({ request, env }) {
     }));
     const res = json(items, 200, origin);
     res.headers.set("Cache-Control", "public, max-age=60");
+    return res;
+  }
+
+  // ── Public read-only order tracking: GET /api/track?o=<orderId>&t=<token> ──
+  if (url.pathname.endsWith("/track") && !url.pathname.includes("/accounts/")) {
+    if (request.method !== "GET") return json({ error: "Method not allowed" }, 405, origin);
+    const res = await trackOrder(url, env, origin);
+    res.headers.set("Cache-Control", "no-store");
     return res;
   }
 
