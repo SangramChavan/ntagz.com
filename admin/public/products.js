@@ -24,6 +24,46 @@ async function loadSummary() {
   return s.categories;
 }
 
+// ── inline price / stock editing ─────────────────────────────────────
+let toastTimer;
+function toast(msg, bad) { const t = $("toast"); t.textContent = msg; t.className = bad ? "err" : ""; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 4000); }
+function commitOnEnter(input) { input.addEventListener("keydown", (e) => { if (e.key === "Enter") input.blur(); else if (e.key === "Escape") { input.value = input.defaultValue; input.blur(); } }); }
+
+function priceInput(p) {
+  const input = el("input", { class: "inl", inputmode: "decimal", value: rupees(p.price_paise), "aria-label": `Selling price for ${p.name} (₹, ex-GST)` });
+  commitOnEnter(input);
+  input.addEventListener("change", async () => {
+    const raw = input.value.trim(), num = Number(raw), paise = Math.round(num * 100);
+    const revert = () => { input.value = rupees(p.price_paise); input.classList.remove("bad"); };
+    if (raw === "" || !Number.isFinite(num) || num < 0 || Math.abs(paise - num * 100) > 1e-6) { input.classList.add("bad"); toast("Enter a valid price in rupees (max 2 decimals)", true); setTimeout(revert, 1200); return; }
+    if (paise === p.price_paise) return revert();
+    if (!(await ask("Confirm price change", [`${p.name} (${p.sku}): ${inr(p.price_paise)} → ${inr(paise)}`, "Applies to future purchases only; past orders keep their prices."], "Save price"))) return revert();
+    input.classList.add("busy"); input.disabled = true;
+    try { await api(`/api/products/${p.id}`, { price: raw }); toast(`Price saved: ${p.name} is now ${inr(paise)}`); }
+    catch (e) { toast(e.message, true); }
+    refresh();
+  });
+  return el("span", { class: "inl-wrap" }, el("span", {}, "₹"), input);
+}
+
+function stockInput(p) {
+  const input = el("input", { class: "inl stock", inputmode: "numeric", value: String(p.stock_qty), "aria-label": `Stock for ${p.name}` });
+  commitOnEnter(input);
+  input.addEventListener("change", async () => {
+    const raw = input.value.trim(), n = Number(raw);
+    const revert = () => { input.value = String(p.stock_qty); input.classList.remove("bad"); };
+    if (raw === "" || !Number.isInteger(n) || n < 0 || n > 1000000) { input.classList.add("bad"); toast("Stock must be a whole number, 0 or more", true); setTimeout(revert, 1200); return; }
+    if (n === p.stock_qty) return revert();
+    const reason = await askReason("Confirm stock count", `${p.name} (${p.sku}): ${p.stock_qty} → ${n} ${p.unit} (${n - p.stock_qty > 0 ? "+" : ""}${n - p.stock_qty}). Recorded in stock history.`, "Stock count correction");
+    if (reason === null) return revert();
+    input.classList.add("busy"); input.disabled = true;
+    try { await api(`/api/products/${p.id}/stock`, { type: "set", quantity: String(n), expected_stock: p.stock_qty, reason, idempotency_key: crypto.randomUUID() }); toast(`Stock saved: ${p.name} is now ${n}`); }
+    catch (e) { toast(e.message, true); }
+    refresh();
+  });
+  return el("span", { class: "inl-wrap" }, input, el("span", {}, p.unit));
+}
+
 async function loadProducts() {
   $("plist").replaceChildren(el("p", { class: "sub" }, "Loading…"));
   try {
@@ -36,12 +76,13 @@ async function loadProducts() {
       el("button", { class: "btn", type: "button", onclick: () => stockDialog(p.id) }, "Update stock"),
       el("button", { class: "btn", type: "button", onclick: () => toggleActive(p) }, p.active ? "Deactivate" : "Activate"));
     $("plist").replaceChildren(...(d.products.length ? d.products.map((p) => el("div", { class: "card" },
-      el("div", { class: "top" }, thumb(p), el("div", { class: "grow" }, el("div", { class: "id" }, p.name), el("div", { class: "sub" }, `${p.sku} · ${p.category}`)), el("b", {}, inr(p.price_paise))),
-      el("div", { class: "row sub" }, el("span", {}, `Stock: ${p.stock_qty} ${p.unit}`), el("span", {}, "Updated " + when(p.updated_at))),
+      el("div", { class: "top" }, thumb(p), el("div", { class: "grow" }, el("div", { class: "id" }, p.name), el("div", { class: "sub" }, `${p.sku} · ${p.category}`))),
+      el("div", { class: "editrow" }, el("label", {}, "Price (ex-GST)", priceInput(p)), el("label", {}, "Stock", stockInput(p))),
+      el("div", { class: "row sub" }, el("span", {}, "Updated " + when(p.updated_at))),
       el("div", {}, statusPills(p)), acts(p))) : [el("p", { class: "sub" }, "No products match your filters.")]));
     $("prows").replaceChildren(...(d.products.length ? d.products.map((p) => el("tr", {},
-      el("td", {}, thumb(p)), el("td", {}, p.name), el("td", {}, p.sku), el("td", {}, p.category), el("td", {}, inr(p.price_paise)),
-      el("td", {}, String(p.stock_qty)), el("td", {}, statusPills(p)), el("td", {}, when(p.updated_at)), el("td", {}, acts(p)))) :
+      el("td", {}, thumb(p)), el("td", {}, p.name), el("td", {}, p.sku), el("td", {}, p.category), el("td", {}, priceInput(p)),
+      el("td", {}, stockInput(p)), el("td", {}, statusPills(p)), el("td", {}, when(p.updated_at)), el("td", {}, acts(p)))) :
       [el("tr", {}, el("td", { colspan: "9" }, "No products match your filters."))]));
   } catch (e) {
     $("plist").replaceChildren(el("p", { class: "msg" }, "Could not load products: " + e.message, " ", el("button", { class: "btn", type: "button", onclick: loadProducts }, "Retry")));
@@ -53,10 +94,23 @@ const refresh = () => Promise.all([loadSummary(), loadProducts()]);
 // ── confirm dialog: resolves true/false ───────────────────────────────
 function ask(title, lines, okLabel) {
   return new Promise((res) => {
-    const d = $("kdlg");
+    const d = $("kdlg"); let done = false;
+    const finish = (v) => { if (done) return; done = true; if (d.open) d.close(); res(v); }; // resolve from the buttons, not only the close event
     d.replaceChildren(el("h2", { id: "kdtitle", class: "h0" }, title), ...lines.map((l) => el("p", {}, l)),
-      el("div", { class: "actions" }, el("button", { class: "btn primary", type: "button", onclick: () => { d.close("ok"); } }, okLabel), el("button", { class: "btn", type: "button", onclick: () => d.close("no") }, "Cancel")));
-    d.onclose = () => res(d.returnValue === "ok"); d.returnValue = ""; d.showModal();
+      el("div", { class: "actions" }, el("button", { class: "btn primary", type: "button", onclick: () => finish(true) }, okLabel), el("button", { class: "btn", type: "button", onclick: () => finish(false) }, "Cancel")));
+    d.onclose = () => finish(false); d.showModal();
+  });
+}
+
+function askReason(title, line, defaultReason) {
+  return new Promise((res) => {
+    const d = $("kdlg"), reason = el("input", { id: "kreason", value: defaultReason, maxlength: "200", "aria-label": "Reason" }); let done = false;
+    const finish = (v) => { if (done) return; done = true; if (d.open) d.close(); res(v); };
+    const ok = () => { if (reason.value.trim().length < 3) { reason.classList.add("bad"); return; } finish(reason.value.trim()); };
+    d.replaceChildren(el("h2", { id: "kdtitle", class: "h0" }, title), el("p", {}, line),
+      el("div", { class: "field" }, el("label", { for: "kreason" }, "Reason (required)"), reason),
+      el("div", { class: "actions" }, el("button", { class: "btn primary", type: "button", onclick: ok }, "Save stock"), el("button", { class: "btn", type: "button", onclick: () => finish(null) }, "Cancel")));
+    d.onclose = () => finish(null); d.showModal(); reason.select();
   });
 }
 
