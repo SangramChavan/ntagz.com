@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>NTAGZ Admin — Orders</title><link rel="stylesheet" href="/style.css"></head>
+<body>
+<header><b>NTAGZ <span>Admin</span></b><span><span id="who" class="sub"></span> <button class="btn" id="out" type="button">Sign out</button></span></header>
+<main>
+  <form class="filters" id="filters" role="search">
+    <input class="wide" id="q" type="search" placeholder="Search order ID, name, phone, email" aria-label="Search orders">
+    <select id="payment_status" aria-label="Payment status"><option value="">Any payment</option><option value="paid">Paid</option><option value="unpaid">Unpaid</option></select>
+    <select id="payment_method" aria-label="Payment method"><option value="">Any method</option><option>razorpay</option><option>payu</option><option>cash</option><option>cod</option><option>upi</option><option>bank</option></select>
+    <select id="fulfilment" aria-label="Fulfilment status"><option value="">Any fulfilment</option><option>confirmed</option><option>packed</option><option>shipped</option><option>delivered</option><option>cancelled</option></select>
+    <input id="from" type="date" aria-label="From date"><input id="to" type="date" aria-label="To date">
+    <a class="btn" id="csv" href="/api/orders.csv">Export CSV</a>
+  </form>
+  <div class="list" id="list" aria-live="polite"></div>
+  <table><thead><tr><th class="sort" data-sort="created_at">Date</th><th>Order</th><th class="sort" data-sort="name">Customer</th><th class="sort" data-sort="total">Total</th><th>Payment</th><th>Fulfilment</th></tr></thead><tbody id="rows"></tbody></table>
+  <div class="pager"><button class="btn" id="prev" type="button">Previous</button><span id="pageInfo"></span><button class="btn" id="next" type="button">Next</button></div>
+</main>
+<dialog id="dlg" aria-labelledby="dtitle"></dialog>
+<dialog id="cdlg" aria-labelledby="ctitle"></dialog>
+<script src="/app.js"></script></body></html>

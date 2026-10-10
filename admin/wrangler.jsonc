@@ -1,0 +1,25 @@
+{
+  // NTAGZ admin — own Worker, own hostname (admin.ntagz.com). The public site stays on GitHub Pages
+  // and the existing `ntagz-payments` Worker keeps /api/* on ntagz.com; neither is touched by this one.
+  "name": "ntagz-admin",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-08",
+  "workers_dev": false,
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ntagz-db",
+      "database_id": "51216708-c501-49ce-a068-5b8854893e74",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": { "ENVIRONMENT": "production" }
+  // Secrets (never committed):  wrangler secret put ADMIN_EMAILS | RESEND_API_KEY
+  // Custom domain is attached at deploy time, only after DNS approval:
+  // "routes": [{ "pattern": "admin.ntagz.com", "custom_domain": true }]
+}

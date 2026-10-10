@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>NTAGZ Admin — Sign in</title><link rel="stylesheet" href="/style.css"></head>
+<body><div class="center"><form class="panel" id="f" autocomplete="on">
+<h1 class="h0">NTAGZ <span class="accent">Admin</span></h1>
+<div class="field" id="emailWrap"><label for="email">Email</label><input id="email" type="email" autocomplete="email" required></div>
+<div class="field" id="otpWrap" hidden><label for="otp">6-digit code</label><input id="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="\d{6}"></div>
+<div class="msg" id="msg" role="alert"></div>
+<button class="btn primary" id="go" type="submit">Send code</button>
+</form></div><script src="/login.js"></script></body></html>
