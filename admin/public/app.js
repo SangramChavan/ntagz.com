@@ -102,4 +102,4 @@ document.querySelectorAll("th.sort").forEach((th) => th.addEventListener("click"
   state.dir = state.sort === th.dataset.sort && state.dir === "desc" ? "asc" : "desc"; state.sort = th.dataset.sort; load();
 }));
 $("out").onclick = async () => { await api("/api/auth/logout", {}); location.reload(); };
-api("/api/me").then((m) => { $("who").textContent = m.email; return load(); }).catch(() => {});
+api("/api/me").then((m) => { $("who").textContent = m.email; }).catch(() => {});

@@ -28,7 +28,7 @@ const SEC_HEADERS = {
   "X-Frame-Options": "DENY",
   "Referrer-Policy": "no-referrer",
   "Content-Security-Policy":
-    "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+    "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://www.ntagz.com https://ntagz.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
 };
 
 function json(data, status = 200, extra = {}) {
@@ -240,6 +240,224 @@ async function exportCsv(sp, env) {
   });
 }
 
+// ── Products & inventory ──────────────────────────────────────────────
+const PSORTS = { name: "name", price: "price_paise", stock: "stock_qty", updated: "updated_at" };
+const PCOLS = "id,sku,name,description,category,image_url,price_paise,mrp_paise,gst_rate,all_inclusive,unit,stock_qty,low_stock_threshold,active,created_at,updated_at";
+const GST_RATES = [0, 5, 12, 18, 28];
+const IMAGE_OK = /^(https:\/\/(www\.)?ntagz\.com\/|images\/)[\w\-./]{1,200}$/;
+
+const stockStatus = (p) => (p.stock_qty <= 0 ? "out" : p.stock_qty <= p.low_stock_threshold ? "low" : "in");
+const pshape = (p) => ({ ...p, active: !!p.active, all_inclusive: !!p.all_inclusive, stock_status: stockStatus(p) });
+
+function rupeesToPaise(v) {
+  const n = typeof v === "string" ? Number(v.trim()) : v;
+  if (typeof n !== "number" || !Number.isFinite(n) || n < 0 || n > 10_000_000) return null;
+  const paise = Math.round(n * 100);
+  return Math.abs(paise - n * 100) < 1e-6 ? paise : null; // at most 2 decimals
+}
+const intIn = (v, min, max) => {
+  const n = typeof v === "string" && v.trim() !== "" ? Number(v) : v;
+  return Number.isInteger(n) && n >= min && n <= max ? n : null;
+};
+
+// Returns { f: {column: value}, errors: {field: message} }. `partial` = only validate fields that are present.
+function validateProduct(b, partial) {
+  const f = {}, errors = {};
+  const has = (k) => !partial || b[k] !== undefined;
+  if (has("name")) {
+    const v = typeof b.name === "string" ? b.name.trim() : "";
+    if (v.length < 2 || v.length > 120) errors.name = "Name must be 2–120 characters"; else f.name = v;
+  }
+  if (has("sku")) {
+    const v = typeof b.sku === "string" ? b.sku.trim().toUpperCase() : "";
+    if (!/^[A-Z0-9][A-Z0-9._-]{1,31}$/.test(v)) errors.sku = "SKU must be 2–32 letters, numbers, . _ -"; else f.sku = v;
+  }
+  if (has("description")) {
+    const v = b.description === undefined || b.description === null ? "" : b.description;
+    if (typeof v !== "string" || v.length > 2000) errors.description = "Description is too long"; else f.description = v.trim();
+  }
+  if (has("category")) {
+    const v = typeof b.category === "string" ? b.category.trim().toLowerCase() : "";
+    if (!/^[a-z0-9][a-z0-9 _-]{0,39}$/.test(v)) errors.category = "Category is required (letters and numbers)"; else f.category = v;
+  }
+  if (has("image_url")) {
+    const v = b.image_url === undefined || b.image_url === null ? "" : String(b.image_url).trim();
+    if (v && !IMAGE_OK.test(v)) errors.image_url = "Use an images/… path or an https://ntagz.com/… URL"; else f.image_url = v || null;
+  }
+  if (has("price")) {
+    const p = rupeesToPaise(b.price);
+    if (p === null) errors.price = "Enter a valid price in rupees (max 2 decimals)"; else f.price_paise = p;
+  }
+  if (b.mrp !== undefined) {
+    if (b.mrp === null || b.mrp === "") f.mrp_paise = null;
+    else { const p = rupeesToPaise(b.mrp); if (p === null) errors.mrp = "Enter a valid MRP"; else f.mrp_paise = p; }
+  }
+  if (f.mrp_paise !== undefined && f.mrp_paise !== null && f.price_paise !== undefined && f.mrp_paise < f.price_paise) errors.mrp = "MRP cannot be lower than the selling price";
+  if (has("gst_rate")) {
+    const v = intIn(b.gst_rate ?? 18, 0, 28);
+    if (v === null || !GST_RATES.includes(v)) errors.gst_rate = "GST rate must be 0, 5, 12, 18 or 28"; else f.gst_rate = v;
+  }
+  if (b.unit !== undefined) {
+    const v = typeof b.unit === "string" ? b.unit.trim() : "";
+    if (!/^[\w ./-]{1,20}$/.test(v)) errors.unit = "Invalid unit"; else f.unit = v;
+  }
+  if (b.low_stock_threshold !== undefined) {
+    const v = intIn(b.low_stock_threshold, 0, 1_000_000);
+    if (v === null) errors.low_stock_threshold = "Threshold must be a whole number, 0 or more"; else f.low_stock_threshold = v;
+  }
+  if (b.active !== undefined) f.active = b.active ? 1 : 0;
+  return { f, errors };
+}
+
+function productFilters(sp) {
+  const where = [], bind = [];
+  const q = (sp.get("q") || "").trim().slice(0, 100);
+  if (q) { bind.push(`%${q.replace(/[\\%_]/g, "\\$&")}%`); where.push("(name LIKE ?1 ESCAPE '\\' OR sku LIKE ?1 ESCAPE '\\' OR id LIKE ?1 ESCAPE '\\')"); }
+  const cat = (sp.get("category") || "").trim().toLowerCase().slice(0, 40);
+  if (cat) { bind.push(cat); where.push(`category=?${bind.length}`); }
+  const st = sp.get("stock");
+  if (st === "out") where.push("stock_qty<=0");
+  else if (st === "low") where.push("stock_qty>0 AND stock_qty<=low_stock_threshold");
+  else if (st === "in") where.push("stock_qty>low_stock_threshold");
+  const a = sp.get("active");
+  if (a === "1" || a === "0") where.push(`active=${a}`);
+  return { sql: where.length ? "WHERE " + where.join(" AND ") : "", bind };
+}
+
+async function listProducts(sp, env) {
+  const { sql, bind } = productFilters(sp);
+  const page = Math.max(1, parseInt(sp.get("page"), 10) || 1);
+  const col = PSORTS[sp.get("sort")] || "updated_at";
+  const dir = sp.get("dir") === "asc" ? "ASC" : "DESC";
+  const total = (await env.DB.prepare(`SELECT count(*) c FROM products ${sql}`).bind(...bind).first()).c;
+  const { results } = await env.DB.prepare(
+    `SELECT ${PCOLS} FROM products ${sql} ORDER BY ${col} ${dir}, id LIMIT ${PAGE_SIZE} OFFSET ${(page - 1) * PAGE_SIZE}`
+  ).bind(...bind).all();
+  return json({ products: results.map(pshape), page, pages: Math.max(1, Math.ceil(total / PAGE_SIZE)), total });
+}
+
+async function productSummary(env) {
+  const s = await env.DB.prepare(
+    `SELECT count(*) total, coalesce(sum(active),0) active,
+            coalesce(sum(CASE WHEN stock_qty>0 AND stock_qty<=low_stock_threshold THEN 1 ELSE 0 END),0) low,
+            coalesce(sum(CASE WHEN stock_qty<=0 THEN 1 ELSE 0 END),0) out FROM products`).first();
+  const cats = await env.DB.prepare("SELECT DISTINCT category FROM products ORDER BY category").all();
+  return json({ ...s, categories: cats.results.map((c) => c.category) });
+}
+
+async function getProduct(id, env) {
+  const p = await env.DB.prepare(`SELECT ${PCOLS} FROM products WHERE id=?`).bind(id).first();
+  if (!p) return null;
+  const mv = await env.DB.prepare(
+    "SELECT type,qty_change,prev_stock,new_stock,reason,reference,notes,admin,created_at FROM inventory_movements WHERE product_id=? ORDER BY created_at DESC, rowid DESC LIMIT 50"
+  ).bind(id).all();
+  return { ...pshape(p), movements: mv.results };
+}
+
+function sanitiseText(v, max) { return typeof v === "string" ? v.trim().slice(0, max) : ""; }
+
+async function createProduct(body, actor, env) {
+  const { f, errors } = validateProduct(body, false);
+  const opening = intIn(body.opening_stock ?? 0, 0, 1_000_000);
+  if (opening === null) errors.opening_stock = "Opening stock must be a whole number, 0 or more";
+  if (Object.keys(errors).length) return json({ error: "Please fix the highlighted fields", fields: errors }, 400);
+  const id = typeof body.id === "string" && /^[a-z0-9][a-z0-9-]{1,63}$/.test(body.id) ? body.id : null;
+  const pid = id || f.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || crypto.randomUUID();
+  if (await env.DB.prepare("SELECT 1 FROM products WHERE id=?").bind(pid).first()) return json({ error: "A product with this ID already exists", fields: { name: "Name is already used by another product" } }, 409);
+  if (await env.DB.prepare("SELECT 1 FROM products WHERE lower(sku)=lower(?)").bind(f.sku).first()) return json({ error: "SKU already exists", fields: { sku: "This SKU is already in use" } }, 409);
+  const thr = f.low_stock_threshold ?? 10;
+  const stmts = [env.DB.prepare(
+    `INSERT INTO products (id,sku,name,description,category,image_url,price_paise,mrp_paise,gst_rate,unit,stock_qty,low_stock_threshold,active)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+  ).bind(pid, f.sku, f.name, f.description ?? "", f.category, f.image_url ?? null, f.price_paise, f.mrp_paise ?? null, f.gst_rate ?? 18, f.unit ?? "pc", opening, thr, f.active ?? 1)];
+  if (opening > 0) stmts.push(env.DB.prepare(
+    "INSERT INTO inventory_movements (id,product_id,type,qty_change,prev_stock,new_stock,reason,admin,idempotency_key) VALUES (?,?,'opening',?,0,?,'Opening stock',?,?)"
+  ).bind(crypto.randomUUID(), pid, opening, opening, actor, "opening"));
+  stmts.push(env.DB.prepare("INSERT INTO audit_log (id,actor,action,detail) VALUES (?,?,'product_create',?)").bind(crypto.randomUUID(), actor, JSON.stringify({ id: pid, sku: f.sku })));
+  try { await env.DB.batch(stmts); } catch { return json({ error: "SKU already exists", fields: { sku: "This SKU is already in use" } }, 409); }
+  return json(await getProduct(pid, env), 201);
+}
+
+async function updateProduct(id, body, actor, env) {
+  if ("stock_qty" in body || "stock" in body) return fail(400, "Stock can only be changed through a stock adjustment");
+  const { f, errors } = validateProduct(body, true);
+  if (Object.keys(errors).length) return json({ error: "Please fix the highlighted fields", fields: errors }, 400);
+  const cur = await env.DB.prepare(`SELECT ${PCOLS} FROM products WHERE id=?`).bind(id).first();
+  if (!cur) return fail(404, "Product not found");
+  if (f.sku && f.sku.toLowerCase() !== cur.sku.toLowerCase() && await env.DB.prepare("SELECT 1 FROM products WHERE lower(sku)=lower(?) AND id<>?").bind(f.sku, id).first())
+    return json({ error: "SKU already exists", fields: { sku: "This SKU is already in use" } }, 409);
+  const mrp = f.mrp_paise !== undefined ? f.mrp_paise : cur.mrp_paise, price = f.price_paise ?? cur.price_paise;
+  if (mrp !== null && mrp < price) return json({ error: "MRP cannot be lower than the selling price", fields: { mrp: "MRP cannot be lower than the selling price" } }, 400);
+  const keys = Object.keys(f);
+  if (!keys.length) return json(await getProduct(id, env));
+  const changed = {};
+  for (const k of keys) if (f[k] !== cur[k]) changed[k] = { from: cur[k], to: f[k] };
+  // Column names come from the fixed validateProduct whitelist above, never from request input.
+  const setSql = keys.map((k) => `${k}=?`).join(",");
+  try {
+    await env.DB.batch([
+      env.DB.prepare(`UPDATE products SET ${setSql}, updated_at=unixepoch() WHERE id=?`).bind(...keys.map((k) => f[k]), id),
+      env.DB.prepare("INSERT INTO audit_log (id,actor,action,detail) VALUES (?,?,'product_update',?)").bind(crypto.randomUUID(), actor, JSON.stringify({ id, changed })),
+    ]);
+  } catch { return json({ error: "SKU already exists", fields: { sku: "This SKU is already in use" } }, 409); }
+  return json(await getProduct(id, env));
+}
+
+// Stock movements. In/out are relative (safe under concurrency); "set" is optimistic: it only applies if the
+// stock is still what the admin saw. Update + movement row are one atomic batch; negative stock is impossible.
+async function adjustStock(id, body, actor, env) {
+  const type = body.type;
+  if (!["in", "out", "set"].includes(type)) return fail(400, "Invalid adjustment type");
+  const qty = intIn(body.quantity, type === "set" ? 0 : 1, 1_000_000);
+  if (qty === null) return json({ error: type === "set" ? "Actual stock must be a whole number, 0 or more" : "Quantity must be a whole number of at least 1", fields: { quantity: "Invalid quantity" } }, 400);
+  const reason = sanitiseText(body.reason, 200);
+  if (reason.length < 3) return json({ error: "A reason is required", fields: { reason: "Enter a reason (at least 3 characters)" } }, 400);
+  const reference = sanitiseText(body.reference, 100) || null, notes = sanitiseText(body.notes, 500) || null;
+  const key = typeof body.idempotency_key === "string" && body.idempotency_key ? body.idempotency_key.slice(0, 64) : "";
+  if (!key) return fail(400, "Missing idempotency key");
+  const cur = await env.DB.prepare("SELECT stock_qty FROM products WHERE id=?").bind(id).first();
+  if (!cur) return fail(404, "Product not found");
+
+  let batch;
+  if (type === "set") {
+    const expected = intIn(body.expected_stock, 0, 1_000_000);
+    if (expected === null) return fail(400, "Missing current stock");
+    if (expected !== cur.stock_qty) return fail(409, `Stock changed to ${cur.stock_qty}. Review and try again.`);
+    batch = [
+      env.DB.prepare("UPDATE products SET stock_qty=?1, updated_at=unixepoch() WHERE id=?2 AND stock_qty=?3").bind(qty, id, expected),
+      env.DB.prepare(`INSERT INTO inventory_movements (id,product_id,type,qty_change,prev_stock,new_stock,reason,reference,notes,admin,idempotency_key)
+                      SELECT ?1,?2,'set',?3-?4,?4,?3,?5,?6,?7,?8,?9 WHERE changes()=1`)
+        .bind(crypto.randomUUID(), id, qty, expected, reason, reference, notes, actor, key),
+    ];
+  } else {
+    const delta = type === "in" ? qty : -qty;
+    batch = [
+      env.DB.prepare("UPDATE products SET stock_qty=stock_qty+?1, updated_at=unixepoch() WHERE id=?2 AND stock_qty+?1>=0").bind(delta, id),
+      env.DB.prepare(`INSERT INTO inventory_movements (id,product_id,type,qty_change,prev_stock,new_stock,reason,reference,notes,admin,idempotency_key)
+                      SELECT ?1,?2,?3,?4,stock_qty-?4,stock_qty,?5,?6,?7,?8,?9 FROM products WHERE id=?2 AND changes()=1`)
+        .bind(crypto.randomUUID(), id, type, delta, reason, reference, notes, actor, key),
+    ];
+  }
+  let res;
+  try { res = await env.DB.batch(batch); } catch { return fail(409, "This adjustment was already recorded"); }
+  if (res[0].meta.changes !== 1) {
+    const now_ = await env.DB.prepare("SELECT stock_qty FROM products WHERE id=?").bind(id).first();
+    return fail(409, type === "out" ? `Cannot remove ${qty}: only ${now_.stock_qty} in stock` : `Stock changed to ${now_.stock_qty}. Review and try again.`);
+  }
+  return json(await getProduct(id, env));
+}
+
+async function setActive(id, body, actor, env) {
+  if (typeof body.active !== "boolean") return fail(400, "active must be true or false");
+  const r = await env.DB.batch([
+    env.DB.prepare("UPDATE products SET active=?, updated_at=unixepoch() WHERE id=?").bind(body.active ? 1 : 0, id),
+    env.DB.prepare("INSERT INTO audit_log (id,actor,action,detail) SELECT ?,?,?,? WHERE changes()=1")
+      .bind(crypto.randomUUID(), actor, body.active ? "product_activate" : "product_deactivate", JSON.stringify({ id })),
+  ]);
+  if (r[0].meta.changes !== 1) return fail(404, "Product not found");
+  return json(await getProduct(id, env));
+}
+
 // ── Router ────────────────────────────────────────────────────────────
 const PUBLIC_ASSETS = { "/style.css": "/style.css", "/login.js": "/login.js" };
 
@@ -255,7 +473,7 @@ export default {
       if (!asset) {
         const user = await session(request, env);
         if (path === "/") asset = user ? "/app.html" : "/login.html";
-        else if (path === "/app.js" && user) asset = "/app.js";
+        else if ((path === "/app.js" || path === "/products.js") && user) asset = path;
         else return new Response("Not found", { status: 404, headers: SEC_HEADERS });
       }
       const res = await env.ASSETS.fetch(new Request(new URL(asset, url), { method: "GET" }));
@@ -302,6 +520,17 @@ export default {
         }
         if (m[2] === "/cash-received" && method === "POST") return await cashReceived(id, body, actor, env);
         if (m[2] === "/fulfilment" && method === "POST") return await setFulfilment(id, body, actor, env);
+      }
+      if (method === "GET" && path === "/api/products") return await listProducts(url.searchParams, env);
+      if (method === "GET" && path === "/api/products/summary") return await productSummary(env);
+      if (method === "POST" && path === "/api/products") return await createProduct(body, actor, env);
+      const pm = path.match(/^\/api\/products\/([a-z0-9][a-z0-9-]{0,63})(\/stock|\/active)?$/);
+      if (pm) {
+        const pid = pm[1];
+        if (!pm[2] && method === "GET") { const p = await getProduct(pid, env); return p ? json(p) : fail(404, "Product not found"); }
+        if (!pm[2] && method === "POST") return await updateProduct(pid, body, actor, env);
+        if (pm[2] === "/stock" && method === "POST") return await adjustStock(pid, body, actor, env);
+        if (pm[2] === "/active" && method === "POST") return await setActive(pid, body, actor, env);
       }
       return fail(404, "Not found");
     } catch (e) {

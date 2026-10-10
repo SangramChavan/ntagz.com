@@ -34,3 +34,21 @@ dl { display:grid; grid-template-columns:110px 1fr; gap:6px 12px; margin:12px 0;
 @media (prefers-reduced-motion: reduce) { * { transition:none !important; animation:none !important; } }
 .h0 { margin:0; font-size:20px; } .accent { color:var(--accent); }
 header b { white-space:nowrap; } @media (max-width:520px) { #who { display:none; } }
+nav { display:flex; gap:4px; } nav a { padding:8px 14px; border-radius:99px; color:var(--ink2); text-decoration:none; font-weight:600; } nav a[aria-current=page] { background:var(--ink); color:#fff; }
+[hidden] { display:none !important; }
+.tiles { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin-bottom:12px; }
+.tile { background:#fff; border:1px solid var(--line); border-radius:14px; padding:12px 14px; } .tile b { display:block; font-size:22px; letter-spacing:-.02em; } .tile span { color:var(--ink2); font-size:13px; }
+.pfilters { grid-template-columns:1fr 1fr; }
+.thumb { width:44px; height:44px; border-radius:10px; object-fit:contain; background:var(--soft); border:1px solid var(--line); }
+.card .top { display:flex; gap:12px; align-items:center; } .card .grow { flex:1; min-width:0; }
+.rowact { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; } .rowact .btn { min-height:40px; padding:0 14px; }
+.pill.low { background:#fff1e0; color:var(--warn); } .pill.out { background:#fdeaea; color:var(--bad); } .pill.in { background:#e7f6ec; color:var(--ok); } .pill.off { background:var(--soft); color:var(--ink2); }
+.ptable { display:none; } .ptable td { vertical-align:middle; }
+.form { display:grid; gap:12px; margin-top:12px; } .form .two { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.field label { font-weight:600; font-size:13px; } .field .err { color:var(--bad); font-size:13px; min-height:1em; } .field textarea { min-height:80px; padding:10px 12px; border:1px solid var(--line); border-radius:12px; font:inherit; width:100%; }
+.field.bad input, .field.bad select, .field.bad textarea { border-color:var(--bad); }
+.preview { padding:10px 12px; background:var(--soft); border-radius:12px; font-weight:600; }
+.hist { width:100%; border-collapse:collapse; display:table; border:0; font-size:13px; } .hist th, .hist td { padding:6px 4px; }
+@media (min-width:900px) { .tiles { grid-template-columns:repeat(4,1fr); } .pfilters { grid-template-columns:2fr 1fr 1fr 1fr 1fr auto; } .ptable { display:table; } #plist { display:none; } }
+header .btn { white-space:nowrap; min-height:40px; padding:0 12px; }
+@media (max-width:520px) { header { gap:6px; padding:10px 12px; } nav a { padding:8px 10px; } header b span { display:none; } }

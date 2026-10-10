@@ -11,7 +11,7 @@ Separate Worker (`ntagz-admin`) for `admin.ntagz.com`. The public site (GitHub P
     npx wrangler dev --local --port 8799     # then: node test/smoke.mjs
 
 ## Production deploy (needs explicit go-ahead; steps are ordered)
-1. `npx wrangler d1 migrations apply ntagz-db --remote`  (additive; see migrations/0001_admin.sql)
+1. `npx wrangler d1 migrations apply ntagz-db --remote`  (additive: 0001_admin.sql, 0002_products.sql — the latter seeds 17 products from js/catalog.js)
 2. `npx wrangler secret put ADMIN_EMAILS` (comma-separated allowlist) and `npx wrangler secret put RESEND_API_KEY`
 3. `npx wrangler deploy`  (do NOT set DEV_OTP_ECHO)
 4. Add DNS + custom domain `admin.ntagz.com` (uncomment `routes` in wrangler.jsonc), then redeploy.
@@ -20,3 +20,17 @@ Separate Worker (`ntagz-admin`) for `admin.ntagz.com`. The public site (GitHub P
 - Code: `npx wrangler rollback` (or deploy the previous commit). Removing the custom domain takes the admin offline instantly.
 - DB: migration 0001 only adds columns/tables/trigger. To undo: `DROP TRIGGER trg_orders_payment_defaults;` and drop the
   four new tables; the new `orders` columns are harmless and can stay.
+
+## Products & inventory
+Endpoints (all need an admin session): `GET /api/products` (q, category, stock=in|low|out, active, sort, dir, page),
+`GET /api/products/summary`, `GET /api/products/:id` (with last 50 stock movements), `POST /api/products` (create),
+`POST /api/products/:id` (edit details/price; cannot change stock), `POST /api/products/:id/stock` (in | out | set),
+`POST /api/products/:id/active`. There is no delete: products are archived (inactive) so orders and history stay valid.
+Tests: `node test/smoke.mjs` then `node test/products.mjs` against a fresh local DB (see Local development).
+
+### Storefront sync (not done yet — needs approval)
+The public storefront and checkout still read prices from `js/catalog.js` (and `functions/api/[[path]].js` for member
+pricing). Admin price/active/stock edits are therefore stored in D1 only; they do **not** change what customers see or are
+charged, and checkout does not decrement stock. Closing that gap means changing public/checkout code (e.g. a read-only
+public endpoint on the payments Worker plus server-side price checks), which should be a separate, reviewed change.
+Seeded stock is 0 for every product: do a first "Set actual stock" count.

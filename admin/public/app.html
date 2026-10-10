@@ -2,8 +2,9 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow"><title>NTAGZ Admin — Orders</title><link rel="stylesheet" href="/style.css"></head>
 <body>
-<header><b>NTAGZ <span>Admin</span></b><span><span id="who" class="sub"></span> <button class="btn" id="out" type="button">Sign out</button></span></header>
-<main>
+<header><b>NTAGZ <span>Admin</span></b>
+<nav aria-label="Sections"><a href="#/orders" id="nav-orders">Orders</a><a href="#/products" id="nav-products">Products</a></nav><span><span id="who" class="sub"></span> <button class="btn" id="out" type="button">Sign out</button></span></header>
+<main id="view-orders">
   <form class="filters" id="filters" role="search">
     <input class="wide" id="q" type="search" placeholder="Search order ID, name, phone, email" aria-label="Search orders">
     <select id="payment_status" aria-label="Payment status"><option value="">Any payment</option><option value="paid">Paid</option><option value="unpaid">Unpaid</option></select>
@@ -16,6 +17,23 @@
   <table><thead><tr><th class="sort" data-sort="created_at">Date</th><th>Order</th><th class="sort" data-sort="name">Customer</th><th class="sort" data-sort="total">Total</th><th>Payment</th><th>Fulfilment</th></tr></thead><tbody id="rows"></tbody></table>
   <div class="pager"><button class="btn" id="prev" type="button">Previous</button><span id="pageInfo"></span><button class="btn" id="next" type="button">Next</button></div>
 </main>
+<main id="view-products" hidden>
+  <div class="tiles" id="ptiles" aria-live="polite"></div>
+  <form class="filters pfilters" id="pfilters" role="search">
+    <input class="wide" id="pq" type="search" placeholder="Search name, SKU or product code" aria-label="Search products">
+    <select id="pcat" aria-label="Category"><option value="">All categories</option></select>
+    <select id="pstock" aria-label="Stock status"><option value="">Any stock</option><option value="in">In stock</option><option value="low">Low stock</option><option value="out">Out of stock</option></select>
+    <select id="pactive" aria-label="Active status"><option value="">Active + inactive</option><option value="1">Active</option><option value="0">Inactive</option></select>
+    <select id="psort" aria-label="Sort"><option value="updated:desc">Recently updated</option><option value="name:asc">Name A–Z</option><option value="price:desc">Price high–low</option><option value="price:asc">Price low–high</option><option value="stock:asc">Stock low–high</option><option value="stock:desc">Stock high–low</option></select>
+    <button class="btn primary" id="padd" type="button">+ Add Product</button>
+  </form>
+  <div class="list" id="plist" aria-live="polite"></div>
+  <table class="ptable"><thead><tr><th></th><th>Product</th><th>SKU</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th>Updated</th><th>Actions</th></tr></thead><tbody id="prows"></tbody></table>
+  <div class="pager"><button class="btn" id="pprev" type="button">Previous</button><span id="ppageInfo"></span><button class="btn" id="pnext" type="button">Next</button></div>
+</main>
+<dialog id="pdlg" aria-labelledby="pdtitle"></dialog>
+<dialog id="sdlg" aria-labelledby="sdtitle"></dialog>
+<dialog id="kdlg" aria-labelledby="kdtitle"></dialog>
 <dialog id="dlg" aria-labelledby="dtitle"></dialog>
 <dialog id="cdlg" aria-labelledby="ctitle"></dialog>
-<script src="/app.js"></script></body></html>
+<script src="/app.js"></script><script src="/products.js"></script></body></html>
