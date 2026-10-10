@@ -11,5 +11,4 @@ exclude:
   - package.json
   - package-lock.json
   - opencode.jsonc
-  - SHEET-TEMPLATE.md
   - .dev.vars.example
