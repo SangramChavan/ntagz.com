@@ -168,6 +168,8 @@ async function openOrder(id, preloaded) {
       ...preorderSection(o),
       el("h3", { class: "sec" }, "Shipments"), ...(shipCards.length ? shipCards : [el("p", { class: "sub" }, "Nothing shipped yet.")]),
       el("h3", { class: "sec" }, "Order journey"), el("ol", { class: "timeline" }, tl),
+      el("h3", { class: "sec" }, "Customer emails"),
+      ...(o.notifications.length ? o.notifications.map((n) => el("div", { class: "sub" }, `${when(n.created_at)} · ${n.subject || n.event} · ${n.status}${n.detail ? " (" + n.detail + ")" : ""}`)) : [el("p", { class: "sub" }, o.email ? "Nothing sent yet. Emails go out when the order is confirmed, packed, shipped, out for delivery or delivered." : "No customer email on this order, so no emails are sent.")]),
       el("h3", { class: "sec" }, "Customer"), el("dl", {}, ...row("Name", o.name || "—"), ...row("Phone", o.phone || "—"), ...row("Email", o.email || "—"), ...row("Ship to", [o.address, o.state, o.pincode].filter(Boolean).join(", ") || "—"), ...row("GSTIN", o.gstin || "—")),
       el("h3", { class: "sec" }, "Items & payment"), el("table", { class: "items" }, el("tbody", {}, items)),
       el("dl", {}, ...row("Subtotal", inr(o.subtotal)), ...row("GST", inr(o.gst)), ...row("Total", inr(o.total)), ...row("Paid", inr(o.paid_paise)), ...row("Outstanding", inr(o.outstanding_paise)), ...row("Method", methodTxt(o)), ...row("Order ID", o.id), ...row("Transaction", o.txn_id || "—"), ...row("Placed", when(o.created_at))),

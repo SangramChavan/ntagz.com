@@ -3,6 +3,7 @@
 // admin allowlist on each request. All SQL is parameterised. No CORS headers: same-origin only.
 
 import PRICING from "../../functions/lib/pricing.js"; // the same engine the payments Worker charges with
+import { notify, STATUS_EVENT } from "./notify.js";
 
 const SESSION_TTL = 12 * 3600;
 const OTP_TTL = 600;
@@ -224,7 +225,8 @@ async function getOrder(id, env) {
     ...events.results.map((e) => ({ kind: e.kind, status: e.status, label: e.kind === "dispatch" ? "Expected dispatch" : STATUS_LABEL[e.status] || e.kind, note: e.note, public_note: e.public_note, customer_visible: !!e.customer_visible, actor: e.actor, at: e.created_at })),
   ].sort((x, y) => x.at - y.at);
   const lines = await env.DB.prepare("SELECT l.product_id,p.name,l.ready_qty,l.pre_qty FROM order_stock_lines l LEFT JOIN products p ON p.id=l.product_id WHERE l.order_id=? ORDER BY l.rowid").bind(id).all();
-  return { ...shape(o), stock_lines: lines.results.map((l) => ({ ...l, name: l.name || l.product_id })), ...(tok ? { track_url: `https://ntagz.com/track.html?o=${id}&t=${tok}` } : {}), is_preorder: !!o.is_preorder, payments: pays.results, shipments, timeline, actions: allowedActions(o.status, !!o.is_preorder), status_label: STATUS_LABEL[o.status] || o.status };
+  const notifications = (await env.DB.prepare("SELECT event,status,detail,subject,created_at FROM notifications WHERE order_id=? ORDER BY created_at, rowid").bind(id).all()).results;
+  return { ...shape(o), notifications, stock_lines: lines.results.map((l) => ({ ...l, name: l.name || l.product_id })), ...(tok ? { track_url: `https://ntagz.com/track.html?o=${id}&t=${tok}` } : {}), is_preorder: !!o.is_preorder, payments: pays.results, shipments, timeline, actions: allowedActions(o.status, !!o.is_preorder), status_label: STATUS_LABEL[o.status] || o.status };
 }
 
 const MANUAL_ORDER_METHODS = ["cash", "cod", "upi", "bank", "whatsapp"];
@@ -270,6 +272,7 @@ async function paymentReceived(id, body, actor, env) {
       .bind(crypto.randomUUID(), actor, id, JSON.stringify({ amount_paise: confirmed, method, reference }), pid),
   ]).catch(() => null);
   if (!res || res[0].meta.changes !== 1) return fail(409, "Payment was not recorded. It may already have been confirmed.");
+  await notify(env, id, "payment_confirmed", pid);
   return json(await getOrder(id, env));
 }
 
@@ -338,6 +341,7 @@ async function changeStatus(id, body, actor, env) {
     res = await env.DB.batch(stmts);
   } catch { return json(await getOrder(id, env)); } // unique-key race: another identical request won
   if (res[0].meta.changes !== 1) return fail(409, "The order changed while you were working. Refresh and try again.");
+  if (STATUS_EVENT[to]) await notify(env, id, STATUS_EVENT[to], eid, { note: pub });
   return json(await getOrder(id, env));
 }
 
@@ -367,6 +371,7 @@ async function setDispatch(id, body, actor, env) {
     ]);
   } catch { return json(await getOrder(id, env)); }
   if (res[0].meta.changes !== 1) return fail(409, "The order changed while you were working. Refresh and try again.");
+  await notify(env, id, "dispatch_updated", eid, { note: pub });
   return json(await getOrder(id, env));
 }
 
@@ -398,6 +403,7 @@ async function shipOrder(id, body, actor, env) {
     ]);
   } catch { return json(await getOrder(id, env)); }
   if (res[0].meta.changes !== 1) return fail(409, "The order changed while you were working. Refresh and try again.");
+  await notify(env, id, "shipped", eid, { courier: f.courier, awb: f.awb, tracking_url: f.tracking_url, est_delivery: f.est_delivery, note: pub });
   return json(await getOrder(id, env));
 }
 

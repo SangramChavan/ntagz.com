@@ -13,7 +13,8 @@ fresh() {
   (npx -y wrangler@4 dev --local --port $PORT >/tmp/ntagz-admin-dev.log 2>&1 &)
   for _ in $(seq 1 40); do curl -s http://localhost:$PORT/api/orders | grep -q "Not signed in" && break; sleep 2; done
 }
-printf 'ADMIN_EMAILS=admin@example.test\nDEV_OTP_ECHO=1\n' > .dev.vars
+printf 'ADMIN_EMAILS=admin@example.test\nDEV_OTP_ECHO=1\nDEV_NOTIFY_ECHO=1\n' > .dev.vars
 fresh; node test/smoke.mjs; node test/products.mjs; node test/payments-manual.mjs
 fresh; node test/fulfilment.mjs
+fresh; node test/notifications.mjs
 pkill -f "wrangler.*dev" 2>/dev/null || true; pkill -f workerd 2>/dev/null || true
