@@ -202,6 +202,7 @@ function historyCard() {
     if (e.action === "pricing_publish") return [
       ...Object.entries(e.detail.settings || {}).map(([k, c]) => `${(SET[k] || [k])[0]}: ${c.from == null ? "—" : (SET[k] ? SET[k][1](c.from) : c.from)} → ${SET[k] ? SET[k][1](c.to) : c.to}`),
       ...Object.entries(e.detail.products || {}).map(([id, c]) => `${names[id] || id} member: ${fmtPct(c.from)} → ${fmtPct(c.to)}`)].join(" · ");
+    if (e.action === "bulk_price") return `${e.detail.direction === "increase" ? "Increased" : "Decreased"} regular prices by ${e.detail.percent}%: ${e.detail.count} product${e.detail.count === 1 ? "" : "s"}${e.detail.scope === "active" ? " (active only)" : ""}`;
     const pc = (e.detail.changed || {}).price_paise;
     if (pc) return `${names[e.detail.id] || e.detail.id} regular price: ${inr(pc.from)} → ${inr(pc.to)}`;
     return `${names[e.detail.id] || e.detail.id || "Product"} created`;

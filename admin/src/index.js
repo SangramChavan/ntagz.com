@@ -701,6 +701,85 @@ async function updateProduct(id, body, actor, env) {
   return json(await getProduct(id, env));
 }
 
+// ── Bulk price change ────────────────────────────────────────────────
+// Adjusts ONLY products.price_paise (the ex-GST selling price). MRP, cost, stock, member % and everything else are untouched. Member
+// pricing is a percentage taken off this price at checkout, so it follows the new price automatically (nothing compounds), and past
+// orders keep the amounts they were created with. Preview and apply share planBulk(); apply refuses a stale preview, writes in one
+// atomic batch, and one audit_log row (id = the client's operation id) makes a repeated submit impossible.
+function parseBulk(b) {
+  const errors = {};
+  const direction = b && (b.direction === "increase" || b.direction === "decrease") ? b.direction : null;
+  if (!direction) errors.direction = "Choose increase or decrease";
+  const n = b && typeof b.percent === "string" && b.percent.trim() !== "" ? Number(b.percent) : b && b.percent;
+  let bp = null; // percentage in basis points (1% = 100): integer maths, no floating-point drift
+  if (typeof n === "number" && Number.isFinite(n) && n > 0 && Math.abs(Math.round(n * 100) - n * 100) < 1e-6) bp = Math.round(n * 100);
+  if (bp === null) errors.percent = "Enter a percentage above 0 with at most 2 decimals";
+  else if (direction === "increase" && bp > 10000) errors.percent = "An increase can be at most 100%";
+  else if (direction === "decrease" && bp > 9999) errors.percent = "A decrease must be less than 100%";
+  const scope = b && b.scope === "active" ? "active" : "all";
+  return { errors, direction, bp, scope };
+}
+
+async function bulkRows(env, scope) {
+  const { results } = await env.DB.prepare(
+    `SELECT id,sku,name,price_paise,mrp_paise,cost_paise,active FROM products ${scope === "active" ? "WHERE active=1" : ""} ORDER BY name COLLATE NOCASE, id`).all();
+  return results;
+}
+
+function planBulk(rows, direction, bp) {
+  const factor = 10000 + (direction === "increase" ? bp : -bp), changes = [], skipped = [];
+  for (const r of rows) {
+    const from = r.price_paise, to = Math.floor((from * factor + 5000) / 10000); // round half up to the paisa
+    const base = { id: r.id, sku: r.sku, name: r.name, from };
+    if (from <= 0) skipped.push({ ...base, reason: "Price is ₹0, so there is nothing to adjust" });
+    else if (to < 1) skipped.push({ ...base, reason: "The new price would be ₹0" });
+    else if (to === from) skipped.push({ ...base, reason: "No change after rounding to the paisa" });
+    else if (r.mrp_paise !== null && r.mrp_paise !== undefined && to > r.mrp_paise) skipped.push({ ...base, reason: `The new price would exceed the MRP (₹${(r.mrp_paise / 100).toFixed(2)}). Raise the MRP first` });
+    else changes.push({ ...base, to, diff: to - from, below_cost: r.cost_paise !== null && r.cost_paise !== undefined && to < r.cost_paise });
+  }
+  return { changes, skipped };
+}
+
+async function bulkVersion(rows, direction, bp, scope) {
+  return sha256(JSON.stringify([direction, bp, scope, rows.map((r) => [r.id, r.price_paise, r.mrp_paise, r.active])]));
+}
+
+async function previewBulkPrice(body, env) {
+  const { errors, direction, bp, scope } = parseBulk(body);
+  if (Object.keys(errors).length) return json({ error: "Please fix the highlighted values", fields: errors }, 400);
+  const rows = await bulkRows(env, scope), plan = planBulk(rows, direction, bp);
+  return json({ direction, percent: bp / 100, scope, total_products: rows.length, count: plan.changes.length, changes: plan.changes, skipped: plan.skipped, version: await bulkVersion(rows, direction, bp, scope) });
+}
+
+async function applyBulkPrice(body, actor, env) {
+  const { errors, direction, bp, scope } = parseBulk(body);
+  if (Object.keys(errors).length) return json({ error: "Please fix the highlighted values", fields: errors }, 400);
+  if (body.confirm !== true) return fail(400, "Please confirm the update");
+  const opId = typeof body.op_id === "string" && /^[0-9a-f-]{36}$/i.test(body.op_id) ? body.op_id.toLowerCase() : null;
+  if (!opId) return fail(400, "Missing operation id");
+  if (await env.DB.prepare("SELECT 1 x FROM audit_log WHERE id=?").bind(opId).first()) return fail(409, "This update was already applied");
+  const rows = await bulkRows(env, scope);
+  if (body.version !== await bulkVersion(rows, direction, bp, scope)) return fail(409, "Prices changed since you previewed. Preview again and review the new numbers.");
+  const { changes, skipped } = planBulk(rows, direction, bp);
+  if (!changes.length) return fail(400, "No prices would change");
+  const map = JSON.stringify(Object.fromEntries(changes.map((c) => [c.id, { f: c.from, t: c.to }])));
+  const detail = JSON.stringify({ direction, percent: bp / 100, scope, count: changes.length, skipped: skipped.length, changes: changes.map((c) => ({ id: c.id, from: c.from, to: c.to })) });
+  try {
+    const out = await env.DB.batch([
+      // Guard + audit in one row: if ANY product's price is no longer what the preview showed, actor becomes NULL (NOT NULL), the
+      // whole batch rolls back and nothing is written. The same row's primary key (op id) rejects a second submit.
+      env.DB.prepare(`INSERT INTO audit_log (id,actor,action,detail) VALUES (?1, CASE WHEN (SELECT count(*) FROM products WHERE json_extract(?3, '$."' || id || '".f') = price_paise) = ?4 THEN ?2 ELSE NULL END, 'bulk_price', ?5)`)
+        .bind(opId, actor, map, changes.length, detail),
+      env.DB.prepare(`UPDATE products SET price_paise = json_extract(?1, '$."' || id || '".t'), updated_at = unixepoch() WHERE json_extract(?1, '$."' || id || '".f') = price_paise`).bind(map),
+    ]);
+    if (out[1].meta.changes !== changes.length) throw new Error("unexpected row count");
+  } catch (e) {
+    if (await env.DB.prepare("SELECT 1 x FROM audit_log WHERE id=?").bind(opId).first()) return fail(409, "This update was already applied");
+    return fail(409, "Nothing was updated (a price may have changed, or the database was unavailable). Preview again and retry.");
+  }
+  return json({ ok: true, updated: changes.length, skipped: skipped.length, op_id: opId });
+}
+
 // Stock movements. In/out are relative (safe under concurrency); "set" is optimistic: it only applies if the
 // stock is still what the admin saw. Update + movement row are one atomic batch; negative stock is impossible.
 async function adjustStock(id, body, actor, env) {
@@ -832,7 +911,7 @@ async function getPricing(env) {
   const state = await pricingState(env);
   const ev = await evaluate(env, { cfg: state.cfg, rows: state.rows });
   const { results: history } = await env.DB.prepare(
-    `SELECT actor,action,detail,created_at FROM audit_log WHERE action='pricing_publish' OR (action IN ('product_update','product_create') AND detail LIKE '%price_paise%')
+    `SELECT actor,action,detail,created_at FROM audit_log WHERE action IN ('pricing_publish','bulk_price') OR (action IN ('product_update','product_create') AND detail LIKE '%price_paise%')
      ORDER BY created_at DESC, rowid DESC LIMIT 30`).all();
   return json({ ...ev, version: state.version, history: history.map((h) => ({ ...h, detail: JSON.parse(h.detail || "{}") })) });
 }
@@ -958,6 +1037,8 @@ export default {
       if (method === "GET" && path === "/api/products") return await listProducts(url.searchParams, env);
       if (method === "GET" && path === "/api/products/summary") return await productSummary(env);
       if (method === "POST" && path === "/api/products") return await createProduct(body, actor, env);
+      if (method === "POST" && path === "/api/products/bulk-price/preview") return await previewBulkPrice(body, env);
+      if (method === "POST" && path === "/api/products/bulk-price/apply") return await applyBulkPrice(body, actor, env);
       const pm = path.match(/^\/api\/products\/([a-z0-9][a-z0-9-]{0,63})(\/stock|\/active|\/duplicate|\/delete)?$/);
       if (pm) {
         const pid = pm[1];

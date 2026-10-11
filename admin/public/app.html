@@ -23,7 +23,7 @@
 <main id="view-products" hidden>
   <div class="pv-head">
     <div><h1 class="pv-title">Products</h1><p class="sub">Manage your product catalogue, pricing, and stock.</p></div>
-    <button class="btn primary" id="padd" type="button">+ Add Product</button>
+    <div class="pv-actions"><button class="btn" id="pbulk" type="button">Bulk price update</button><button class="btn primary" id="padd" type="button">+ Add Product</button></div>
   </div>
   <div class="stats" id="ptiles" aria-live="polite"></div>
   <form class="pfilters" id="pfilters" role="search">
@@ -48,6 +48,7 @@
 <div class="draftbar" id="draftbar" hidden><span id="draftinfo"></span><span><button class="btn link" id="draftdiscard" type="button">Discard draft</button> <button class="btn primary" id="draftpublish" type="button">Review &amp; publish</button></span></div>
 <div id="toast" role="status" aria-live="polite" hidden></div>
 <dialog id="ppanel" class="panel" aria-labelledby="pptitle"></dialog>
+<dialog id="bpanel" class="panel" aria-labelledby="bptitle"></dialog>
 <dialog id="sdlg" aria-labelledby="sdtitle"></dialog>
 <dialog id="kdlg" aria-labelledby="kdtitle"></dialog>
 <dialog id="opanel" class="panel" aria-labelledby="optitle"></dialog>

@@ -340,3 +340,94 @@ function route() {
 }
 document.querySelectorAll("nav a").forEach((a) => a.addEventListener("click", () => setTimeout(route, 0)));
 window.addEventListener("hashchange", route); window.addEventListener("DOMContentLoaded", route);
+
+
+// ── bulk price update ────────────────────────────────────────────────
+// Adjusts only the selling price (ex-GST). Preview first; the server recomputes everything on confirm, refuses a stale preview and
+// applies all-or-nothing. One operation id per preview, so a double click or retry can never apply the same update twice.
+const BP = { data: null, op: null, busy: false };
+const csvCell = (v) => { const t = String(v ?? ""); return /[",\n]/.test(t) || /^[=+\-@]/.test(t) ? '"' + (/^[=+\-@]/.test(t) ? "'" : "") + t.replace(/"/g, '""') + '"' : t; };
+const bpVerb = (d) => (d.direction === "increase" ? "Increase" : "Decrease");
+
+function bpClose() { const d = $("bpanel"); if (d.open) d.close(); }
+function bpReset() { BP.data = null; BP.op = null; const o = $("bpout"); if (o) o.replaceChildren(); bpActions(); }
+
+function openBulk() {
+  BP.data = null; BP.op = null; BP.busy = false;
+  const form = el("div", { class: "form" },
+    el("p", { class: "sub" }, "Changes every product’s selling price (before GST) by a percentage. MRP, cost, stock and member discounts are not edited, and past orders keep their prices."),
+    el("div", { class: "field" }, el("label", { for: "bpdir" }, "Adjustment"), el("select", { id: "bpdir" }, el("option", { value: "increase" }, "Increase prices"), el("option", { value: "decrease" }, "Decrease prices"))),
+    el("div", { class: "field" }, el("label", { for: "bppct" }, "Percentage"), el("input", { id: "bppct", inputmode: "decimal", placeholder: "e.g. 10", autocomplete: "off" }), el("div", { class: "hint" }, "Up to 2 decimals. Increase up to 100%, decrease below 100%.")),
+    el("div", { class: "field" }, el("label", { for: "bpscope" }, "Apply to"), el("select", { id: "bpscope" }, el("option", { value: "all" }, "All products"), el("option", { value: "active" }, "Active products only"))),
+    el("div", { id: "bpout", "aria-live": "polite" }));
+  $("bpanel").replaceChildren(el("div", { class: "panel-head" }, el("h2", { id: "bptitle", class: "h0" }, "Bulk price update"), el("button", { class: "btn small", type: "button", "aria-label": "Close", onclick: bpClose }, "✕")), form, el("div", { class: "panel-actions", id: "bpactions" }));
+  ["bpdir", "bppct", "bpscope"].forEach((id) => $(id).addEventListener("input", bpReset));
+  $("bppct").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); bpPreview(); } });
+  bpActions(); $("bpanel").showModal(); $("bppct").focus();
+}
+
+function bpActions() {
+  const a = $("bpactions"); if (!a) return;
+  const d = BP.data, busy = BP.busy;
+  const btn = (label, cls, on, off) => { const b = el("button", { class: "btn " + cls, type: "button", onclick: on }, label); if (off) b.disabled = true; return b; };
+  a.replaceChildren(
+    d ? btn(busy ? "Updating…" : "Confirm update", "primary", bpConfirm, busy || d.count === 0) : btn("Preview changes", "primary", bpPreview, busy),
+    d && d.count ? btn("Download CSV", "", bpCsv, busy) : "",
+    btn("Cancel", "", bpClose, busy));
+}
+
+async function bpPreview() {
+  if (BP.busy) return;
+  const out = $("bpout"), pct = $("bppct").value.trim(), n = Number(pct);
+  if (pct === "" || !Number.isFinite(n) || n <= 0) { out.replaceChildren(el("p", { class: "msg" }, "Enter a percentage above 0.")); $("bppct").focus(); return; }
+  BP.busy = true; bpActions(); out.replaceChildren(el("p", { class: "sub" }, "Calculating…"));
+  try {
+    const d = await api("/api/products/bulk-price/preview", { direction: $("bpdir").value, percent: pct, scope: $("bpscope").value });
+    BP.data = d; BP.op = crypto.randomUUID(); BP.busy = false; bpRender();
+  } catch (e) { BP.busy = false; out.replaceChildren(el("p", { class: "msg" }, e.message)); }
+  bpActions();
+}
+
+function bpRender(filter = "") {
+  const d = BP.data, out = $("bpout"), f = filter.trim().toLowerCase();
+  if (!d.count) { out.replaceChildren(el("p", { class: "sub bp-sum" }, d.total_products ? "No prices would change." : "No products to update."), bpSkipped(d)); return; }
+  const rows = d.changes.filter((c) => !f || c.name.toLowerCase().includes(f) || c.sku.toLowerCase().includes(f)), shown = rows.slice(0, 200);
+  const search = el("input", { type: "search", placeholder: "Search the preview", "aria-label": "Search the preview", value: filter, autocomplete: "off" });
+  search.addEventListener("input", () => { bpRender(search.value); const s = out.querySelector("input[type=search]"); s.focus(); s.setSelectionRange(s.value.length, s.value.length); });
+  out.replaceChildren(
+    el("p", { class: "bp-sum" }, `${bpVerb(d)} ${d.count} product${d.count === 1 ? "" : "s"} by ${d.percent}%`),
+    el("p", { class: "bp-meta" }, `${d.total_products} in scope${d.skipped.length ? ` · ${d.skipped.length} will not change` : ""} · prices are before GST`),
+    search,
+    el("div", { class: "bp-wrap" }, el("table", { class: "bp-table" },
+      el("thead", {}, el("tr", {}, el("th", {}, "Product"), el("th", {}, "Current"), el("th", {}, "New"), el("th", {}, "Change"))),
+      el("tbody", {}, ...shown.map((c) => el("tr", {}, el("td", {}, c.name, el("span", { class: "bp-note" }, c.sku), c.below_cost ? el("span", { class: "bp-note" }, "New price is below cost") : ""),
+        el("td", {}, inr(c.from)), el("td", {}, inr(c.to)), el("td", { class: c.diff > 0 ? "bp-up" : "bp-down" }, (c.diff > 0 ? "+" : "−") + inr(Math.abs(c.diff)))))))),
+    rows.length > shown.length ? el("p", { class: "bp-meta" }, `Showing ${shown.length} of ${rows.length}. Search to narrow. The update covers all ${d.count}.`) : (f && !rows.length ? el("p", { class: "bp-meta" }, "No match in this preview.") : ""),
+    bpSkipped(d));
+}
+function bpSkipped(d) {
+  return d.skipped.length ? el("details", { class: "bp-skip" }, el("summary", {}, `${d.skipped.length} product${d.skipped.length === 1 ? "" : "s"} will not change`), el("ul", {}, ...d.skipped.map((x) => el("li", {}, `${x.name} (${inr(x.from)}): ${x.reason}`)))) : "";
+}
+
+function bpCsv() {
+  const d = BP.data; if (!d) return;
+  const lines = [["SKU", "Product", "Current (INR)", "New (INR)", "Change (INR)", "Note"], ...d.changes.map((c) => [c.sku, c.name, rupees(c.from), rupees(c.to), rupees(c.diff), c.below_cost ? "Below cost" : ""]), ...d.skipped.map((x) => [x.sku, x.name, rupees(x.from), "", "", "Not changed: " + x.reason])];
+  const a = el("a", { href: URL.createObjectURL(new Blob([lines.map((r) => r.map(csvCell).join(",")).join("\n")], { type: "text/csv" })), download: `price-${d.direction}-${d.percent}pct.csv` });
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+async function bpConfirm() {
+  const d = BP.data; if (!d || BP.busy || !d.count) return;
+  const ok = await ask("Confirm price update", [`${bpVerb(d)} the prices of ${d.count} product${d.count === 1 ? "" : "s"} by ${d.percent}%? This will update their current selling prices.`, "New orders use these prices right away. Existing orders keep theirs."], `${bpVerb(d)} prices`);
+  if (!ok || BP.busy) return;
+  BP.busy = true; bpActions();
+  try {
+    const r = await api("/api/products/bulk-price/apply", { direction: d.direction, percent: String(d.percent), scope: d.scope, version: d.version, op_id: BP.op, confirm: true });
+    BP.busy = false; bpClose(); toast(`Updated ${r.updated} product${r.updated === 1 ? "" : "s"}.`); refresh();
+  } catch (e) {
+    BP.busy = false;
+    toast(e.message, true);
+    if (/already applied/i.test(e.message)) { bpClose(); refresh(); } else bpReset();   // otherwise: preview again before retrying
+  }
+}
+$("pbulk").onclick = openBulk;

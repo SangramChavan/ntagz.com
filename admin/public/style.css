@@ -150,3 +150,14 @@ dialog#sdlg { width:min(760px, calc(100vw - 24px)); }
 @media (min-width:900px) { .pgrid { grid-template-columns:1fr 1fr; } }
 .prtable td.notes, .prow .notes { max-width:none; } .prtable td.notes .pill, .prow .notes .pill { margin:2px 4px 2px 0; white-space:nowrap; }
 @media (max-width:420px) { nav { gap:0; } nav a { padding:8px 7px; font-size:14px; } header .btn { padding:0 8px; } .prow .editrow { flex-wrap:wrap; } }
+
+/* bulk price update */
+.pv-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+.bp-sum { font-weight:600; margin:14px 0 8px; } .bp-meta { color:var(--ink2); font-size:13px; margin:0 0 8px; }
+.bp-wrap { overflow:auto; max-height:44vh; border:1px solid var(--line); border-radius:12px; margin-top:8px; }
+.bp-table { display:table; width:100%; border-collapse:collapse; font-size:13px; } .bp-table th, .bp-table td { padding:8px 10px; text-align:right; border-bottom:1px solid var(--line); white-space:nowrap; }
+.bp-table th:first-child, .bp-table td:first-child { text-align:left; white-space:normal; min-width:140px; } .bp-table thead th { position:sticky; top:0; background:#fff; }
+.bp-up { color:#b33000; } .bp-down { color:#067647; } .bp-note { display:block; font-size:11px; color:#8a6500; }
+.bp-skip { margin:10px 0 0; font-size:13px; } .bp-skip ul { margin:6px 0 0; padding-left:18px; }
+#bpout, .bp-wrap { min-width:0; max-width:100%; } #bpanel .form { overflow-x:hidden; } #bpout input[type=search] { width:100%; min-height:44px; padding:0 12px; border:1px solid var(--line); border-radius:12px; }
+@media (max-width:480px) { .bp-table th, .bp-table td { padding:8px 6px; font-size:12px; } .bp-table th:first-child, .bp-table td:first-child { min-width:96px; } }
