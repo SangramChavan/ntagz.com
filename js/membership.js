@@ -1,6 +1,7 @@
 /* ntagz membership page. Prices come from the live catalogue (js/catalog.js + catalog-live.js); member discount % per
-   product from GET /api/membership/pricing (the same config checkout uses). Everything here is a client-side ESTIMATE:
-   checkout recomputes prices, discounts and membership status on the server. */
+   product from GET /api/membership/pricing (the same settings checkout uses). The calculator shows an instant local estimate,
+   then replaces it with the server's own guest-vs-member prices for the basket (POST /api/quote, compare). Checkout always
+   recomputes prices, discounts and membership status on the server. */
 (function () {
   'use strict';
   var GST = 0.18, DEFAULT_FEE = 999;
@@ -15,6 +16,7 @@
   var pct = {};          // product id -> member discount %
   var pricingLive = false;
   var fee = DEFAULT_FEE;
+  var maxTotal = 30;     // combined bulk + member cap (server setting)
   var rows = [];         // [{id, qty}]
   var user = null, membership = null;
 
@@ -24,6 +26,7 @@
   /* ── calculator maths (mirrors the server: volume tier, then member %, GST on non-inclusive items) ── */
   function line(p, qty, pctOff) {
     var vol = C.discountFor(p, qty);
+    if (vol + pctOff - vol * pctOff / 100 > maxTotal) pctOff = vol >= maxTotal ? 0 : (1 - (100 - maxTotal) / (100 - vol)) * 100; // same cap as checkout
     var base = p.price * qty * (100 - vol) / 100;
     var net = base * (100 - pctOff) / 100;
     var g = p.allInclusive ? 1 : 1 + GST;
@@ -40,11 +43,32 @@
     return { reg: reg, mem: mem };
   }
 
+  /* Server prices for the basket (same engine as checkout). Debounced; a stale or failed answer is ignored. */
+  var srv = { key: '', t: null, timer: null };
+  function basketKey() { return JSON.stringify(rows.filter(function (r) { return r.qty >= C.moqFor(C.byId(r.id)); }).map(function (r) { return [r.id, r.qty]; })); }
+  function askServer() {
+    var key = basketKey(); if (key === srv.key || key === '[]') return;
+    clearTimeout(srv.timer);
+    srv.timer = setTimeout(function () {
+      var items = JSON.parse(key).map(function (x) { return { id: x[0], qty: x[1] }; });
+      fetch('/api/quote', { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: items, state: '', compare: true }) })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+          if (!d || !d.guest || !d.member || basketKey() !== key) return;
+          srv.key = key; srv.t = { reg: d.guest.amount, mem: d.member.amount };
+          if (d.feePaise) fee = Math.round(d.feePaise / 100);
+          renderResult();
+        }).catch(function () { });
+    }, 400);
+  }
+
   function renderResult() {
     var box = $('mResult'); box.textContent = '';
     if (!pricingLive) { box.appendChild(el('p', 'm-fine', 'Member pricing is not available right now, so we can’t estimate savings. Please check back shortly.')); return; }
     if (!rows.length) { box.appendChild(el('p', 'm-fine', 'Add a product to see your savings.')); return; }
-    var t = totals(), saved = t.reg - t.mem, net = saved - fee;
+    var exact = srv.t && srv.key === basketKey();
+    var t = exact ? srv.t : totals(), saved = t.reg - t.mem, net = saved - fee;
+    if (!exact) askServer();
     [['Regular total', inr(t.reg)], ['Member total', inr(t.mem)], ['Product savings', inr(saved)], ['Annual membership', '− ' + inr(fee)]].forEach(function (x) {
       var d = el('div', 'm-line'); d.appendChild(el('span', null, x[0])); d.appendChild(el('b', null, x[1])); box.appendChild(d);
     });
@@ -57,6 +81,7 @@
     else msg = 'These products have no member discount.';
     n.appendChild(el('p', 'm-net-msg', msg));
     box.appendChild(n);
+    box.appendChild(el('p', 'm-fine', exact ? 'Checked with our checkout prices.' : 'Estimate. Checking with our checkout prices…'));
   }
 
   function renderRows() {
@@ -114,7 +139,7 @@
     var pr = fetch('/api/membership/pricing', { credentials: 'omit' }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
     Promise.all([live, pr]).then(function (res) {
       var d = res[1];
-      if (d && d.live && d.products) { pricingLive = true; pct = d.products; fee = Math.round((d.feePaise || DEFAULT_FEE * 100) / 100); }
+      if (d && d.live && d.products) { pricingLive = true; pct = d.products; fee = Math.round((d.feePaise || DEFAULT_FEE * 100) / 100); if (typeof d.maxTotalDiscountPct === 'number') maxTotal = d.maxTotalDiscountPct; }
       rows = pricingLive ? DEFAULT_ROWS.filter(function (x) { return eligible(C.byId(x[0])); }).map(function (x) { return { id: x[0], qty: x[1] }; }) : [];
       document.querySelectorAll('[data-fee]').forEach(function (e) { e.textContent = fee; });
       fillPct(); renderCards(); renderRows(); renderResult();
@@ -163,7 +188,7 @@
         loadRzp(function () {
         var rzp = new Razorpay({
           key: x.d.keyId, order_id: x.d.id, amount: x.d.amount, currency: x.d.currency, name: 'nTagz',
-          description: 'ntagz Annual Membership — 12 months', prefill: { email: user.email, contact: user.phone || '' }, theme: { color: '#FF6A21' },
+          description: 'ntagz Annual Membership', prefill: { email: user.email, contact: user.phone || '' }, theme: { color: '#FF6A21' },
           handler: function (resp) {
             status('Verifying your payment…');
             fetch('/api/membership/verify-payment', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },

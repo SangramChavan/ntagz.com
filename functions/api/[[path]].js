@@ -1,22 +1,7 @@
-const PRODUCTS = {
-  "sample-kit":                   { price: 1940, fixed: true, allInclusive: false },
-  "black-nfc-card":               { price: 30,  category: "nfc_consumables" },
-  "white-nfc-card":               { price: 25,  category: "nfc_consumables" },
-  "white-inkjet-nfc-card":        { price: 32.8,category: "nfc_consumables" },
-  "google-review-nfc-card":       { price: 95,  category: "finished_products" },
-  "google-review-nfc-stand-5x5":  { price: 99,  category: "finished_products", allInclusive: true },
-  "google-review-nfc-stand-10x10":{ price: 149, category: "finished_products", allInclusive: true },
-  "google-review-nfc-stand-12x12":{ price: 199, category: "finished_products", allInclusive: true },
-  "nfc-card-custom-printing":     { price: 75,  category: "finished_products" },
-  "anti-metal-tag":               { price: 20,  category: "nfc_consumables" },
-  "ntag216-adhesive-tag":         { price: 18,  category: "nfc_consumables" },
-  "nfc-coin":                     { price: 20,  category: "nfc_consumables" },
-  "mini-nfc-tag":                 { price: 16,  category: "nfc_consumables" },
-  "micro-flex-fpc":               { price: 75,  category: "nfc_consumables" },
-  "nfc-wristband":                { price: 80,  category: "nfc_consumables" },
-  "uhf-rfid-label":               { price: 249, category: "nfc_consumables", packSize: 10, moq: 1 },
-  "rfid-card-custom-printing":    { price: 75,  category: "finished_products" },
-};
+const PRICING = require("../lib/pricing.js");
+
+// Product structure (pack size, MOQ, fixed kits, all-inclusive) lives with the pricing engine so the admin preview uses it too.
+const PRODUCTS = PRICING.PRODUCTS;
 
 const corsHeaders = {
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
@@ -39,7 +24,11 @@ async function loadPricing(env) {
   const nowMs = Date.now();
   if (pricingCache.db === env.DB && nowMs - pricingCache.at < 30000) return pricingCache.map;
   try {
-    const { results } = await env.DB.prepare("SELECT id,name,price_paise,active,track_stock,stock_qty,low_stock_threshold,preorder_enabled,preorder_message,preorder_dispatch,preorder_max,preordered_qty FROM products").all();
+    const cols = "id,name,price_paise,active,track_stock,stock_qty,low_stock_threshold,preorder_enabled,preorder_message,preorder_dispatch,preorder_max,preordered_qty";
+    // member_discount_pct/cost_paise arrive with migration 0010; before it, read without them (= no member discount).
+    let results;
+    try { ({ results } = await env.DB.prepare(`SELECT ${cols},member_discount_pct,cost_paise FROM products`).all()); }
+    catch { ({ results } = await env.DB.prepare(`SELECT ${cols},0 AS member_discount_pct,NULL AS cost_paise FROM products`).all()); }
     const map = {};
     for (const r of results) map[r.id] = r;
     pricingCache = { db: env.DB, at: nowMs, map };
@@ -67,34 +56,9 @@ function unavailableReason(items, pricing) {
   return null;
 }
 
-function calculateTotal(items, state, memberDiscounts, pricing) {
-  if (!Array.isArray(items) || items.length < 1 || items.length > 30) return null;
-  let regular = 0;
-  let inclusive = 0;
-  let pieces = 0;
-
-  for (const item of items) {
-    const product = PRODUCTS[item?.id];
-    const qty = item?.qty;
-    if (!product || !Number.isSafeInteger(qty) || qty < (product.fixed ? 1 : product.moq || 10) || qty > 100000) return null;
-    if (product.fixed && qty !== 1) return null;
-    const linePieces = qty * (product.packSize || 1);
-    const discount = product.fixed ? 0 : linePieces >= 5000 ? 25 : linePieces >= 1000 ? 15 : linePieces >= 500 ? 10 : 0;
-    const memberDisc = memberDiscounts && product.category ? (memberDiscounts[product.category] || 0) : 0;
-    const livePrice = pricing && pricing[item.id] ? pricing[item.id].price_paise / 100 : product.price;
-    const net = livePrice * qty * (100 - discount) / 100 * (100 - memberDisc) / 100;
-    if (product.allInclusive) inclusive += net;
-    else regular += net;
-    pieces += product.fixed ? 70 : linePieces;
-  }
-
-  const taxable = regular + inclusive;
-  const shipping = state
-    ? inclusive > 0 || taxable >= 2000 ? 0 : state === "Maharashtra" ? 40 : 80
-    : 0;
-  const amount = Math.round(regular + Math.round(regular * 0.18) + inclusive + shipping);
-  if (!Number.isSafeInteger(amount) || amount < 1 || amount > 10000000) return null;
-  return { amount, pieces, gst: Math.round(regular * 0.18) };
+// Server-side price of a cart. `member` is the result of getMemberContext (null = regular prices). See functions/lib/pricing.js.
+function calculateTotal(items, state, member, pricing) {
+  return PRICING.priceCart(items, { products: PRODUCTS, live: pricing, state, member: !!member, settings: member ? member.settings : null });
 }
 
 async function razorpayRequest(path, env, body) {
@@ -200,7 +164,13 @@ function jsonAuth(data, status, allowedOrigin, cookieHeader) {
   return new Response(JSON.stringify(data), { status, headers });
 }
 
-async function getMemberDiscounts(request, env) {
+async function loadMemberSettings(env) {
+  const { results } = await env.DB.prepare("SELECT key, value FROM membership_config").all();
+  return PRICING.settingsFrom(Object.fromEntries(results.map((r) => [r.key, r.value])));
+}
+
+// {settings} for a signed-in customer with an unexpired active membership while member pricing is live; otherwise null.
+async function getMemberContext(request, env) {
   if (!env.DB) return null;
   const u = await getSession(request, env);
   if (!u) return null;
@@ -208,15 +178,8 @@ async function getMemberDiscounts(request, env) {
     `SELECT id FROM memberships WHERE user_id=? AND status='active' AND expires_at>unixepoch() LIMIT 1`
   ).bind(u.user_id).first();
   if (!mem) return null;
-  const { results } = await env.DB.prepare(
-    `SELECT key, value FROM membership_config WHERE key IN ('discounts_live','discount_nfc_consumables_pct','discount_finished_products_pct')`
-  ).all();
-  const cfg = Object.fromEntries(results.map(r => [r.key, r.value]));
-  if (cfg.discounts_live !== "1") return null;
-  return {
-    nfc_consumables:   parseFloat(cfg.discount_nfc_consumables_pct)   || 0,
-    finished_products: parseFloat(cfg.discount_finished_products_pct) || 0,
-  };
+  const settings = await loadMemberSettings(env);
+  return settings.live ? { settings } : null;
 }
 
 // ── Membership handler ────────────────────────────────────────────────────────
@@ -229,15 +192,14 @@ async function handleMembership(url, request, env, allowedOrigin) {
   // GET /api/membership/pricing — public, no session. Member discount % per product, from the same config checkout uses,
   // so the membership page shows exactly what checkout will charge. {live:false} when member pricing is switched off.
   if (method === "GET" && path.endsWith("/membership/pricing")) {
-    const { results } = await env.DB.prepare(
-      `SELECT key, value FROM membership_config WHERE key IN ('fee_paise','discounts_live','discount_nfc_consumables_pct','discount_finished_products_pct')`
-    ).all();
-    const cfg = Object.fromEntries(results.map((r) => [r.key, r.value]));
-    const live = cfg.discounts_live === "1";
-    const pct = { nfc_consumables: parseFloat(cfg.discount_nfc_consumables_pct) || 0, finished_products: parseFloat(cfg.discount_finished_products_pct) || 0 };
+    const settings = await loadMemberSettings(env);
+    const pricing = await loadPricing(env);
     const products = {};
-    if (live) for (const [id, p] of Object.entries(PRODUCTS)) if (p.category && pct[p.category] > 0) products[id] = pct[p.category];
-    const res = jsonAuth({ live, feePaise: parseInt(cfg.fee_paise, 10) || 99900, products }, 200, allowedOrigin);
+    if (settings.live && pricing) for (const [id, p] of Object.entries(PRODUCTS)) {
+      const row = pricing[id];
+      if (!p.fixed && row && row.active && Number(row.member_discount_pct) > 0) products[id] = Number(row.member_discount_pct);
+    }
+    const res = jsonAuth({ live: settings.live, feePaise: settings.feePaise, durationDays: settings.durationDays, maxTotalDiscountPct: settings.maxTotalPct, products }, 200, allowedOrigin);
     res.headers.set("Cache-Control", "public, max-age=300");
     return res;
   }
@@ -252,8 +214,6 @@ async function handleMembership(url, request, env, allowedOrigin) {
     return jsonAuth({ membership: mem ? {
       active: true,
       expiresAt: mem.expires_at,
-      welcomeCreditPaise: mem.welcome_credit_paise,
-      welcomeCreditUsed: !!mem.welcome_credit_used,
       pricePaid: mem.price_paid,
       purchasedAt: mem.purchased_at,
     } : { active: false } }, 200, allowedOrigin);
@@ -267,15 +227,19 @@ async function handleMembership(url, request, env, allowedOrigin) {
     const existing = await env.DB.prepare(
       `SELECT id FROM memberships WHERE user_id=? AND status='active' AND expires_at > unixepoch() LIMIT 1`
     ).bind(u.user_id).first();
-    if (existing) return jsonAuth({ error: "You already have an active Trade Pass" }, 409, allowedOrigin);
-    const feePaise = 99900;
+    if (existing) return jsonAuth({ error: "You already have an active membership" }, 409, allowedOrigin);
+    const settings = await loadMemberSettings(env);
+    // Never sell a membership that currently gives nothing.
+    if (!settings.live) return jsonAuth({ error: "Membership is not available right now" }, 409, allowedOrigin);
+    const feePaise = settings.feePaise;
+    if (feePaise < 100) return jsonAuth({ error: "Membership is not available right now" }, 409, allowedOrigin);
     const rpRes = await fetch("https://api.razorpay.com/v1/orders", {
       method: "POST",
       headers: {
         Authorization: "Basic " + btoa(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`),
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ amount: feePaise, currency: "INR", receipt: `tp-${u.user_id.slice(0, 8)}` }),
+      body: JSON.stringify({ amount: feePaise, currency: "INR", receipt: `tp-${u.user_id.slice(0, 8)}`, notes: { kind: "membership", days: String(settings.durationDays) } }),
     });
     if (!rpRes.ok) { const t = await rpRes.text().catch(() => ""); console.error("Razorpay order error:", t); return jsonAuth({ error: "Payment setup failed" }, 502, allowedOrigin); }
     const order = await rpRes.json();
@@ -295,26 +259,28 @@ async function handleMembership(url, request, env, allowedOrigin) {
     // Idempotent: check if already recorded
     const already = await env.DB.prepare(`SELECT id FROM memberships WHERE razorpay_order_id=?`).bind(razorpay_order_id).first();
     if (already) return jsonAuth({ ok: true, membershipId: already.id }, 200, allowedOrigin);
-    // The signature only proves *a* Razorpay order was paid. Confirm it is this user's Trade Pass order, paid in full.
+    // The signature only proves *a* Razorpay order was paid. Confirm it is this user's membership order (only this Worker creates
+    // orders with that receipt, at the fee configured at the time), paid in full. The fee charged is what gets recorded.
     const rp = await fetch(`https://api.razorpay.com/v1/orders/${encodeURIComponent(razorpay_order_id)}`, {
       headers: { Authorization: "Basic " + btoa(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`) },
     }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-    if (!rp || rp.amount !== 99900 || rp.amount_paid !== 99900 || rp.receipt !== `tp-${u.user_id.slice(0, 8)}`) {
-      return jsonAuth({ error: "Payment does not match a Trade Pass order" }, 400, allowedOrigin);
+    if (!rp || !Number.isSafeInteger(rp.amount) || rp.amount < 100 || rp.amount_paid !== rp.amount || rp.receipt !== `tp-${u.user_id.slice(0, 8)}`) {
+      return jsonAuth({ error: "Payment does not match a membership order" }, 400, allowedOrigin);
     }
     const memId = crypto.randomUUID();
     const now = Math.floor(Date.now() / 1000);
+    const days = Math.min(Math.max(parseInt(rp.notes && rp.notes.days, 10) || (await loadMemberSettings(env)).durationDays, 1), 1095);
     try {
       await env.DB.prepare(
         `INSERT INTO memberships (id, user_id, status, purchased_at, expires_at, welcome_credit_paise, price_paid, payment_id, razorpay_order_id)
-         VALUES (?, ?, 'active', ?, ?, 50000, 99900, ?, ?)`
-      ).bind(memId, u.user_id, now, now + 365 * 86400, razorpay_payment_id, razorpay_order_id).run();
+         VALUES (?, ?, 'active', ?, ?, 0, ?, ?, ?)`
+      ).bind(memId, u.user_id, now, now + days * 86400, rp.amount, razorpay_payment_id, razorpay_order_id).run();
     } catch { // lost a race against the unique index: return the winner
       const w = await env.DB.prepare(`SELECT id FROM memberships WHERE razorpay_order_id=?`).bind(razorpay_order_id).first();
       if (w) return jsonAuth({ ok: true, membershipId: w.id }, 200, allowedOrigin);
       return jsonAuth({ error: "Could not record membership" }, 500, allowedOrigin);
     }
-    return jsonAuth({ ok: true, membershipId: memId, expiresAt: now + 365 * 86400 }, 200, allowedOrigin);
+    return jsonAuth({ ok: true, membershipId: memId, expiresAt: now + days * 86400 }, 200, allowedOrigin);
   }
 
   return jsonAuth({ error: "Not found" }, 404, allowedOrigin);
@@ -610,11 +576,11 @@ async function recordOfflineOrder(request, env, body, origin) {
   if (!OFFLINE_METHODS.includes(method)) return json({ error: "Invalid payment method" }, 400, origin);
   const d = cleanDetails(body);
   if (d.name.length < 2 || d.phone.length !== 10 || d.address.length < 5 || !d.pincode || !d.quoteRef) return json({ error: "Missing or invalid customer details" }, 400, origin);
-  const memberDiscounts = await getMemberDiscounts(request, env);
+  const member = await getMemberContext(request, env);
   const pricing = await loadPricing(env);
   const blocked = unavailableReason(body.items, pricing);
   if (blocked) return json({ error: blocked }, 409, origin);
-  const total = calculateTotal(body.items, d.state, memberDiscounts, pricing);
+  const total = calculateTotal(body.items, d.state, member, pricing);
   if (!total) return json({ error: "Invalid order" }, 400, origin);
   const ipHash = await sha256Hex(`ntagz:${request.headers.get("CF-Connecting-IP") || "unknown"}`);
   const recent = await env.DB.prepare("SELECT count(*) c FROM order_attempts WHERE ip_hash=? AND created_at>unixepoch()-600").bind(ipHash).first();
@@ -731,6 +697,36 @@ async function onRequest({ request, env }) {
     catch (e) { console.error("offline order failed:", e && e.message); return json({ error: "Could not record order" }, 500, origin); }
   }
 
+  // ── Price quote: POST /api/quote {items, state, compare?} — the checkout engine's numbers, for display only ──
+  // Prices for the caller (member prices only with a verified active membership). compare:true also returns guest and member
+  // prices for the same cart (the membership calculator). Nothing is stored; checkout re-prices on its own.
+  if (url.pathname.endsWith("/quote") && !url.pathname.includes("/accounts/")) {
+    if (request.method !== "POST") return json({ error: "Method not allowed" }, 405, origin);
+    if (origin && !["https://www.ntagz.com", "https://ntagz.com"].includes(origin)) return json({ error: "Origin not allowed" }, 403, origin);
+    let qb;
+    try {
+      if (Number(request.headers.get("Content-Length")) > 10000) return json({ error: "Request too large" }, 413, origin);
+      qb = await request.json();
+    } catch { return json({ error: "Invalid JSON" }, 400, origin); }
+    try {
+      const pricing = await loadPricing(env);
+      const blocked = unavailableReason(qb && qb.items, pricing);
+      if (blocked) return json({ error: blocked }, 409, origin);
+      const state = typeof qb.state === "string" ? qb.state.slice(0, 50) : "";
+      const member = await getMemberContext(request, env);
+      const you = calculateTotal(qb.items, state, member, pricing);
+      if (!you) return json({ error: "Invalid order" }, 400, origin);
+      const out = { you, signedInMember: !!member };
+      if (qb.compare === true && env.DB) {
+        const settings = await loadMemberSettings(env);
+        out.guest = calculateTotal(qb.items, state, null, pricing);
+        out.member = settings.live ? calculateTotal(qb.items, state, { settings }, pricing) : null;
+        out.feePaise = settings.feePaise;
+      }
+      return json(out, 200, origin);
+    } catch (e) { console.error("quote failed:", e && e.message); return json({ error: "Quote unavailable" }, 503, origin); }
+  }
+
   // ── Membership routes (/api/membership/*) ──────────────────────────────
   if (url.pathname.includes("/membership/")) {
     if (origin && !["https://www.ntagz.com", "https://ntagz.com"].includes(origin)) {
@@ -807,11 +803,11 @@ async function onRequest({ request, env }) {
 
   try {
     if (url.pathname.endsWith("/create-order")) {
-      const memberDiscounts = await getMemberDiscounts(request, env);
+      const member = await getMemberContext(request, env);
       const pricing = await loadPricing(env);
       const blocked = unavailableReason(body.items, pricing);
       if (blocked) return json({ error: blocked }, 409, origin);
-      const total = calculateTotal(body.items, body.state, memberDiscounts, pricing);
+      const total = calculateTotal(body.items, body.state, member, pricing);
       if (!total) return json({ error: "Invalid order" }, 400, origin);
       const order = await razorpayRequest("/orders", env, {
         amount: total.amount * 100,
@@ -823,7 +819,7 @@ async function onRequest({ request, env }) {
         },
       });
       await recordIntent(env, request, order.id, "razorpay", body, total);
-      return json({ id: order.id, amount: order.amount, currency: order.currency, keyId: env.RAZORPAY_KEY_ID, memberPricing: !!memberDiscounts }, 200, origin);
+      return json({ id: order.id, amount: order.amount, currency: order.currency, keyId: env.RAZORPAY_KEY_ID, memberPricing: !!member }, 200, origin);
     }
 
     if (url.pathname.endsWith("/verify-payment")) {
@@ -840,11 +836,11 @@ async function onRequest({ request, env }) {
 
     if (url.pathname.endsWith("/payu/checkout")) {
       if (!env.PAYU_KEY || !env.PAYU_SALT) return json({ error: "PayU is not configured" }, 503, origin);
-      const memberDiscounts = await getMemberDiscounts(request, env);
+      const member = await getMemberContext(request, env);
       const pricing = await loadPricing(env);
       const blocked = unavailableReason(body.items, pricing);
       if (blocked) return json({ error: blocked }, 409, origin);
-      const total = calculateTotal(body.items, body.state, memberDiscounts, pricing);
+      const total = calculateTotal(body.items, body.state, member, pricing);
       if (!total) return json({ error: "Invalid order" }, 400, origin);
       const firstName = typeof body.name === "string" ? body.name.trim().split(/\s+/)[0].slice(0, 60) : "";
       const email = typeof body.email === "string" ? body.email.trim().slice(0, 254) : "";
@@ -898,4 +894,4 @@ async function onRequest({ request, env }) {
   }
 }
 
-if (typeof module !== "undefined") module.exports = { onRequest, resetPricingCache, calculateTotal, verifySignature, payuHash, verifyPayuResponse };
+if (typeof module !== "undefined") module.exports = { onRequest, resetPricingCache, calculateTotal, PRODUCTS, verifySignature, payuHash, verifyPayuResponse };
