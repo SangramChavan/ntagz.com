@@ -152,7 +152,7 @@
   }
 
   /* ── account + purchase (unchanged server flow: create-order → Razorpay → verify-payment) ── */
-  var ctaIds = ['mHeroCta', 'mJoinCta', 'mStickyCta'];
+  var ctaIds = ['mJoinCta'];
   function setCta(text, on) { ctaIds.forEach(function (id) { var b = $(id); if (!b) return; b.textContent = text; if (on) b.onclick = on; }); }
   function status(msg, err) { var s = $('mStatus'); s.textContent = msg || ''; s.className = 'm-status' + (err ? ' err' : ''); }
 
@@ -178,14 +178,14 @@
   function loadRzp(cb) {
     if (window.Razorpay) return cb();
     var sc = document.createElement('script'); sc.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    sc.onload = cb; sc.onerror = function () { status('Could not load the payment window. Please try again.', true); ctaIds.forEach(function (id) { var x = $(id); if (x) { x.disabled = false; x.textContent = 'Become a Member'; } }); };
+    sc.onload = cb; sc.onerror = function () { status('Could not load the payment window. Please try again.', true); ctaIds.forEach(function (id) { var x = $(id); if (x) { x.disabled = false; x.textContent = 'Buy Annual Membership'; } }); };
     document.head.appendChild(sc);
   }
 
   function purchase() {
     if (membership && membership.active) { location.href = '/account/'; return; }
     if (!user) { location.href = '/account/login.html?next=' + encodeURIComponent('/membership/'); return; }
-    var label = 'Become a Member', busy = function (b) { ctaIds.forEach(function (id) { var x = $(id); if (x) { x.disabled = b; x.textContent = b ? 'Please wait…' : label; } }); };
+    var label = 'Buy Annual Membership', busy = function (b) { ctaIds.forEach(function (id) { var x = $(id); if (x) { x.disabled = b; x.textContent = b ? 'Please wait…' : label; } }); };
     busy(true); status('');
     fetch('/api/membership/create-order', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' } })
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
@@ -216,19 +216,6 @@
       }).catch(function () { status('Something went wrong. Please try again.', true); busy(false); });
   }
 
-  /* ── sticky CTA (mobile): visible only while neither the hero CTA nor the join card is on screen ── */
-  function sticky() {
-    var bar = $('mSticky'); if (!bar || !window.IntersectionObserver) return;
-    var seen = {};
-    var io = new IntersectionObserver(function (es) {
-      es.forEach(function (e) { seen[e.target.id] = e.isIntersecting; });
-      var show = !seen.mHeroCta && !seen.mJoin && window.scrollY > 200;
-      bar.classList.toggle('show', show); document.body.classList.toggle('m-has-sticky', show);
-    });
-    io.observe($('mHeroCta')); io.observe($('mJoin'));
-    window.addEventListener('scroll', function () { if (window.scrollY <= 200) { bar.classList.remove('show'); document.body.classList.remove('m-has-sticky'); } }, { passive: true });
-  }
-
   ctaIds.forEach(function (id) { var b = $(id); if (b) b.onclick = purchase; });
-  init(); checkStatus(); sticky(); cartLink();
+  init(); checkStatus(); cartLink();
 })();

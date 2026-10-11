@@ -332,9 +332,10 @@ $("pclear").onclick = clearFilters;
 $("padd").onclick = () => openPanel(null);
 $("pprev").onclick = () => { P.page--; loadProducts(); }; $("pnext").onclick = () => { P.page++; loadProducts(); };
 function route() {
-  const view = location.hash === "#/products" ? "products" : location.hash === "#/pricing" ? "pricing" : "orders";
-  for (const v of ["orders", "products", "pricing"]) { $("view-" + v).hidden = v !== view; $("nav-" + v).setAttribute("aria-current", v === view ? "page" : "false"); }
+  const view = location.hash === "#/products" ? "products" : location.hash === "#/pricing" ? "pricing" : location.hash === "#/rewards" ? "rewards" : "orders";
+  for (const v of ["orders", "products", "pricing", "rewards"]) { $("view-" + v).hidden = v !== view; $("nav-" + v).setAttribute("aria-current", v === view ? "page" : "false"); }
   if (window.pricingVisible) window.pricingVisible(view === "pricing");
+  if (window.rewardsVisible) window.rewardsVisible(view === "rewards");
   if (view === "products") { if (!P.loaded) { P.loaded = true; restoreFilters(); refresh(); } }
   else if (view === "orders") load().catch(() => {});
 }

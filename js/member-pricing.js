@@ -20,7 +20,8 @@
   var money = function (n) { return '₹' + nf.format(Math.round(n * 100) / 100); };
   var el = function (tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
-  var st = { member: false, lines: null, pct: null };   // lines: id -> {unit, was, pct} (server-quoted); pct: id -> % (public pricing)
+  var st = { member: false, loggedIn: false, tier: null, milestones: undefined, lines: null, pct: null };
+  var esc = function (v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };   // lines: id -> {unit, was, pct} (server-quoted); pct: id -> % (public pricing)
   var statusP = null, pending = null;
   var choice = function () { return sget(CK); };
 
@@ -29,13 +30,17 @@
     return fetch('/api/membership/status', { credentials: 'same-origin' }).then(function (r) {
       if (r.status === 401) return { loggedIn: false, member: false };
       if (!r.ok) throw new Error('status');
-      return r.json().then(function (d) { return { loggedIn: true, member: !!(d && d.membership && d.membership.active) }; });
+      /* A price benefit is a paid membership and/or a spending-tier discount. The server decides; this is only what it reported. */
+      return r.json().then(function (d) {
+        var tier = d && d.tier ? d.tier : null;
+        return { loggedIn: true, tier: tier, member: !!((d && d.membership && d.membership.active) || (tier && tier.discountPct > 0)) };
+      });
     });
   }
   function applyStatus(res) {
-    st.member = res.member;
-    lset(HK, res.member ? '1' : null);          // hint only: lets a returning member skip the question; the server still decides
-    if (res.member) sset(CK, 'yes');
+    st.member = res.member; st.loggedIn = !!res.loggedIn; st.tier = res.tier || null;
+    lset(HK, res.loggedIn ? '1' : null);        // hint only: a returning signed-in customer skips the question; the server still decides
+    if (res.loggedIn) sset(CK, 'yes');
     return res;
   }
   function quote(items, compare) {
@@ -81,8 +86,8 @@
         row.appendChild(el('span', 'mp-unit', '/ ' + (t.p.unit || 'pc') + (t.p.allInclusive ? ' all-inclusive' : ' + GST')));
         node.appendChild(row);
         node.appendChild(el('div', 'mp-tag', 'Member price · save ' + money(ln.was - ln.unit) + ' (' + Math.round(ln.pct * 100) / 100 + '%)'));
-      } else if (!st.member && choice() === 'no' && st.pct && st.pct[t.p.id]) {
-        node = el('a', 'mp-unlock', 'Unlock member pricing →'); node.href = '/membership/';
+      } else if (!st.member && choice() === 'no' && st.pct && (st.pct[t.p.id] || (st.tierIds && st.tierIds[t.p.id]))) {
+        node = el('a', 'mp-unlock', 'Unlock member pricing with Ntagz Rewards →'); node.href = '/membership/';
         node.addEventListener('click', function (e) { e.stopPropagation(); });
       }
       if (node) t.after.parentNode.insertBefore(node, t.after.nextSibling);
@@ -111,15 +116,28 @@
       });
     } else if (choice() === 'no' && !st.pct) {
       fetch('/api/membership/pricing', { credentials: 'omit' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
-        st.pct = d && d.live && d.products ? d.products : {}; render();
+        st.pct = d && d.live && d.products ? d.products : {};
+        st.tierIds = {}; ((d && d.tierEligible) || []).forEach(function (id) { st.tierIds[id] = 1; });
+        render();
       }).catch(function () { });
     } else render();
   }
 
-  /* ── cart drawer view (members only; server-quoted, debounced) ── */
+  /* Public list of running cart milestones (cached 5 min by the browser). A server quote is only needed for the cart if one exists. */
+  function loadMilestones() {
+    if (st.milestones !== undefined) return;
+    st.milestones = null;
+    fetch('/api/rewards/tiers', { credentials: 'omit' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+      st.milestones = d && d.milestones ? d.milestones : [];
+      document.dispatchEvent(new CustomEvent('ntagz:member-pricing'));
+    }).catch(function () { st.milestones = []; });
+  }
+
+  /* ── cart drawer view (server-quoted, debounced): member prices, cart milestone and tier progress ── */
   var cv = { key: '', data: null, timer: null };
   function cartView(cart) {
-    if (!st.member) return null;
+    loadMilestones();
+    if (!(st.member || (st.milestones && st.milestones.length) || (st.loggedIn && st.tier))) return null;
     var items = Object.keys(cart).map(function (id) { var p = C.byId(id); return p ? { id: id, qty: p.fixed ? 1 : cart[id] } : null; }).filter(Boolean);
     if (!items.length) return null;
     var key = JSON.stringify(items);
@@ -131,7 +149,7 @@
         if (d && d.you && d.guest && Array.isArray(d.you.lines) && Array.isArray(d.guest.lines)) {
           var lines = {}, reg = 0, mem = 0;
           d.you.lines.forEach(function (y, i) { var g = d.guest.lines[i]; lines[y.id] = { regular: g.net, member: y.net, pct: y.memberPct }; reg += g.net; mem += y.net; });
-          cv.data = { lines: lines, regularSub: reg, memberSub: mem, savings: Math.max(reg - mem, 0) };
+          cv.data = { lines: lines, regularSub: reg, memberSub: mem, savings: Math.max(reg - mem, 0), rewards: d.rewards || null, total: d.you.amount };
         }
         document.dispatchEvent(new CustomEvent('ntagz:member-pricing'));
       });
@@ -140,12 +158,36 @@
   }
   document.addEventListener('ntagz:cart-change', function () { cv.key = ''; });
 
+  var rupee = function (paise) { return '₹' + nf.format(Math.round(paise) / 100); };
+  var rewardWord = function (c) { return c.type === 'free_shipping' ? 'free shipping' : c.value + '% off'; };
+
+  /* Cart milestone (this cart) and tier progress (lifetime spend) are different numbers and shown on separate lines. */
+  function rewardsHtml() {
+    var cvd = cv.data, rw = cvd && cvd.rewards, h = '';
+    if (!rw) return h;
+    if (rw.campaign) h += '<p class="mp-reward"><b>Reward unlocked:</b> ' + esc(rw.campaign.name) + (rw.campaign.savingsPaise ? ' (saves ' + rupee(rw.campaign.savingsPaise) + ')' : '') + '</p>';
+    if (rw.note) h += '<p class="mp-reward mp-muted">' + esc(rw.note) + '</p>';
+    if (rw.next) {
+      h += '<p class="mp-reward">Add ' + rupee(rw.next.remainingPaise) + ' of eligible products to unlock ' + esc(rewardWord(rw.next)) + '.</p>';
+      if (rw.suggest && rw.suggest.length) h += '<div class="mp-sug">' + rw.suggest.map(function (x) {
+        return '<button type="button" class="mp-link mp-add" data-mp-add="' + esc(x.id) + '" data-qty="' + x.qty + '">Add ' + x.qty + ' × ' + esc(x.name) + ' · about ' + rupee(x.valuePaise) + '</button>';
+      }).join('') + '</div>';
+    }
+    if (rw.tier && rw.tier.current) {
+      var t = rw.tier;
+      h += '<p class="mp-reward mp-muted"><b>Ntagz Rewards:</b> ' + esc(t.current.name) + (t.next ? ' · ' + rupee(t.next.remainingPaise) + ' of qualifying spend to ' + esc(t.next.name) : ' · top tier') +
+        (t.afterThisOrder && t.afterThisOrder.tier && t.afterThisOrder.tier.id !== t.current.id ? '. This order would take you to ' + esc(t.afterThisOrder.tier.name) + '.' : '') + '</p>';
+    }
+    return h;
+  }
+
   function footHtml() {
     var h;
     if (st.member) h = 'Member pricing applied · <button type="button" class="mp-link" data-mp-change>Change</button>';
-    else if (choice() === 'yes') h = 'No active membership found · <a class="mp-link" href="/membership/">View plans</a> · <button type="button" class="mp-link" data-mp-change>Change</button>';
-    else h = 'Member? <button type="button" class="mp-link" data-mp-change>Check member pricing</button> · <a class="mp-link" href="/membership/">View plans</a>';
-    return '<p class="mp-foot">' + h + '</p>';
+    else if (st.loggedIn) h = 'Signed in · <a class="mp-link" href="/membership/">How Ntagz Rewards work</a> · <button type="button" class="mp-link" data-mp-change>Change</button>';
+    else if (choice() === 'yes') h = 'Not signed in · <a class="mp-link" href="/account/login.html?next=' + encodeURIComponent(location.pathname + location.search) + '">Sign in for member pricing</a> · <button type="button" class="mp-link" data-mp-change>Change</button>';
+    else h = 'Member? <button type="button" class="mp-link" data-mp-change>Check member pricing</button> · <a class="mp-link" href="/membership/">Ntagz Rewards</a>';
+    return rewardsHtml() + '<p class="mp-foot">' + h + '</p>';
   }
 
   /* ── styles (injected once at load: price blocks need them before the sheet is ever opened) ── */
@@ -157,6 +199,7 @@
       '.mp-tag{display:inline-block;margin-top:4px;font-size:12px;font-weight:700;color:#FF8A57;background:rgba(255,106,33,.16);border-radius:999px;padding:3px 10px}' +
       '.mp-unlock{display:inline-block;margin-top:6px;font-size:13px;font-weight:700;color:#FF8A57;text-decoration:none}.mp-unlock:hover{text-decoration:underline}' +
       '.prod-price-box .mp-tag{color:#B33000;background:#FFF0EB}.prod-price-box .mp-unlock{color:#B33000}' +
+      '.mp-reward{font-size:13px;margin:10px 0 0;text-align:left;color:inherit}.mp-muted{opacity:.75}.mp-sug{display:grid;gap:6px;margin:6px 0 0;text-align:left}.mp-add{text-align:left;font-weight:600}' +
       '.mp-foot{font-size:13px;opacity:.8;margin:10px 0 0;text-align:center;color:inherit}.mp-link{background:none;border:0;padding:0;font:inherit;font-weight:700;color:#FF8A57;cursor:pointer;text-decoration:underline}' +
       '.cart-line-total s{display:block;font-size:12px;font-weight:400;opacity:.6}.cart-line-total .mp-save{display:block;font-size:11px;font-weight:700;color:#FF8A57}' +
       '.mp-sheet-root{position:fixed;inset:0;z-index:10050;display:none}.mp-sheet-root.open{display:block}.mp-ov{position:absolute;inset:0;background:rgba(26,23,20,.55)}' +
@@ -192,7 +235,7 @@
       if (b.disabled) x.disabled = true; box.appendChild(x);
     });
     body.appendChild(box);
-    if (moreLink) { var a = el('a', 'mp-more', 'View membership plans'); a.href = '/membership/'; body.appendChild(a); }
+    if (moreLink) { var a = el('a', 'mp-more', 'See how Ntagz Rewards work'); a.href = '/membership/'; body.appendChild(a); }
     if (!sheet.classList.contains('open')) lastFocus = document.activeElement;
     sheet.classList.add('open');
     var f = box.querySelector('button,a'); if (f) f.focus();
@@ -210,23 +253,23 @@
   function regularPrices() { sset(CK, 'no'); st.member = false; proceed(); }
   function ask() {
     view('Are you an Ntagz member?', 'Members get exclusive pricing on eligible products.', [
-      { label: 'Yes, I’m a member', primary: true, on: verify },
-      { label: 'No, I’m not a member', on: regularPrices }
+      { label: 'I’m a member', primary: true, on: verify },
+      { label: 'I’m new to Ntagz', on: regularPrices }
     ], true);
   }
   function verify() {
-    view('Checking your membership…', 'One moment.', [{ label: 'Please wait', disabled: true }]);
+    view('Checking your rewards…', 'One moment.', [{ label: 'Please wait', disabled: true }]);
     checkStatus().then(function (res) {
       applyStatus(res);
       if (res.member) { proceed(); schedule(); return; }
       var here = location.pathname + location.search;
-      if (!res.loggedIn) view('Sign in to verify', 'We’ll check your membership and keep your cart as it is.', [
+      if (!res.loggedIn) view('Sign in to check your rewards', 'We’ll look up your membership and tier and keep your cart as it is.', [
         { label: 'Sign in', primary: true, on: function () { if (pending && pending.id) sset(PK, pending.id); location.href = '/account/login.html?next=' + encodeURIComponent(here); } },
         { label: 'Continue at regular prices', on: regularPrices }
       ], true);
-      else view('No active membership', 'We couldn’t find an active membership on this account.', [
-        { label: 'View membership plans', primary: true, href: '/membership/' },
-        { label: 'Continue at regular prices', on: regularPrices }
+      else view('No member pricing yet', res.tier && res.tier.next ? 'You’re on the ' + (res.tier.name || 'Free') + ' tier. ' + rupee(res.tier.next.remainingPaise) + ' more qualifying spend unlocks ' + res.tier.next.name + '.' : 'We couldn’t find member pricing on this account.', [
+        { label: 'Continue', primary: true, on: function () { sset(CK, 'yes'); proceed(); } },
+        { label: 'See how Ntagz Rewards work', href: '/membership/' }
       ]);
     }).catch(function () {
       view('Couldn’t check right now', 'You can try again, or continue at regular prices. Prices are confirmed again at checkout.', [
@@ -238,6 +281,8 @@
 
   /* Capture phase: runs before cart-ui's own click handler, so the first Add to Cart is held until the customer answers. */
   document.addEventListener('click', function (e) {
+    var addS = e.target.closest && e.target.closest('[data-mp-add]');
+    if (addS && CART) { e.preventDefault(); CART.add(addS.getAttribute('data-mp-add'), parseInt(addS.getAttribute('data-qty'), 10) || undefined); cv.key = ''; return; }
     var chg = e.target.closest && e.target.closest('[data-mp-change]');
     if (chg) { e.preventDefault(); sset(CK, null); st.member = false; pending = null; cv.key = ''; document.dispatchEvent(new CustomEvent('ntagz:member-pricing')); ask(); return; }
     var btn = e.target.closest && e.target.closest('[data-product-id][data-cart-wired]');

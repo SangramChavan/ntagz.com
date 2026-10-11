@@ -404,7 +404,13 @@
   }
   fetch('/api/membership/status', { credentials: 'same-origin' })
     .then(function (r) { return r.ok ? r.json() : null; })
-    .then(function (d) { if (d && d.membership && d.membership.active) { MQ.member = true; calculateQuote(); } })
+    .then(function (d) {
+      /* Price benefits: a paid membership and/or a spending-tier discount. Either way the server quotes this exact cart. */
+      if (d && ((d.membership && d.membership.active) || (d.tier && d.tier.discountPct > 0))) { MQ.member = true; calculateQuote(); return; }
+      /* Anyone else only needs a server quote when a cart milestone reward is running (public list, cached by the browser). */
+      return fetch('/api/rewards/tiers', { credentials: 'omit' }).then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (t) { if (t && t.milestones && t.milestones.length) { MQ.member = true; calculateQuote(); } });
+    })
     .catch(function () { });
 
   /* ── MAIN CALCULATION ─────────────────────────────────────── */
@@ -494,10 +500,11 @@
 
     /* Member prices. Only the server knows whether this customer is an active member, so for members the quote shows the
        server's numbers for this exact cart: the same amount checkout will charge. Guests keep the local estimate. */
-    var memberOff = 0, mq = memberQuoteFor(lineItems, cState);
-    if (mq && mq.member) {
+    var memberOff = 0, rewardOff = 0, mq = memberQuoteFor(lineItems, cState);
+    if (mq && (mq.member || mq.campaign)) {
       memberOff = mq.memberDiscount;
-      netValue = Math.round((netValue - memberOff) * 100) / 100;
+      rewardOff = mq.campaign && mq.campaign.type === 'percent_off' ? mq.campaignDiscountPaise / 100 : 0;
+      netValue = Math.round((netValue - memberOff - rewardOff) * 100) / 100;
       gstAmount = mq.gst; cgst = Math.round(mq.gst / 2); sgst = mq.gst - cgst;
       if (mq.shipping !== shippingCharge && cState !== '') {
         pillEl.className = mq.shipping === 0 ? 'shipping-info-pill' : 'shipping-info-pill paid';
@@ -514,6 +521,20 @@
     }
     mRow.style.display = memberOff > 0 ? 'flex' : 'none';
     $('outMemberDiscount').textContent = '− ' + fmt(memberOff);
+    var src = {}; (mq && mq.lines || []).forEach(function (l) { if (l.source) src[l.source] = 1; });
+    mRow.firstChild.textContent = src.both || (src.tier && src.membership) ? 'Member + Rewards Discount' : src.tier ? 'Rewards Tier Discount' : 'Member Discount';
+    /* Cart milestone reward: shown on its own line; free shipping appears in the shipping row below. */
+    var rRow = $('rewardRow');
+    if (!rRow) {
+      rRow = document.createElement('div'); rRow.id = 'rewardRow'; rRow.className = 'qt-line discount';
+      rRow.innerHTML = '<span class="qt-label" id="rewardLabel">Reward</span><span class="qt-val" id="outReward"></span>';
+      mRow.parentNode.insertBefore(rRow, mRow.nextSibling);
+    }
+    rRow.style.display = mq && mq.campaign ? 'flex' : 'none';
+    if (mq && mq.campaign) {
+      $('rewardLabel').textContent = 'Reward: ' + mq.campaign.name;
+      $('outReward').textContent = mq.campaign.type === 'percent_off' ? '− ' + fmt(rewardOff) : 'Free shipping';
+    }
 
     $('outSubtotal').textContent = fmt(totalSubtotal);
     $('outDiscountAmt').textContent = totalDiscount > 0 ? '− ' + fmt(totalDiscount) : '₹0';
@@ -654,6 +675,7 @@
       'Subtotal:       ' + fmt(totalSubtotal) + '\n' +
       'Bulk Discount:  - ' + fmt(totalDiscount) + '\n' +
       (memberOff > 0 ? 'Member Discount: - ' + fmt(memberOff) + '\n' : '') +
+      (mq && mq.campaign ? 'Reward (' + mq.campaign.name + '): ' + (mq.campaign.type === 'percent_off' ? '- ' + fmt(rewardOff) : 'Free shipping') + '\n' : '') +
       'Net Value:      ' + fmt(netValue) + '\n' +
       'Shipping:       ' + (hasAllInc ? 'Included' : (cState ? (shippingCharge === 0 ? 'FREE' : fmt(shippingCharge)) : 'TBD')) + '\n' +
       gstLine + '\n' +

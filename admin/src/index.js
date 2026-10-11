@@ -3,6 +3,7 @@
 // admin allowlist on each request. All SQL is parameterised. No CORS headers: same-origin only.
 
 import PRICING from "../../functions/lib/pricing.js"; // the same engine the payments Worker charges with
+import LOYALTY from "../../functions/lib/loyalty.js"; // spending tiers: same derivation as the storefront
 import { notify, STATUS_EVENT } from "./notify.js";
 
 const SESSION_TTL = 12 * 3600;
@@ -273,6 +274,7 @@ async function paymentReceived(id, body, actor, env) {
   ]).catch(() => null);
   if (!res || res[0].meta.changes !== 1) return fail(409, "Payment was not recorded. It may already have been confirmed.");
   await notify(env, id, "payment_confirmed", pid);
+  await tierSyncFor(env, id, "order paid");
   return json(await getOrder(id, env));
 }
 
@@ -342,6 +344,7 @@ async function changeStatus(id, body, actor, env) {
   } catch { return json(await getOrder(id, env)); } // unique-key race: another identical request won
   if (res[0].meta.changes !== 1) return fail(409, "The order changed while you were working. Refresh and try again.");
   if (STATUS_EVENT[to]) await notify(env, id, STATUS_EVENT[to], eid, { note: pub });
+  if (to === "cancelled" || to === "returned") await tierSyncFor(env, id, `order ${to}`);
   return json(await getOrder(id, env));
 }
 
@@ -508,6 +511,15 @@ function validateProduct(b, partial) {
   if (b.cost !== undefined) {
     if (b.cost === null || b.cost === "") f.cost_paise = null;
     else { const p = rupeesToPaise(b.cost); if (p === null) errors.cost = "Enter a valid cost price"; else f.cost_paise = p; }
+  }
+  if (b.loyalty_eligible !== undefined) {
+    if (b.loyalty_eligible === true || b.loyalty_eligible === 1) f.loyalty_eligible = 1;
+    else if (b.loyalty_eligible === false || b.loyalty_eligible === 0) f.loyalty_eligible = 0;
+    else errors.loyalty_eligible = "Invalid";
+  }
+  if (b.loyalty_max_pct !== undefined) { // ceiling for spending-tier discounts on this product (0 = none); blank = no ceiling
+    if (b.loyalty_max_pct === null || b.loyalty_max_pct === "") f.loyalty_max_pct = null;
+    else { const n = Number(b.loyalty_max_pct); if (!Number.isFinite(n) || n < 0 || n > 50 || Math.abs(Math.round(n * 100) - n * 100) > 1e-6) errors.loyalty_max_pct = "Enter 0–50 (max 2 decimals)"; else f.loyalty_max_pct = n; }
   }
   if (f.mrp_paise !== undefined && f.mrp_paise !== null && f.price_paise !== undefined && f.mrp_paise < f.price_paise) errors.mrp = "MRP cannot be lower than the selling price";
   if (has("gst_rate")) {
@@ -679,6 +691,7 @@ async function updateProduct(id, body, actor, env) {
   if ("stock_qty" in body || "stock" in body) return fail(400, "Stock can only be changed through a stock adjustment");
   const { f, errors } = validateProduct(body, true);
   const cur = await env.DB.prepare(`SELECT ${PCOLS} FROM products WHERE id=?`).bind(id).first();
+  if (cur && ("loyalty_eligible" in f || "loyalty_max_pct" in f)) Object.assign(cur, await env.DB.prepare("SELECT loyalty_eligible,loyalty_max_pct FROM products WHERE id=?").bind(id).first());
   if (cur) preorderRule(f, cur, errors);
   if (Object.keys(errors).length) return json({ error: "Please fix the highlighted fields", fields: errors }, 400);
   if (!cur) return fail(404, "Product not found");
@@ -968,6 +981,204 @@ async function listMemberships(sp, env) {
   return json({ memberships: results.map((r) => ({ ...r, active: r.status === "active" && r.expires_at > now() })) });
 }
 
+// ── Rewards: spending tiers, customers, refunds, adjustments ──────────────────
+// Spend is derived from orders (see functions/lib/loyalty.js). Cancelling/returning an order drops it from spend automatically; a refund
+// reduces it in proportion; a manual correction is a signed, reasoned, audited delta, never an overwrite. Prices use the freshly
+// derived tier, so tier history (loyalty_tier_log) is a record, not an input.
+async function tierSyncFor(env, orderId, reason) {
+  try {
+    const o = await env.DB.prepare("SELECT user_id FROM orders WHERE id=?").bind(orderId).first();
+    if (o && o.user_id) await LOYALTY.syncTier(env.DB, o.user_id, reason);
+  } catch (e) { console.error("tier sync failed:", e && e.message); }
+}
+
+const REWARD_KEYS = ["loyalty_live", "loyalty_combine"];
+async function rewardsState(env) {
+  const [cfg, tiers, flags] = await Promise.all([
+    env.DB.prepare("SELECT key,value FROM membership_config").all(),
+    env.DB.prepare("SELECT id,name,min_spend_paise,discount_pct,sort_order,active,perks FROM loyalty_tiers ORDER BY min_spend_paise, sort_order").all(),
+    env.DB.prepare("SELECT id,sku,name,category,active,price_paise,cost_paise,loyalty_eligible,loyalty_max_pct FROM products ORDER BY name").all(),
+  ]);
+  const c = Object.fromEntries(cfg.results.map((r) => [r.key, r.value]));
+  const settings = { live: c.loyalty_live === "1", combine: c.loyalty_combine === "stack" ? "stack" : "best_of", max_total_discount_pct: Number(c.max_total_discount_pct) || 30 };
+  const version = await sha256(JSON.stringify([settings, tiers.results, flags.results.map((p) => [p.id, p.loyalty_eligible, p.loyalty_max_pct])]));
+  return { settings, tiers: tiers.results.map((t) => ({ ...t, active: !!t.active })), products: flags.results.map((p) => ({ ...p, loyalty_eligible: !!p.loyalty_eligible, loyalty_max_pct: p.loyalty_max_pct })), version };
+}
+
+async function getRewards(env) {
+  const st = await rewardsState(env);
+  const { results: counts } = await env.DB.prepare("SELECT coalesce(loyalty_tier_id,'(not yet recorded)') t, count(*) n FROM users GROUP BY 1").all();
+  const { results: history } = await env.DB.prepare("SELECT actor,action,detail,created_at FROM audit_log WHERE action IN ('rewards_settings','rewards_adjust','order_refund','campaign_save') ORDER BY created_at DESC, rowid DESC LIMIT 30").all();
+  return json({ ...st, customers_by_tier: counts, history: history.map((h) => ({ ...h, detail: (() => { try { return JSON.parse(h.detail); } catch { return {}; } })() })) });
+}
+
+// Settings + tiers in one validated, atomic, audited save. Tiers are never deleted (orders reference them): leaving one out deactivates it.
+async function saveRewards(body, actor, env) {
+  const st = await rewardsState(env);
+  if (body.version !== st.version) return fail(409, "Rewards settings changed since you opened this page. Reload and review again.");
+  const bs = body.settings && typeof body.settings === "object" ? body.settings : {};
+  const settings = { ...st.settings };
+  if (bs.live !== undefined) { if (typeof bs.live !== "boolean") return fail(400, "Invalid on/off value"); settings.live = bs.live; }
+  if (bs.combine !== undefined) { if (!["best_of", "stack"].includes(bs.combine)) return fail(400, "Combine rule must be best_of or stack"); settings.combine = bs.combine; }
+  const { errors, tiers } = LOYALTY.validateTiers(body.tiers);
+  if (errors.length) return json({ error: errors[0], errors }, 400);
+  const incoming = new Set(tiers.map((t) => t.id));
+  const stmts = [];
+  for (const t of tiers) stmts.push(env.DB.prepare(`INSERT INTO loyalty_tiers (id,name,min_spend_paise,discount_pct,sort_order,active,perks,updated_at) VALUES (?1,?2,?3,?4,?5,?6,?7,unixepoch())
+      ON CONFLICT(id) DO UPDATE SET name=?2,min_spend_paise=?3,discount_pct=?4,sort_order=?5,active=?6,perks=?7,updated_at=unixepoch()`).bind(t.id, t.name, t.min_spend_paise, t.discount_pct, t.sort_order, t.active, t.perks));
+  for (const old of st.tiers) if (!incoming.has(old.id) && old.active) stmts.push(env.DB.prepare("UPDATE loyalty_tiers SET active=0, updated_at=unixepoch() WHERE id=?").bind(old.id));
+  for (const [k, v] of [["loyalty_live", settings.live ? "1" : "0"], ["loyalty_combine", settings.combine]])
+    stmts.push(env.DB.prepare("INSERT INTO membership_config (key,value,updated_at) VALUES (?1,?2,unixepoch()) ON CONFLICT(key) DO UPDATE SET value=?2, updated_at=unixepoch()").bind(k, v));
+  stmts.push(env.DB.prepare("INSERT INTO audit_log (id,actor,action,detail) VALUES (?,?,'rewards_settings',?)").bind(crypto.randomUUID(), actor,
+    JSON.stringify({ settings: { from: st.settings, to: settings }, tiers: { from: st.tiers.map((t) => [t.id, t.name, t.min_spend_paise, t.discount_pct, t.active]), to: tiers.map((t) => [t.id, t.name, t.min_spend_paise, t.discount_pct, !!t.active]) } })));
+  await env.DB.batch(stmts);
+  return getRewards(env);
+}
+
+// Customers: search + standing. Spend uses the same derivation as the storefront (one query for the page).
+async function listCustomers(sp, env) {
+  const q = (sp.get("q") || "").trim().slice(0, 80), page = Math.max(parseInt(sp.get("page"), 10) || 1, 1);
+  const like = q ? `%${q.replace(/[%_\\]/g, (c) => "\\" + c)}%` : "%";
+  const [tiers, rows] = await Promise.all([LOYALTY.loadTiers(env.DB), env.DB.prepare(
+    `SELECT u.id,u.email,u.name,u.phone,u.created_at,
+       (SELECT count(*) FROM orders o WHERE o.user_id=u.id) orders,
+       coalesce((SELECT sum(o.qualifying_paise * (o.paid_paise - min(o.refunded_paise, o.paid_paise)) / o.paid_paise) FROM orders o
+                 WHERE o.user_id=u.id AND o.payment_status='paid' AND o.paid_paise>0 AND o.status NOT IN ('cancelled','returned')),0)
+       + coalesce((SELECT sum(a.delta_paise) FROM loyalty_adjustments a WHERE a.user_id=u.id),0) AS spend
+     FROM users u WHERE u.email LIKE ?1 ESCAPE '\\' OR coalesce(u.name,'') LIKE ?1 ESCAPE '\\' OR coalesce(u.phone,'') LIKE ?1 ESCAPE '\\'
+     ORDER BY u.created_at DESC, u.rowid DESC LIMIT 26 OFFSET ?2`).bind(like, (page - 1) * 25).all()]);
+  const more = rows.results.length > 25;
+  return json({ page, more, customers: rows.results.slice(0, 25).map((r) => { const spend = Math.max(0, Math.round(r.spend)); const t = LOYALTY.tierFor(spend, tiers); return { id: r.id, email: r.email, name: r.name, phone: r.phone, orders: r.orders, spend_paise: spend, tier: t ? t.id : null, tier_name: t ? t.name : null }; }) });
+}
+
+async function getCustomer(id, env) {
+  const u = await env.DB.prepare("SELECT id,email,name,phone,gstin,created_at,loyalty_tier_id FROM users WHERE id=?").bind(id).first();
+  if (!u) return fail(404, "Customer not found");
+  const [ctx, orders, adj, log, sav] = await Promise.all([
+    LOYALTY.loyaltyContext(env.DB, id, { loyaltyLive: true }),
+    env.DB.prepare("SELECT id,txn_id,created_at,status,payment_status,total,paid_paise,refunded_paise,qualifying_paise,shipping_paise,discount_paise,loyalty_tier FROM orders WHERE user_id=? ORDER BY created_at DESC, rowid DESC LIMIT 100").bind(id).all(),
+    env.DB.prepare("SELECT delta_paise,reason,actor,spend_before,spend_after,created_at FROM loyalty_adjustments WHERE user_id=? ORDER BY created_at DESC, rowid DESC").bind(id).all(),
+    env.DB.prepare("SELECT from_tier,to_tier,spend_paise,reason,created_at FROM loyalty_tier_log WHERE user_id=? ORDER BY created_at DESC, rowid DESC LIMIT 50").bind(id).all(),
+    env.DB.prepare("SELECT coalesce(sum(discount_paise),0) s FROM orders WHERE user_id=? AND payment_status='paid' AND status NOT IN ('cancelled','returned')").bind(id).first(),
+  ]);
+  const counts = (o) => o.payment_status === "paid" && o.paid_paise > 0 && !["cancelled", "returned"].includes(o.status);
+  return json({ customer: u, tier: ctx.tier, next: ctx.next, remaining_paise: ctx.remaining, spend_paise: ctx.spend, savings_paise: Number(sav.s) || 0,
+    orders: orders.results.map((o) => ({ ...o, counts: counts(o), effective_paise: counts(o) ? Math.round(o.qualifying_paise * (o.paid_paise - Math.min(o.refunded_paise, o.paid_paise)) / o.paid_paise) : 0 })),
+    adjustments: adj.results, tier_history: log.results });
+}
+
+async function adjustSpend(id, body, actor, env) {
+  const u = await env.DB.prepare("SELECT id FROM users WHERE id=?").bind(id).first();
+  if (!u) return fail(404, "Customer not found");
+  const delta = rupeesToPaise(typeof body.delta_rupees === "string" || typeof body.delta_rupees === "number" ? String(body.delta_rupees).replace(/^-/, "") : "");
+  const negative = typeof body.delta_rupees !== "undefined" && String(body.delta_rupees).trim().startsWith("-");
+  const reason = sanitiseText(body.reason, 200), key = typeof body.idempotency_key === "string" ? body.idempotency_key.slice(0, 64) : "";
+  if (delta === null || delta === 0) return json({ error: "Enter a non-zero amount in rupees (max 2 decimals)", fields: { delta_rupees: "Enter an amount" } }, 400);
+  if (delta > 10_000_000) return json({ error: "A single adjustment can be at most ₹1,00,000", fields: { delta_rupees: "Too large" } }, 400);
+  if (reason.length < 8) return json({ error: "Explain the correction (at least 8 characters)", fields: { reason: "Reason required" } }, 400);
+  if (key.length < 8) return fail(400, "Missing operation key");
+  if (body.confirm !== true) return fail(400, "Please confirm the adjustment");
+  const signed = negative ? -delta : delta;
+  const before = await LOYALTY.spendOf(env.DB, id);
+  if (before + signed < 0) return fail(409, `Spend cannot go below ₹0 (currently ₹${(before / 100).toFixed(2)})`);
+  try {
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO loyalty_adjustments (id,user_id,delta_paise,reason,actor,spend_before,spend_after,idempotency_key) VALUES (?,?,?,?,?,?,?,?)").bind(crypto.randomUUID(), id, signed, reason, actor, before, before + signed, key),
+      env.DB.prepare("INSERT INTO audit_log (id,actor,action,detail) VALUES (?,?,'rewards_adjust',?)").bind(crypto.randomUUID(), actor, JSON.stringify({ user_id: id, delta_paise: signed, reason, spend_before: before, spend_after: before + signed })),
+    ]);
+  } catch { return fail(409, "This adjustment was already recorded"); }
+  await LOYALTY.syncTier(env.DB, id, `manual adjustment by ${actor}: ${reason}`).catch(() => {});
+  return getCustomer(id, env);
+}
+
+// Refund record for a paid order (money is returned outside this system; this keeps spend and history honest).
+async function refundOrder(id, body, actor, env) {
+  const o = await env.DB.prepare("SELECT id,user_id,payment_status,paid_paise,refunded_paise FROM orders WHERE id=?").bind(id).first();
+  if (!o) return fail(404, "Order not found");
+  const amount = rupeesToPaise(typeof body.amount_rupees === "string" || typeof body.amount_rupees === "number" ? body.amount_rupees : "");
+  const reason = sanitiseText(body.reason, 200), key = typeof body.idempotency_key === "string" ? body.idempotency_key.slice(0, 64) : "";
+  if (amount === null || amount <= 0) return json({ error: "Enter the refund amount in rupees", fields: { amount_rupees: "Enter an amount" } }, 400);
+  if (reason.length < 5) return json({ error: "Enter a reason", fields: { reason: "Reason required" } }, 400);
+  if (key.length < 8) return fail(400, "Missing operation key");
+  if (body.confirm !== true) return fail(400, "Please confirm the refund");
+  if (o.payment_status !== "paid") return fail(409, "Only paid orders can be refunded");
+  if (amount > o.paid_paise - o.refunded_paise) return fail(409, `Refund exceeds what is left to refund (₹${((o.paid_paise - o.refunded_paise) / 100).toFixed(2)})`);
+  const rid = crypto.randomUUID();
+  try {
+    const res = await env.DB.batch([
+      env.DB.prepare("UPDATE orders SET refunded_paise = refunded_paise + ?2, updated_at = unixepoch() WHERE id = ?1 AND payment_status = 'paid' AND refunded_paise = ?3 AND refunded_paise + ?2 <= paid_paise").bind(id, amount, o.refunded_paise),
+      env.DB.prepare("INSERT INTO order_refunds (id,order_id,amount_paise,reason,actor,idempotency_key) SELECT ?1,?2,?3,?4,?5,?6 WHERE changes() = 1").bind(rid, id, amount, reason, actor, key),
+      env.DB.prepare("INSERT INTO audit_log (id,actor,action,order_id,detail) SELECT ?1,?2,'order_refund',?3,?4 WHERE EXISTS (SELECT 1 FROM order_refunds WHERE id=?5)").bind(crypto.randomUUID(), actor, id, JSON.stringify({ amount_paise: amount, reason }), rid),
+    ]);
+    if (res[0].meta.changes !== 1) return fail(409, "The order changed while you were working. Refresh and try again.");
+  } catch { return fail(409, "This refund was already recorded"); }
+  if (o.user_id) await LOYALTY.syncTier(env.DB, o.user_id, "refund recorded").catch(() => {});
+  return json({ ok: true, refunded_paise: o.refunded_paise + amount });
+}
+
+// ── Cart milestones (campaigns) ──────────────────────────────────────
+// A campaign pays an explicit reward (free shipping, or up to 20% off) once the cart's net product value (without GST) reaches the
+// threshold. Never auto-applied beyond what is configured here; saved atomically with an audit row; never deleted (orders reference
+// them), only deactivated. The percentage reward does not stack on quantity/member discounts unless "combinable" is chosen.
+const CAMP_AUDIENCE = ["all", "signed_in", "members"];
+const campDay = (v) => { const t = Date.parse(`${v}T00:00:00Z`); return Number.isNaN(t) ? null : Math.floor(t / 1000); };
+
+function validateCampaign(b) {
+  const errors = {}, f = {};
+  const name = sanitiseText(b.name, 60); if (name.length < 2) errors.name = "Give the milestone a name"; else f.name = name;
+  const th = rupeesToPaise(typeof b.threshold_rupees === "string" || typeof b.threshold_rupees === "number" ? b.threshold_rupees : "");
+  if (th === null || th < 100 || th > 10_000_000) errors.threshold_rupees = "Threshold must be between ₹1 and ₹1,00,000"; else f.threshold_paise = th;
+  if (!["free_shipping", "percent_off"].includes(b.reward_type)) errors.reward_type = "Choose a reward"; else f.reward_type = b.reward_type;
+  if (f.reward_type === "percent_off") {
+    const v = Number(b.reward_value);
+    if (!Number.isFinite(v) || v <= 0 || v > 20 || Math.abs(Math.round(v * 100) - v * 100) > 1e-6) errors.reward_value = "Percentage must be above 0 and at most 20 (max 2 decimals)"; else f.reward_value = v;
+  } else if (f.reward_type) f.reward_value = 0;
+  if (!CAMP_AUDIENCE.includes(b.audience ?? "all")) errors.audience = "Invalid audience"; else f.audience = b.audience ?? "all";
+  f.combinable = b.combinable === true ? 1 : 0; f.active = b.active === true ? 1 : 0;
+  const date = (k, end) => { const v = b[k]; if (v === undefined || v === null || v === "") return null; if (typeof v !== "string" || !validDate(v)) { errors[k] = "Enter a valid date"; return undefined; } const t = campDay(v); return end ? t + 86399 : t; };
+  f.starts_at = date("starts", false); f.ends_at = date("ends", true);
+  if (f.starts_at && f.ends_at && f.ends_at < f.starts_at) errors.ends = "End date must be on or after the start date";
+  for (const k of ["max_redemptions", "per_customer_limit"]) {
+    const v = b[k]; if (v === undefined || v === null || v === "") { f[k] = null; continue; }
+    const n = intIn(v, 1, 1_000_000); if (n === null) errors[k] = "Enter a whole number of 1 or more, or leave blank"; else f[k] = n;
+  }
+  return { f, errors };
+}
+
+async function listCampaigns(env) {
+  const { results } = await env.DB.prepare(
+    `SELECT c.*, (SELECT count(*) FROM orders o WHERE o.campaign_id=c.id AND o.status NOT IN ('cancelled','returned')) redemptions FROM cart_campaigns c ORDER BY c.threshold_paise, c.created_at`).all();
+  const cfg = Object.fromEntries((await env.DB.prepare("SELECT key,value FROM membership_config").all()).results.map((r) => [r.key, r.value]));
+  const minMargin = Number(cfg.min_margin_pct) || 20;
+  const { results: prods } = await env.DB.prepare("SELECT name,price_paise,cost_paise FROM products WHERE active=1 AND cost_paise IS NOT NULL").all();
+  return json({ campaigns: results.map((c) => {
+    const warnings = [];
+    if (c.reward_type === "percent_off") {
+      const low = prods.filter((p) => p.price_paise * (1 - c.reward_value / 100) < p.cost_paise / (1 - minMargin / 100));
+      if (low.length) warnings.push(`A ${c.reward_value}% reward takes ${low.length} product${low.length === 1 ? "" : "s"} below the ${minMargin}% minimum margin (${low.slice(0, 3).map((p) => p.name).join(", ")}${low.length > 3 ? ", …" : ""}). Campaign percentages are not margin-limited per product.`);
+    }
+    return { ...c, active: !!c.active, combinable: !!c.combinable, warnings };
+  }), min_margin_pct: minMargin });
+}
+
+async function saveCampaign(body, actor, env) {
+  const { f, errors } = validateCampaign(body);
+  if (Object.keys(errors).length) return json({ error: "Please fix the highlighted values", fields: errors }, 400);
+  const id = typeof body.id === "string" && /^[0-9a-f-]{36}$/i.test(body.id) ? body.id.toLowerCase() : null;
+  const cur = id ? await env.DB.prepare("SELECT * FROM cart_campaigns WHERE id=?").bind(id).first() : null;
+  if (id && !cur) return fail(404, "Milestone not found");
+  const nid = cur ? cur.id : crypto.randomUUID();
+  if (body.confirm !== true) return fail(400, "Please confirm");
+  const stmts = [cur
+    ? env.DB.prepare("UPDATE cart_campaigns SET name=?2,active=?3,threshold_paise=?4,reward_type=?5,reward_value=?6,audience=?7,combinable=?8,starts_at=?9,ends_at=?10,max_redemptions=?11,per_customer_limit=?12,updated_at=unixepoch() WHERE id=?1")
+        .bind(nid, f.name, f.active, f.threshold_paise, f.reward_type, f.reward_value, f.audience, f.combinable, f.starts_at, f.ends_at, f.max_redemptions, f.per_customer_limit)
+    : env.DB.prepare("INSERT INTO cart_campaigns (id,name,active,threshold_paise,reward_type,reward_value,audience,combinable,starts_at,ends_at,max_redemptions,per_customer_limit) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)")
+        .bind(nid, f.name, f.active, f.threshold_paise, f.reward_type, f.reward_value, f.audience, f.combinable, f.starts_at, f.ends_at, f.max_redemptions, f.per_customer_limit),
+    env.DB.prepare("INSERT INTO audit_log (id,actor,action,detail) VALUES (?,?,'campaign_save',?)").bind(crypto.randomUUID(), actor, JSON.stringify({ id: nid, from: cur || null, to: f }))];
+  await env.DB.batch(stmts);
+  return listCampaigns(env);
+}
+
 // ── Router ────────────────────────────────────────────────────────────
 const PUBLIC_ASSETS = { "/style.css": "/style.css", "/login.js": "/login.js" };
 
@@ -983,7 +1194,7 @@ export default {
       if (!asset) {
         const user = await session(request, env);
         if (path === "/") asset = user ? "/app.html" : "/login.html";
-        else if ((path === "/app.js" || path === "/orders.js" || path === "/products.js" || path === "/pricing.js") && user) asset = path;
+        else if ((path === "/app.js" || path === "/orders.js" || path === "/products.js" || path === "/pricing.js" || path === "/rewards.js") && user) asset = path;
         else return new Response("Not found", { status: 404, headers: SEC_HEADERS });
       }
       const res = await env.ASSETS.fetch(new Request(new URL(asset, url), { method: "GET" }));
@@ -1049,6 +1260,18 @@ export default {
         if (pm[2] === "/duplicate" && method === "POST") return await duplicateProduct(pid, actor, env);
         if (pm[2] === "/delete" && method === "POST") return await deleteProduct(pid, actor, env);
       }
+      if (method === "GET" && path === "/api/rewards") return await getRewards(env);
+      if (method === "POST" && path === "/api/rewards") return await saveRewards(body, actor, env);
+      if (method === "GET" && path === "/api/campaigns") return await listCampaigns(env);
+      if (method === "POST" && path === "/api/campaigns") return await saveCampaign(body, actor, env);
+      if (method === "GET" && path === "/api/customers") return await listCustomers(url.searchParams, env);
+      const cm = path.match(/^\/api\/customers\/([0-9a-fA-F-]{8,64})(\/adjust)?$/);
+      if (cm) {
+        if (!cm[2] && method === "GET") return await getCustomer(cm[1], env);
+        if (cm[2] && method === "POST") return await adjustSpend(cm[1], body, actor, env);
+      }
+      const rm = path.match(/^\/api\/orders\/([0-9a-fA-F-]{8,64})\/refund$/);
+      if (rm && method === "POST") return await refundOrder(rm[1], body, actor, env);
       if (method === "GET" && path === "/api/pricing") return await getPricing(env);
       if (method === "POST" && path === "/api/pricing/preview") return await previewPricing(body, env);
       if (method === "POST" && path === "/api/pricing/publish") return await publishPricing(body, actor, env);

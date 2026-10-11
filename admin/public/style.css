@@ -161,3 +161,9 @@ dialog#sdlg { width:min(760px, calc(100vw - 24px)); }
 .bp-skip { margin:10px 0 0; font-size:13px; } .bp-skip ul { margin:6px 0 0; padding-left:18px; }
 #bpout, .bp-wrap { min-width:0; max-width:100%; } #bpanel .form { overflow-x:hidden; } #bpout input[type=search] { width:100%; min-height:44px; padding:0 12px; border:1px solid var(--line); border-radius:12px; }
 @media (max-width:480px) { .bp-table th, .bp-table td { padding:8px 6px; font-size:12px; } .bp-table th:first-child, .bp-table td:first-child { min-width:96px; } }
+
+/* rewards screen (no inline styles: the admin CSP forbids them) */
+.rw-row { display:grid; gap:8px; } .rw-two { display:grid; grid-template-columns:1fr 1fr; gap:8px; } .rw-camp { display:grid; gap:4px; }
+.rw-elig { display:grid; grid-template-columns:1fr auto 110px; gap:8px; align-items:center; } .rw-cust { display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center; }
+.chk { display:flex; align-items:center; gap:8px; min-height:44px; } .chk input { width:auto; min-height:0; }
+@media (max-width:480px) { .rw-elig { grid-template-columns:1fr auto; } .rw-elig > input { grid-column:1/-1; } }

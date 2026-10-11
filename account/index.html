@@ -206,14 +206,19 @@
       user = data.user;
 
       document.getElementById('userEmail').textContent = user.email;
+      /* Ntagz Rewards: tier and progress come from the server (derived from paid orders). The old gross-spend "Pro" counter is no longer used. */
       var tierEl = document.getElementById('userTier');
-      if (user.loyaltyTier === 'pro') {
-        tierEl.textContent = 'NFC Pro ★'; tierEl.className = 'acct-user-tier tier-pro';
-      } else {
-        var spent = Math.round((user.loyaltySpend || 0) / 100);
-        var remaining = Math.max(0, 10000 - spent);
-        if (remaining > 0) document.getElementById('loyaltyBar').textContent = '₹' + remaining.toLocaleString('en-IN') + ' to Pro tier';
-      }
+      fetch('/api/rewards/me', { credentials: 'include' }).then(function (rr) { return rr.ok ? rr.json() : null; }).then(function (rw) {
+        if (!rw || !rw.tier) return;
+        var inr = function (p) { return '₹' + Math.round(p / 100).toLocaleString('en-IN'); };
+        tierEl.textContent = rw.tier.name + ' tier' + (rw.topTier ? ' ★' : ''); tierEl.className = 'acct-user-tier' + (rw.topTier ? ' tier-pro' : '');
+        var bar = document.getElementById('loyaltyBar');
+        bar.textContent = '';
+        var line = document.createElement('span');
+        line.textContent = rw.next ? inr(rw.next.remainingPaise) + ' more qualifying spend to ' + rw.next.name + ' · ' : 'Top tier · ';
+        var link = document.createElement('a'); link.href = '/membership/#rewards'; link.textContent = 'My rewards';
+        bar.appendChild(line); bar.appendChild(link);
+      }).catch(function () { });
 
       document.getElementById('pEmail').value = user.email;
       document.getElementById('pName').value  = user.name  || '';

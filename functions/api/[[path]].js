@@ -1,4 +1,5 @@
 const PRICING = require("../lib/pricing.js");
+const LOYALTY = require("../lib/loyalty.js");
 
 // Product structure (pack size, MOQ, fixed kits, all-inclusive) lives with the pricing engine so the admin preview uses it too.
 const PRODUCTS = PRICING.PRODUCTS;
@@ -24,18 +25,57 @@ async function loadPricing(env) {
   const nowMs = Date.now();
   if (pricingCache.db === env.DB && nowMs - pricingCache.at < 30000) return pricingCache.map;
   try {
-    const cols = "id,name,price_paise,active,track_stock,stock_qty,low_stock_threshold,preorder_enabled,preorder_message,preorder_dispatch,preorder_max,preordered_qty";
+    const cols = "id,name,category,price_paise,active,track_stock,stock_qty,low_stock_threshold,preorder_enabled,preorder_message,preorder_dispatch,preorder_max,preordered_qty";
     // member_discount_pct/cost_paise arrive with migration 0010; before it, read without them (= no member discount).
     let results;
-    try { ({ results } = await env.DB.prepare(`SELECT ${cols},member_discount_pct,cost_paise FROM products`).all()); }
-    catch { ({ results } = await env.DB.prepare(`SELECT ${cols},0 AS member_discount_pct,NULL AS cost_paise FROM products`).all()); }
+    // loyalty_eligible/loyalty_max_pct arrive with migration 0012 (before it: every product eligible, no ceiling).
+    try { ({ results } = await env.DB.prepare(`SELECT ${cols},member_discount_pct,cost_paise,loyalty_eligible,loyalty_max_pct FROM products`).all()); }
+    catch {
+      try { ({ results } = await env.DB.prepare(`SELECT ${cols},member_discount_pct,cost_paise,1 AS loyalty_eligible,NULL AS loyalty_max_pct FROM products`).all()); }
+      catch { ({ results } = await env.DB.prepare(`SELECT ${cols},0 AS member_discount_pct,NULL AS cost_paise,1 AS loyalty_eligible,NULL AS loyalty_max_pct FROM products`).all()); }
+    }
     const map = {};
     for (const r of results) map[r.id] = r;
     pricingCache = { db: env.DB, at: nowMs, map };
     return map;
   } catch (e) { console.error("loadPricing failed:", e && e.message); return null; }
 }
-const resetPricingCache = () => { pricingCache = { db: null, at: 0, map: null }; };
+const resetPricingCache = () => { campaignCache = { db: null, at: 0, rows: [] }; pricingCache = { db: null, at: 0, map: null }; settingsCache = { db: null, at: 0, v: null }; rewardsSchema = { db: null, at: 0, ok: false }; LOYALTY.resetTiersCache(); }; // tests flip config in place
+
+// A few in-stock products that would close the gap to the next cart milestone: same category as something in the cart first, then the
+// smallest overshoot. Values are ex-GST estimates at each product's minimum order; the server prices the real cart.
+function suggestFor(items, pricing, remainingPaise) {
+  const inCart = new Set(items.map((i) => i.id)), cats = new Set(items.map((i) => pricing[i.id] && pricing[i.id].category).filter(Boolean)), out = [];
+  for (const [id, st] of Object.entries(PRODUCTS)) {
+    const row = pricing[id];
+    if (st.fixed || inCart.has(id) || !row || !row.active) continue;
+    const unitEx = row.price_paise / 100 / (st.allInclusive ? 1.18 : 1);
+    if (!(unitEx > 0)) continue;
+    const qty = Math.max(st.moq || 10, Math.ceil(remainingPaise / 100 / unitEx));
+    if (qty > 100000 || (row.track_stock && !row.preorder_enabled && qty > row.stock_qty)) continue;
+    out.push({ id, name: row.name, qty, valuePaise: Math.round(qty * unitEx * 100), sameCategory: cats.has(row.category) });
+  }
+  out.sort((a, b) => (b.sameCategory - a.sameCategory) || (a.valuePaise - b.valuePaise));
+  return out.slice(0, 3);
+}
+
+// Everything the cart needs besides prices: the milestone reached/next (with relevant suggestions), and, for a signed-in customer, tier
+// progress. These are different numbers: the milestone is about THIS cart; the tier is about lifetime spend (before this order).
+async function rewardsBlock(env, request, you, items, pricing, member) {
+  const block = { campaign: you.campaign ? { ...you.campaign, savingsPaise: you.campaignDiscountPaise } : null, note: you.campaignNote || null, next: you.nextCampaign, suggest: [], tier: null };
+  if (you.nextCampaign && pricing) block.suggest = suggestFor(items, pricing, you.nextCampaign.remainingPaise);
+  try {
+    const settings = await loadMemberSettings(env), uid = (shopperOf.get(request) || {}).userId;
+    if (settings.loyaltyLive && uid) {
+      const ctx = member && member.loyalty ? member.loyalty : await LOYALTY.loyaltyContext(env.DB, uid, settings);
+      const tiers = await LOYALTY.loadTiers(env.DB), after = ctx.spend + you.qualifyingPaise, aTier = LOYALTY.tierFor(after, tiers), aNext = LOYALTY.nextTierFor(after, tiers);
+      const nm = (t) => (t ? { id: t.id, name: t.name, discountPct: Number(t.discount_pct) } : null);
+      block.tier = { spendPaise: ctx.spend, current: nm(ctx.tier), next: ctx.next ? { ...nm(ctx.next), remainingPaise: ctx.remaining } : null,
+        afterThisOrder: { spendPaise: after, tier: nm(aTier), next: aNext ? { ...nm(aNext), remainingPaise: aNext.min_spend_paise - after } : null } };
+    }
+  } catch (e) { console.error("tier progress unavailable:", e && e.message); }
+  return block;
+}
 
 // Returns a customer-facing message if any item can't be sold right now, else null.
 function unavailableReason(items, pricing) {
@@ -57,8 +97,13 @@ function unavailableReason(items, pricing) {
 }
 
 // Server-side price of a cart. `member` is the result of getMemberContext (null = regular prices). See functions/lib/pricing.js.
-function calculateTotal(items, state, member, pricing) {
-  return PRICING.priceCart(items, { products: PRODUCTS, live: pricing, state, member: !!member, settings: member ? member.settings : null });
+// `member` = getMemberContext's {settings, paid, loyalty} (null = regular prices). A bare {settings} means a paid member (the quote's what-if).
+function calculateTotal(items, state, member, pricing, campaigns) {
+  const paid = !!member && member.paid !== false;
+  const loyalty = member && member.loyalty && member.loyalty.pct > 0 ? { pct: member.loyalty.pct, tier: member.loyalty.tier } : null;
+  const t = PRICING.priceCart(items, { products: PRODUCTS, live: pricing, state, member: paid, settings: member ? member.settings : null, loyalty, campaigns });
+  if (t) t.loyaltyTier = loyalty ? loyalty.tier.id : null;
+  return t;
 }
 
 async function razorpayRequest(path, env, body) {
@@ -164,22 +209,124 @@ function jsonAuth(data, status, allowedOrigin, cookieHeader) {
   return new Response(JSON.stringify(data), { status, headers });
 }
 
+let settingsCache = { db: null, at: 0, v: null };
 async function loadMemberSettings(env) {
+  if (settingsCache.db === env.DB && Date.now() - settingsCache.at < 30000 && settingsCache.v) return settingsCache.v;
   const { results } = await env.DB.prepare("SELECT key, value FROM membership_config").all();
-  return PRICING.settingsFrom(Object.fromEntries(results.map((r) => [r.key, r.value])));
+  const v = PRICING.settingsFrom(Object.fromEntries(results.map((r) => [r.key, r.value])));
+  settingsCache = { db: env.DB, at: Date.now(), v };
+  return v;
 }
 
-// {settings} for a signed-in customer with an unexpired active membership while member pricing is live; otherwise null.
+// Does this database have the rewards columns yet (migration 0012)? Without them checkout keeps working on the old statements.
+let rewardsSchema = { db: null, at: 0, ok: false };
+async function hasRewardsSchema(env) {
+  if (rewardsSchema.db === env.DB && (rewardsSchema.ok || Date.now() - rewardsSchema.at < 60000)) return rewardsSchema.ok;
+  let ok = false;
+  try { ok = !!(await env.DB.prepare("SELECT 1 x FROM pragma_table_info('orders') WHERE name='qualifying_paise'").first()); } catch { ok = false; }
+  rewardsSchema = { db: env.DB, at: Date.now(), ok };
+  return ok;
+}
+
+// Active cart milestones (cached 30s). Empty if the table does not exist yet.
+let campaignCache = { db: null, at: 0, rows: [] };
+async function loadCampaigns(env) {
+  if (campaignCache.db === env.DB && Date.now() - campaignCache.at < 30000) return campaignCache.rows;
+  let rows = [];
+  try { rows = (await env.DB.prepare("SELECT * FROM cart_campaigns WHERE active=1").all()).results; } catch { rows = []; }
+  campaignCache = { db: env.DB, at: Date.now(), rows };
+  return rows;
+}
+const shopperOf = new WeakMap(); // request -> {userId}: lets campaignsFor know who is shopping without a second session lookup
+
+// The milestones this shopper can use right now: in date, right audience, and under their redemption limits.
+async function campaignsFor(request, env, member) {
+  if (!env.DB) return [];
+  const rows = await loadCampaigns(env);
+  if (!rows.length) return [];
+  const now = Math.floor(Date.now() / 1000), uid = (shopperOf.get(request) || {}).userId || null, out = [];
+  for (const c of rows) {
+    if ((c.starts_at && now < c.starts_at) || (c.ends_at && now > c.ends_at)) continue;
+    if ((c.audience === "signed_in" && !uid) || (c.audience === "members" && !member)) continue;
+    try {
+      if (c.max_redemptions != null) { const t = await env.DB.prepare("SELECT count(*) n FROM orders WHERE campaign_id=? AND status NOT IN ('cancelled','returned')").bind(c.id).first(); if (t.n >= c.max_redemptions) continue; }
+      if (c.per_customer_limit != null) { if (!uid) continue; const t = await env.DB.prepare("SELECT count(*) n FROM orders WHERE campaign_id=? AND user_id=? AND status NOT IN ('cancelled','returned')").bind(c.id, uid).first(); if (t.n >= c.per_customer_limit) continue; }
+    } catch { continue; }
+    out.push(c);
+  }
+  return out;
+}
+
+// {settings, paid, loyalty} for a signed-in customer who earns a price benefit: an unexpired active paid membership (while member
+// pricing is live) and/or a spending tier with a discount (while rewards are live). null = regular prices. Loyalty is only looked up
+// when switched on, so while it is off this costs nothing extra.
 async function getMemberContext(request, env) {
   if (!env.DB) return null;
   const u = await getSession(request, env);
+  shopperOf.set(request, { userId: u ? u.user_id : null });
   if (!u) return null;
-  const mem = await env.DB.prepare(
-    `SELECT id FROM memberships WHERE user_id=? AND status='active' AND expires_at>unixepoch() LIMIT 1`
-  ).bind(u.user_id).first();
-  if (!mem) return null;
-  const settings = await loadMemberSettings(env);
-  return settings.live ? { settings } : null;
+  const [mem, settings] = await Promise.all([
+    env.DB.prepare(`SELECT id FROM memberships WHERE user_id=? AND status='active' AND expires_at>unixepoch() LIMIT 1`).bind(u.user_id).first(),
+    loadMemberSettings(env),
+  ]);
+  const paid = !!mem && settings.live;
+  let loyalty = null;
+  if (settings.loyaltyLive) { try { loyalty = await LOYALTY.loyaltyContext(env.DB, u.user_id, settings); } catch (e) { console.error("loyalty unavailable:", e && e.message); } }
+  if (!paid && !(loyalty && loyalty.pct > 0)) return null;
+  return { settings, paid, loyalty: loyalty && loyalty.pct > 0 ? loyalty : null, userId: u.user_id };
+}
+
+// ── Rewards (spending tiers) ──────────────────────────────────────────────────
+// GET /api/rewards/tiers  public: tier names, thresholds and discounts (cacheable).
+// GET /api/rewards/me     the signed-in customer's own standing: derived from their paid orders, never from a client flag.
+async function handleRewards(url, request, env, allowedOrigin) {
+  if (!env.DB) return jsonAuth({ error: "Rewards are temporarily unavailable" }, 503, allowedOrigin);
+  if (request.method !== "GET") return jsonAuth({ error: "Method not allowed" }, 405, allowedOrigin);
+  try {
+    const settings = await loadMemberSettings(env), tiers = await LOYALTY.loadTiers(env.DB);
+    const publicTiers = tiers.map((t) => ({ id: t.id, name: t.name, minSpendPaise: t.min_spend_paise, discountPct: Number(t.discount_pct), perks: t.perks }));
+    if (url.pathname.endsWith("/rewards/tiers")) {
+      const now = Math.floor(Date.now() / 1000);
+      const milestones = (await loadCampaigns(env)).filter((c) => (!c.starts_at || now >= c.starts_at) && (!c.ends_at || now <= c.ends_at))
+        .map((c) => ({ id: c.id, name: c.name, thresholdPaise: c.threshold_paise, type: c.reward_type, value: Number(c.reward_value) || 0, audience: c.audience }));
+      const res = jsonAuth({ live: settings.loyaltyLive, combine: settings.loyaltyCombine, tiers: publicTiers, milestones }, 200, allowedOrigin);
+      res.headers.set("Cache-Control", "public, max-age=300");
+      return res;
+    }
+    if (url.pathname.endsWith("/rewards/me")) {
+      const u = await getSession(request, env);
+      if (!u) return jsonAuth({ error: "Not authenticated" }, 401, allowedOrigin);
+      const ctx = await LOYALTY.loyaltyContext(env.DB, u.user_id, settings);
+      const [orders, adj, log, sav, mem] = await Promise.all([
+        env.DB.prepare(`SELECT txn_id ref, created_at, status, payment_status, paid_paise, refunded_paise, qualifying_paise, discount_paise FROM orders WHERE user_id=? ORDER BY created_at DESC, rowid DESC LIMIT 20`).bind(u.user_id).all(),
+        env.DB.prepare("SELECT delta_paise, reason, created_at FROM loyalty_adjustments WHERE user_id=? ORDER BY created_at DESC, rowid DESC LIMIT 20").bind(u.user_id).all(),
+        env.DB.prepare("SELECT from_tier, to_tier, spend_paise, reason, created_at FROM loyalty_tier_log WHERE user_id=? ORDER BY created_at DESC, rowid DESC LIMIT 20").bind(u.user_id).all(),
+        env.DB.prepare(`SELECT coalesce(sum(discount_paise),0) s FROM orders WHERE user_id=? AND payment_status='paid' AND status NOT IN ('cancelled','returned')`).bind(u.user_id).first(),
+        env.DB.prepare(`SELECT expires_at FROM memberships WHERE user_id=? AND status='active' AND expires_at>unixepoch() ORDER BY expires_at DESC LIMIT 1`).bind(u.user_id).first(),
+      ]);
+      // Relevant products to reach the next tier: what would close the gap, preferring the categories of their last paid order.
+      let suggest = [];
+      if (ctx.next) {
+        try {
+          const last = await env.DB.prepare("SELECT items_json FROM orders WHERE user_id=? AND payment_status='paid' ORDER BY created_at DESC, rowid DESC LIMIT 1").bind(u.user_id).first();
+          const items = last ? JSON.parse(last.items_json || "[]").filter((i) => i && typeof i.id === "string") : [];
+          const pricing = await loadPricing(env);
+          if (pricing) suggest = suggestFor(items, pricing, ctx.remaining).map((x) => ({ id: x.id, name: x.name, qty: x.qty, valuePaise: x.valuePaise }));
+        } catch (e) { console.error("tier suggestions failed:", e && e.message); }
+      }
+      const counts = (o) => o.payment_status === "paid" && o.paid_paise > 0 && !["cancelled", "returned"].includes(o.status);
+      const pub = (t) => (t ? { id: t.id, name: t.name, discountPct: Number(t.discount_pct), perks: t.perks, minSpendPaise: t.min_spend_paise } : null);
+      return jsonAuth({
+        live: ctx.live, suggest, spendPaise: ctx.spend, tier: pub(ctx.tier), next: ctx.next ? { ...pub(ctx.next), remainingPaise: ctx.remaining } : null, topTier: !ctx.next,
+        discountPct: ctx.pct, savingsPaise: Number(sav && sav.s) || 0, tiers: publicTiers,
+        paidMembership: mem ? { active: true, expiresAt: mem.expires_at } : { active: false },
+        orders: orders.results.map((o) => ({ ref: o.ref, createdAt: o.created_at, status: o.status, counted: counts(o), qualifyingPaise: counts(o) ? Math.round(o.qualifying_paise * (o.paid_paise - Math.min(o.refunded_paise, o.paid_paise)) / o.paid_paise) : 0, refundedPaise: o.refunded_paise })),
+        adjustments: adj.results.map((a) => ({ deltaPaise: a.delta_paise, reason: a.reason, at: a.created_at })),
+        tierHistory: log.results.map((l) => ({ from: l.from_tier, to: l.to_tier, spendPaise: l.spend_paise, reason: l.reason, at: l.created_at })),
+      }, 200, allowedOrigin);
+    }
+    return jsonAuth({ error: "Not found" }, 404, allowedOrigin);
+  } catch (e) { console.error("rewards failed:", e && e.message); return jsonAuth({ error: "Rewards are temporarily unavailable" }, 503, allowedOrigin); }
 }
 
 // ── Membership handler ────────────────────────────────────────────────────────
@@ -199,7 +346,13 @@ async function handleMembership(url, request, env, allowedOrigin) {
       const row = pricing[id];
       if (!p.fixed && row && row.active && Number(row.member_discount_pct) > 0) products[id] = Number(row.member_discount_pct);
     }
-    const res = jsonAuth({ live: settings.live, feePaise: settings.feePaise, durationDays: settings.durationDays, maxTotalDiscountPct: settings.maxTotalPct, products }, 200, allowedOrigin);
+    // Products a spending-tier discount can apply to (so "unlock member pricing" is never shown for an excluded product).
+    let tierEligible = [];
+    if (settings.loyaltyLive && pricing) {
+      const top = Math.max(0, ...(await LOYALTY.loadTiers(env.DB)).map((t) => Number(t.discount_pct) || 0));
+      if (top > 0) tierEligible = Object.entries(PRODUCTS).filter(([id, p]) => { const r = pricing[id]; return !p.fixed && r && r.active && r.loyalty_eligible !== 0 && !(r.loyalty_max_pct != null && Number(r.loyalty_max_pct) <= 0); }).map(([id]) => id);
+    }
+    const res = jsonAuth({ live: settings.live, loyaltyLive: settings.loyaltyLive, tierEligible, feePaise: settings.feePaise, durationDays: settings.durationDays, maxTotalDiscountPct: settings.maxTotalPct, products }, 200, allowedOrigin);
     res.headers.set("Cache-Control", "public, max-age=300");
     return res;
   }
@@ -211,12 +364,21 @@ async function handleMembership(url, request, env, allowedOrigin) {
     const mem = await env.DB.prepare(
       `SELECT * FROM memberships WHERE user_id=? AND status='active' AND expires_at > unixepoch() ORDER BY expires_at DESC LIMIT 1`
     ).bind(u.user_id).first();
+    // The spending tier rides along (only looked up while rewards are live), so one call tells the storefront everything it needs.
+    let tier = null;
+    try {
+      const settings = await loadMemberSettings(env);
+      if (settings.loyaltyLive) {
+        const c = await LOYALTY.loyaltyContext(env.DB, u.user_id, settings);
+        tier = { id: c.tier ? c.tier.id : null, name: c.tier ? c.tier.name : null, discountPct: c.pct, spendPaise: c.spend, next: c.next ? { name: c.next.name, remainingPaise: c.remaining } : null };
+      }
+    } catch (e) { console.error("tier lookup failed:", e && e.message); }
     return jsonAuth({ membership: mem ? {
       active: true,
       expiresAt: mem.expires_at,
       pricePaid: mem.price_paid,
       purchasedAt: mem.purchased_at,
-    } : { active: false } }, 200, allowedOrigin);
+    } : { active: false }, tier }, 200, allowedOrigin);
   }
 
   // POST /api/membership/create-order
@@ -524,9 +686,15 @@ async function recordIntent(env, request, txnId, gateway, body, total) {
     const d = cleanDetails(body);
     const items = (Array.isArray(body.items) ? body.items : []).map((i) => ({ id: String(i.id).slice(0, 64), qty: i.qty }));
     const amountPaise = total.amount * 100, gstPaise = total.gst * 100;
+    const rw = await hasRewardsSchema(env);
     await env.DB.batch([
       env.DB.prepare("DELETE FROM checkout_intents WHERE created_at < unixepoch() - 604800"),
-      env.DB.prepare(
+      rw ? env.DB.prepare(
+        `INSERT OR REPLACE INTO checkout_intents (txn_id,gateway,user_id,items_json,name,phone,email,address,pincode,state,gstin,quote_ref,subtotal_paise,gst_paise,amount_paise,shipping_paise,discount_paise,qualifying_paise,loyalty_tier,campaign_id,campaign_discount_paise)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      ).bind(txnId, gateway, u ? u.user_id : null, JSON.stringify(items), d.name, d.phone, d.email, d.address, d.pincode, d.state, d.gstin, d.quoteRef,
+             amountPaise - gstPaise, gstPaise, amountPaise, total.shippingPaise, total.memberDiscountPaise, total.qualifyingPaise, total.loyaltyTier || null, total.campaign ? total.campaign.id : null, total.campaignDiscountPaise)
+      : env.DB.prepare(
         `INSERT OR REPLACE INTO checkout_intents (txn_id,gateway,user_id,items_json,name,phone,email,address,pincode,state,gstin,quote_ref,subtotal_paise,gst_paise,amount_paise)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
       ).bind(txnId, gateway, u ? u.user_id : null, JSON.stringify(items), d.name, d.phone, d.email, d.address, d.pincode, d.state, d.gstin, d.quoteRef,
@@ -561,13 +729,20 @@ async function finalizeOrder(env, txnId, paymentRef, verifiedPaise, gateway) {
       return "failed";
     }
     const oid = crypto.randomUUID();
+    const rw = intent.qualifying_paise !== undefined; // the intent row only has these fields once migration 0012 is applied
     await env.DB.batch([
-      env.DB.prepare(
+      (rw ? env.DB.prepare(
+        `INSERT OR IGNORE INTO orders (id,user_id,txn_id,gateway,quote_ref,items_json,name,phone,email,address,pincode,state,gstin,subtotal,gst,total,payment_method,payment_status,paid_paise,shipping_paise,discount_paise,qualifying_paise,loyalty_tier,campaign_id,campaign_discount_paise)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'paid', ?,?,?,?,?,?,?)`
+      ).bind(oid, intent.user_id, txnId, intent.gateway, intent.quote_ref, intent.items_json, intent.name, intent.phone, intent.email,
+             intent.address, intent.pincode, intent.state, intent.gstin, intent.subtotal_paise, intent.gst_paise, intent.amount_paise,
+             intent.gateway, intent.amount_paise, intent.shipping_paise, intent.discount_paise, intent.qualifying_paise, intent.loyalty_tier, intent.campaign_id, intent.campaign_discount_paise)
+      : env.DB.prepare(
         `INSERT OR IGNORE INTO orders (id,user_id,txn_id,gateway,quote_ref,items_json,name,phone,email,address,pincode,state,gstin,subtotal,gst,total,payment_method,payment_status,paid_paise)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'paid', ?)`
       ).bind(oid, intent.user_id, txnId, intent.gateway, intent.quote_ref, intent.items_json, intent.name, intent.phone, intent.email,
              intent.address, intent.pincode, intent.state, intent.gstin, intent.subtotal_paise, intent.gst_paise, intent.amount_paise,
-             intent.gateway, intent.amount_paise),
+             intent.gateway, intent.amount_paise)),
       env.DB.prepare(
         `INSERT INTO payments (id,order_id,method,amount_paise,recorded_by,idempotency_key,reference)
          SELECT ?,id,?,?,'gateway',?,? FROM orders WHERE id=? AND changes()=1`
@@ -582,6 +757,9 @@ async function finalizeOrder(env, txnId, paymentRef, verifiedPaise, gateway) {
     if (!await env.DB.prepare("SELECT 1 AS x FROM orders WHERE txn_id=?").bind(txnId).first()) {
       await alertPayment(env, txnId, gateway || intent.gateway, ref, intent.amount_paise, "order row was not created");
       return "failed";
+    }
+    if (intent.user_id && intent.qualifying_paise !== undefined) {   // record any tier change this payment caused (history only; prices re-derive the tier)
+      try { await LOYALTY.syncTier(env.DB, intent.user_id, "order paid"); } catch (e) { console.error("tier sync failed:", e && e.message); }
     }
     return "recorded";
   } catch (e) {
@@ -606,7 +784,7 @@ async function recordOfflineOrder(request, env, body, origin) {
   const pricing = await loadPricing(env);
   const blocked = unavailableReason(body.items, pricing);
   if (blocked) return json({ error: blocked }, 409, origin);
-  const total = calculateTotal(body.items, d.state, member, pricing);
+  const total = calculateTotal(body.items, d.state, member, pricing, await campaignsFor(request, env, member));
   if (!total) return json({ error: "Invalid order" }, 400, origin);
   const ipHash = await sha256Hex(`ntagz:${request.headers.get("CF-Connecting-IP") || "unknown"}`);
   const recent = await env.DB.prepare("SELECT count(*) c FROM order_attempts WHERE ip_hash=? AND created_at>unixepoch()-600").bind(ipHash).first();
@@ -616,10 +794,16 @@ async function recordOfflineOrder(request, env, body, origin) {
   const items = body.items.map((i) => ({ id: String(i.id).slice(0, 64), qty: i.qty }));
   const amountPaise = total.amount * 100, gstPaise = total.gst * 100;
   const orderIdOffline = crypto.randomUUID();
+  const rw = await hasRewardsSchema(env);
   await env.DB.batch([
     env.DB.prepare("DELETE FROM order_attempts WHERE created_at < unixepoch() - 86400"),
     env.DB.prepare("INSERT INTO order_attempts (ip_hash) VALUES (?)").bind(ipHash),
-    env.DB.prepare(
+    rw ? env.DB.prepare(
+      `INSERT OR IGNORE INTO orders (id,user_id,txn_id,gateway,quote_ref,items_json,name,phone,email,address,pincode,state,gstin,subtotal,gst,total,payment_method,payment_status,paid_paise,shipping_paise,discount_paise,qualifying_paise,loyalty_tier,campaign_id,campaign_discount_paise)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'unpaid', 0, ?,?,?,?,?,?)`
+    ).bind(orderIdOffline, u ? u.user_id : null, txnId, method, d.quoteRef, JSON.stringify(items), d.name, d.phone, d.email, d.address, d.pincode,
+           d.state, d.gstin, amountPaise - gstPaise, gstPaise, amountPaise, method, total.shippingPaise, total.memberDiscountPaise, total.qualifyingPaise, total.loyaltyTier || null, total.campaign ? total.campaign.id : null, total.campaignDiscountPaise)
+    : env.DB.prepare(
       `INSERT OR IGNORE INTO orders (id,user_id,txn_id,gateway,quote_ref,items_json,name,phone,email,address,pincode,state,gstin,subtotal,gst,total,payment_method,payment_status,paid_paise)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'unpaid', 0)`
     ).bind(orderIdOffline, u ? u.user_id : null, txnId, method, d.quoteRef, JSON.stringify(items), d.name, d.phone, d.email, d.address, d.pincode,
@@ -740,13 +924,13 @@ async function onRequest({ request, env }) {
       if (blocked) return json({ error: blocked }, 409, origin);
       const state = typeof qb.state === "string" ? qb.state.slice(0, 50) : "";
       const member = await getMemberContext(request, env);
-      const you = calculateTotal(qb.items, state, member, pricing);
+      const you = calculateTotal(qb.items, state, member, pricing, await campaignsFor(request, env, member));
       if (!you) return json({ error: "Invalid order" }, 400, origin);
-      const out = { you, signedInMember: !!member };
+      const out = { you, signedInMember: !!member, rewards: await rewardsBlock(env, request, you, qb.items, pricing, member) };
       if (qb.compare === true && env.DB) {
         const settings = await loadMemberSettings(env);
-        out.guest = calculateTotal(qb.items, state, null, pricing);
-        out.member = settings.live ? calculateTotal(qb.items, state, { settings }, pricing) : null;
+        out.guest = calculateTotal(qb.items, state, null, pricing, await campaignsFor(request, env, null));
+        out.member = settings.live ? calculateTotal(qb.items, state, { settings, paid: true }, pricing, await campaignsFor(request, env, { settings })) : null;
         out.feePaise = settings.feePaise;
       }
       return json(out, 200, origin);
@@ -759,6 +943,11 @@ async function onRequest({ request, env }) {
       return json({ error: "Origin not allowed" }, 403, origin);
     }
     return handleMembership(url, request, env, allowedOrigin);
+  }
+  // ── Rewards routes (/api/rewards/*) ────────────────────────────────────
+  if (url.pathname.includes("/rewards/")) {
+    if (origin && !["https://www.ntagz.com", "https://ntagz.com"].includes(origin)) return json({ error: "Origin not allowed" }, 403, origin);
+    return handleRewards(url, request, env, allowedOrigin);
   }
 
   // ── Payment routes ─────────────────────────────────────────────────────
@@ -834,7 +1023,7 @@ async function onRequest({ request, env }) {
       const pricing = await loadPricing(env);
       const blocked = unavailableReason(body.items, pricing);
       if (blocked) return json({ error: blocked }, 409, origin);
-      const total = calculateTotal(body.items, body.state, member, pricing);
+      const total = calculateTotal(body.items, body.state, member, pricing, await campaignsFor(request, env, member));
       if (!total) return json({ error: "Invalid order" }, 400, origin);
       const order = await razorpayRequest("/orders", env, {
         amount: total.amount * 100,
@@ -867,7 +1056,7 @@ async function onRequest({ request, env }) {
       const pricing = await loadPricing(env);
       const blocked = unavailableReason(body.items, pricing);
       if (blocked) return json({ error: blocked }, 409, origin);
-      const total = calculateTotal(body.items, body.state, member, pricing);
+      const total = calculateTotal(body.items, body.state, member, pricing, await campaignsFor(request, env, member));
       if (!total) return json({ error: "Invalid order" }, 400, origin);
       const firstName = typeof body.name === "string" ? body.name.trim().split(/\s+/)[0].slice(0, 60) : "";
       const email = typeof body.email === "string" ? body.email.trim().slice(0, 254) : "";

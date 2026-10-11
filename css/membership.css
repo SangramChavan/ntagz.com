@@ -128,3 +128,29 @@ body.m-has-sticky{padding-bottom:72px}
 }
 @media (prefers-reduced-motion:reduce){.m *{transition:none!important}}
 .m [hidden]{display:none!important}
+
+/* Ntagz Rewards (free spending tiers) */
+.m{--m-orange:#FF6A21;--m-ink:#1F1C20;--m-soft:#F4F6F8}
+.m-banner{background:#FFF2EA;border:1px solid #FFD9C4;color:#7A3410;border-radius:14px;padding:12px 14px;font-size:14px;margin-top:16px}
+.m-tiers{display:grid;gap:12px;margin:28px 0 14px}
+.m-tier{border:1px solid var(--m-line);border-radius:var(--m-r);padding:20px;background:#fff;display:flex;flex-direction:column;gap:8px}
+.m-tier.current{border:2px solid var(--m-ink)}
+.m-tier h3{font-size:22px}
+.m-tier .t-spend{font-size:14px;color:var(--m-ink-2)}
+.m-tier .t-off{font:700 30px/1.1 var(--ff-head,system-ui,sans-serif);letter-spacing:-.02em}
+.m-tier .t-off small{font:500 14px var(--ff-body,system-ui,sans-serif);color:var(--m-ink-2);letter-spacing:0}
+.m-tier .t-perk{font-size:14px;color:var(--m-ink-2)}
+.m-tier .t-you{display:inline-block;align-self:flex-start;background:var(--m-ink);color:#fff;border-radius:999px;font-size:12px;font-weight:700;padding:3px 12px}
+.m-my{display:grid;gap:14px;margin-top:22px}
+.m-my .card{background:#fff;border:1px solid var(--m-line);border-radius:var(--m-r);padding:20px}
+.m-my h3{font-size:20px;margin-bottom:6px}
+.m-bar{height:10px;background:#E5E7EB;border-radius:999px;overflow:hidden;margin:12px 0 8px}
+.m-bar i{display:block;height:100%;background:var(--m-orange);border-radius:999px}
+.m-stat{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--m-line);font-size:15px}
+.m-stat:last-child{border-bottom:0}.m-stat b{font-variant-numeric:tabular-nums}
+.m-recs{display:grid;gap:8px;margin-top:10px}
+.m-recs a{display:flex;justify-content:space-between;gap:10px;align-items:center;border:1px solid var(--m-line);border-radius:14px;padding:12px 14px;text-decoration:none;font-size:14px;min-height:44px}
+.m-hist{margin-top:10px;font-size:14px}.m-hist summary{cursor:pointer;font-weight:700;min-height:44px;display:flex;align-items:center}
+.m-hist ul{margin:6px 0 0;padding-left:18px;color:var(--m-ink-2)}
+@media (min-width:640px){.m-tiers{grid-template-columns:repeat(2,1fr)}.m-my{grid-template-columns:repeat(2,1fr)}.m-my .wide{grid-column:1/-1}}
+@media (min-width:960px){.m-tiers{grid-template-columns:repeat(4,1fr)}}

@@ -52,6 +52,10 @@ function settingsFrom(cfg = {}) {
     durationDays: Math.min(Math.max(parseInt(cfg.duration_days, 10) || 365, 1), 1095),
     maxTotalPct: Math.min(Math.max(num(cfg.max_total_discount_pct, 30), 0), 90),
     minMarginPct: Math.min(Math.max(num(cfg.min_margin_pct, 20), 0), 90),
+    // Spending-tier rewards (loyalty). Off until an admin switches it on. combine: how a tier discount and a paid-membership
+    // discount meet on one product: "best_of" (customer gets the higher one, default) or "stack" (both, still under the cap).
+    loyaltyLive: cfg.loyalty_live === "1",
+    loyaltyCombine: cfg.loyalty_combine === "stack" ? "stack" : "best_of",
   };
 }
 
@@ -80,10 +84,17 @@ function memberPctFor({ listPrice, costPaise, allInclusive, bulkPct, requestedPc
 // items: [{id, qty}]. products: static structure table {id: {price, fixed, moq, packSize, allInclusive}}.
 // live: D1 rows by id (price_paise, member_discount_pct, cost_paise) or null. member: true only for a verified active member.
 // Returns null for any invalid cart (unknown product, bad qty, below MOQ, too many lines, absurd total).
-function priceCart(items, { products, live, state, member, settings }) {
+function combinePct(paid, tier, mode) {
+  if (paid > 0 && tier > 0 && mode === "stack") return paid + tier - (paid * tier) / 100;
+  return Math.max(paid, tier);
+}
+
+// loyalty: null, or {pct, tier} for a customer whose spending tier currently earns a discount. Per product: only if
+// products.loyalty_eligible, and never above that product's loyalty_max_pct when set (0 = excluded).
+function priceCart(items, { products, live, state, member, settings, loyalty, campaigns }) {
   if (!Array.isArray(items) || items.length < 1 || items.length > 30) return null;
   const s = settings || settingsFrom({});
-  let regular = 0, inclusive = 0, pieces = 0, list = 0, bulkOff = 0, memberOff = 0;
+  let regular = 0, inclusive = 0, pieces = 0, list = 0, bulkOff = 0, memberOff = 0, qualifying = 0;
   const lines = [];
   for (const item of items) {
     const product = products[item && item.id];
@@ -94,22 +105,64 @@ function priceCart(items, { products, live, state, member, settings }) {
     const linePieces = qty * (product.packSize || 1);
     const bulk = product.fixed ? 0 : bulkPctFor(linePieces);
     const price = row ? row.price_paise / 100 : product.price;
-    const requested = member && s.live && !product.fixed && row ? Number(row.member_discount_pct) || 0 : 0;
+    const paidReq = member && s.live && !product.fixed && row ? Number(row.member_discount_pct) || 0 : 0;
+    let tierReq = 0;
+    if (loyalty && loyalty.pct > 0 && !product.fixed && row && row.loyalty_eligible !== 0) {
+      tierReq = row.loyalty_max_pct !== null && row.loyalty_max_pct !== undefined ? Math.min(loyalty.pct, Number(row.loyalty_max_pct) || 0) : loyalty.pct;
+    }
+    const requested = combinePct(paidReq, tierReq, s.loyaltyCombine);
     const mp = memberPctFor({ listPrice: price, costPaise: row ? row.cost_paise : null, allInclusive: !!product.allInclusive, bulkPct: bulk, requestedPct: requested, settings: s });
+    const source = mp.pct <= 0 ? null : paidReq > 0 && tierReq > 0 && s.loyaltyCombine === "stack" ? "both" : paidReq >= tierReq ? "membership" : "tier";
     const afterBulk = price * qty * (100 - bulk) / 100;
     const net = afterBulk * (100 - mp.pct) / 100; // same expression as the original calculateTotal
     if (product.allInclusive) inclusive += net; else regular += net;
     pieces += product.fixed ? 70 : linePieces;
     list += price * qty; bulkOff += price * qty - afterBulk; memberOff += afterBulk - net;
-    lines.push({ id: item.id, qty, unitPrice: price, bulkPct: bulk, memberPct: mp.pct, requestedMemberPct: requested, limit: mp.limit, net, allInclusive: !!product.allInclusive });
+    qualifying += product.allInclusive ? net / (1 + GST_PCT / 100) : net; // net product value without GST (all-inclusive prices carry it)
+    lines.push({ id: item.id, qty, unitPrice: price, bulkPct: bulk, memberPct: mp.pct, requestedMemberPct: requested, source, limit: mp.limit, net, allInclusive: !!product.allInclusive });
   }
+  // Cart milestones: `campaigns` are pre-filtered by the caller (active, in date, audience, limits). The best one the cart has reached applies,
+  // never more than one. A percentage reward does not stack on quantity or member discounts unless that campaign says combinable.
+  const cartValue = qualifying; // net product value without GST, after the discounts above
+  let campaign = null, campaignOff = 0, campaignNote = null, nextCampaign = null;
+  const list_ = Array.isArray(campaigns) ? campaigns : [];
+  const reached = list_.filter((c) => cartValue * 100 + 1e-6 >= c.threshold_paise);
+  const hasOtherDiscount = bulkOff > 0.004 || memberOff > 0.004;
+  const baseShip = (r, i) => (state ? (i > 0 || (r + i) >= SHIPPING.freeAbove ? 0 : state === SHIPPING.homeState ? SHIPPING.home : SHIPPING.rest) : 0);
+  let best = null;
+  for (const c of reached) {
+    let benefit = 0;
+    if (c.reward_type === "free_shipping") benefit = baseShip(regular, inclusive);
+    else if (c.reward_type === "percent_off") {
+      if (hasOtherDiscount && !c.combinable) { campaignNote = campaignNote || `${c.name}: not applied because this cart already has a quantity or member discount`; continue; }
+      benefit = (regular + inclusive) * Math.min(Number(c.reward_value) || 0, 20) / 100;
+    }
+    if (benefit > 0 && (!best || benefit > best.benefit + 1e-9 || (Math.abs(benefit - best.benefit) <= 1e-9 && c.threshold_paise < best.c.threshold_paise))) best = { c, benefit };
+  }
+  if (best) {
+    campaign = best.c;
+    if (best.c.reward_type === "percent_off") {
+      const f = 1 - Math.min(Number(best.c.reward_value) || 0, 20) / 100;
+      campaignOff = best.benefit; regular *= f; inclusive *= f; qualifying *= f;
+    }
+  }
+  // The next milestone worth promising: unmet, and not a percentage reward that this cart's existing discounts would block.
+  nextCampaign = list_.filter((c) => cartValue * 100 + 1e-6 < c.threshold_paise && !(c.reward_type === "percent_off" && hasOtherDiscount && !c.combinable))
+    .sort((a, b) => a.threshold_paise - b.threshold_paise)[0] || null;
   const taxable = regular + inclusive;
-  const shipping = state ? (inclusive > 0 || taxable >= SHIPPING.freeAbove ? 0 : state === SHIPPING.homeState ? SHIPPING.home : SHIPPING.rest) : 0;
+  let shipping = baseShip(regular, inclusive);
+  let shippingWaived = 0;
+  if (campaign && campaign.reward_type === "free_shipping" && shipping > 0) { shippingWaived = shipping; shipping = 0; }
   const gst = Math.round(regular * GST_PCT / 100);
   const amount = Math.round(regular + gst + inclusive + shipping);
   if (!Number.isSafeInteger(amount) || amount < 1 || amount > 10000000) return null;
   const r2 = (x) => Math.round(x * 100) / 100;
-  return { amount, pieces, gst, shipping, subtotal: r2(list), bulkDiscount: r2(bulkOff), memberDiscount: r2(memberOff), member: memberOff > 0.004, lines };
+  // qualifyingPaise: what this order is worth to the spending tiers (after discounts, without GST and shipping). Frozen on the order.
+  return { amount, pieces, gst, shipping, shippingPaise: Math.round(shipping * 100), qualifyingPaise: Math.round(qualifying * 100), subtotal: r2(list), bulkDiscount: r2(bulkOff), memberDiscount: r2(memberOff), memberDiscountPaise: Math.round(memberOff * 100), member: memberOff > 0.004,
+    campaign: campaign ? { id: campaign.id, name: campaign.name, type: campaign.reward_type, value: Number(campaign.reward_value) || 0 } : null,
+    campaignDiscountPaise: Math.round(campaignOff * 100 + shippingWaived * 100), campaignNote,
+    nextCampaign: nextCampaign ? { id: nextCampaign.id, name: nextCampaign.name, type: nextCampaign.reward_type, value: Number(nextCampaign.reward_value) || 0, remainingPaise: Math.round(nextCampaign.threshold_paise - cartValue * 100) } : null,
+    cartValuePaise: Math.round(cartValue * 100), lines };
 }
 
 // Admin view of one product's member price: what members actually pay at each bulk tier, and why it may be limited.

@@ -4,10 +4,13 @@ const fs = require("node:fs");
 const { DatabaseSync } = require("node:sqlite");
 const root = path.join(__dirname, "..", "..");
 
-function makeDb() {
+// opts.exclude: migration file names to leave out (to test data that pre-dates a migration, or a database that has not been migrated yet).
+function makeDb(opts = {}) {
   const sqlite = new DatabaseSync(":memory:");
-  const files = ["db/schema.sql", "db/membership-schema.sql", ...fs.readdirSync(path.join(root, "admin/migrations")).sort().map((f) => "admin/migrations/" + f)];
+  const skip = new Set(opts.exclude || []);
+  const files = ["db/schema.sql", "db/membership-schema.sql", ...fs.readdirSync(path.join(root, "admin/migrations")).sort().filter((f) => !skip.has(f)).map((f) => "admin/migrations/" + f)];
   for (const f of files) sqlite.exec(fs.readFileSync(path.join(root, f), "utf8"));
+  const applyMigration = (name) => sqlite.exec(fs.readFileSync(path.join(root, "admin/migrations", name), "utf8"));
   const bound = (sql, a) => {
     const st = sqlite.prepare(sql);
     return {
@@ -25,6 +28,6 @@ function makeDb() {
       catch (e) { sqlite.exec("ROLLBACK"); throw e; }
     },
   };
-  return { sqlite, D1, q: (sql, ...a) => sqlite.prepare(sql).all(...a), one: (sql, ...a) => sqlite.prepare(sql).get(...a) };
+  return { sqlite, D1, applyMigration, q: (sql, ...a) => sqlite.prepare(sql).all(...a), one: (sql, ...a) => sqlite.prepare(sql).get(...a) };
 }
 module.exports = { makeDb, root };

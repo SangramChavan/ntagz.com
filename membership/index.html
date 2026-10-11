@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ntagz Annual Membership — ₹999/year member pricing</title>
-  <meta name="description" content="Pay member prices on NFC cards, tags and Google Review stands. ₹999 for 12 months. See your exact savings with the calculator before you join." />
+  <title>Ntagz Rewards — spend more, pay less | ntagz</title>
+  <meta name="description" content="Ntagz Rewards: free spending tiers with better prices on eligible NFC and QR products as you shop. Plus an optional ₹999 paid membership." />
   <link rel="canonical" href="https://www.ntagz.com/membership/" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="ntagz" />
-  <meta property="og:title" content="ntagz Annual Membership — Get More. Spend Less." />
-  <meta property="og:description" content="Member prices on NFC cards, tags and Google Review stands. ₹999 for 12 months, with a calculator to check your savings first." />
+  <meta property="og:title" content="Ntagz Rewards — your spending deserves rewards." />
+  <meta property="og:description" content="Shop Ntagz, unlock better prices, and get more value from every order." />
   <meta property="og:url" content="https://www.ntagz.com/membership/" />
   <meta property="og:image" content="https://www.ntagz.com/images/google-review-stand-10x10.jpg" />
   <meta name="twitter:card" content="summary_large_image" />
@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="../css/base.css" />
-  <link rel="stylesheet" href="../css/membership.css?v=20261011" />
+  <link rel="stylesheet" href="../css/membership.css?v=20261013" />
 </head>
 <body>
   <div id="header-placeholder"></div>
@@ -29,25 +29,60 @@
     <!-- Hero -->
     <header class="m-hero">
       <div class="m-wrap">
-        <p class="m-eyebrow">ntagz Annual Membership</p>
-        <h1>Get More. <span>Spend Less.</span> Every Time.</h1>
-        <p class="m-sub">Join ntagz and unlock member pricing on NFC cards, QR review products, tags, accessories, and future eligible products.</p>
-        <p class="m-price">₹<span data-fee>999</span> <small>/ year, incl. GST</small></p>
+        <p class="m-eyebrow">Ntagz Rewards</p>
+        <h1>Your spending <span>deserves rewards.</span></h1>
+        <p class="m-sub">Shop Ntagz, unlock better prices, and get more value from every order.</p>
         <div class="m-cta">
-          <button class="m-btn m-btn-primary" id="mHeroCta" type="button">Become a Member</button>
-          <a class="m-btn m-btn-ghost" href="../order.html">Explore Products</a>
+          <a class="m-btn m-btn-primary" id="mRewardsCta" href="/account/login.html?next=%2Fmembership%2F">Join Free</a>
+          <a class="m-btn m-btn-ghost" href="#tiers">See the tiers</a>
         </div>
-        <p class="m-note">One-time payment for 12 months. It does not renew automatically.</p>
-        <ul class="m-points">
-          <li>One annual membership</li>
-          <li>Member-exclusive prices on eligible products</li>
-          <li>More savings as you buy more</li>
-        </ul>
+        <p class="m-note">Free to join with just your email. There is nothing to buy to earn rewards.</p>
       </div>
     </header>
 
     <main>
-      <!-- Calculator -->
+      <!-- Tiers -->
+      <section id="tiers" aria-labelledby="tiersH">
+        <div class="m-wrap">
+          <p class="m-eyebrow">Membership tiers</p>
+          <h2 class="m-h2" id="tiersH">The more you shop, the better your price.</h2>
+          <p class="m-lede">Your tier comes from your qualifying spend. Discounts apply to eligible products only and are not combined with other offers unless stated.</p>
+          <p class="m-banner" id="rwOff" hidden>Tier discounts are not switched on yet. Your qualifying spend is still counted from your paid orders.</p>
+          <div class="m-tiers" id="rwTiers" aria-live="polite"><p class="m-fine">Loading tiers…</p></div>
+          <p class="m-fine">Qualifying spend is the value of your paid orders after discounts, without GST or shipping. Cancelled and returned orders do not count, and refunds reduce it in proportion.</p>
+        </div>
+      </section>
+
+      <!-- Personal rewards -->
+      <section id="rewards" aria-labelledby="myH" style="background:var(--m-soft)" hidden>
+        <div class="m-wrap">
+          <p class="m-eyebrow">Your rewards</p>
+          <h2 class="m-h2" id="myH">Where you stand.</h2>
+          <div class="m-my" id="rwMine" aria-live="polite"></div>
+        </div>
+      </section>
+
+      <!-- How it works -->
+      <section aria-labelledby="howH">
+        <div class="m-wrap">
+          <p class="m-eyebrow">How it works</p>
+          <h2 class="m-h2" id="howH">Three steps.</h2>
+          <ol class="m-steps">
+            <li><h3>Shop for what you need</h3><p>Sign in when you check out so your orders are linked to your account. Orders placed while signed out cannot be counted.</p></li>
+            <li><h3>Build qualifying spend</h3><p>Every paid order adds its product value, without GST or shipping, to your lifetime total.</p></li>
+            <li><h3>Unlock better pricing</h3><p>Reach a tier and your member price appears on eligible products in your cart and at checkout.</p></li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- Optional paid membership: separate from the free tiers -->
+      <section aria-labelledby="paidH" style="background:var(--m-soft)">
+        <div class="m-wrap">
+          <p class="m-eyebrow">Optional · paid</p>
+          <h2 class="m-h2" id="paidH">Ntagz Annual Membership (paid).</h2>
+          <p class="m-lede">A separate ₹<span data-fee>999</span> membership for people who buy often, available alongside the free tiers. You never need it to earn rewards. <span id="rwCombine">If you have both, you get the better of the two discounts on a product, not both.</span></p>
+        </div>
+      </section>
       <section id="calculator" aria-labelledby="calcH">
         <div class="m-wrap">
           <p class="m-eyebrow">Savings calculator</p>
@@ -84,7 +119,7 @@
       <section id="join" aria-labelledby="joinH">
         <div class="m-wrap">
           <div class="m-join" id="mJoin">
-            <p class="m-eyebrow">One plan</p>
+            <p class="m-eyebrow">Paid plan</p>
             <h3 id="joinH">ntagz Annual Membership</h3>
             <p class="m-price">₹<span data-fee>999</span> <small>/ year, incl. GST</small></p>
             <ul class="m-list">
@@ -93,7 +128,7 @@
               <li>One payment. No automatic renewal.</li>
               <li>Sign in with your email to join. Your membership is linked to that account.</li>
             </ul>
-            <button class="m-btn m-btn-primary" id="mJoinCta" type="button">Join ntagz Membership</button>
+            <button class="m-btn m-btn-primary" id="mJoinCta" type="button">Buy Annual Membership</button>
             <p class="m-status" id="mStatus" role="status"></p>
             <a class="m-btn m-btn-ghost" id="mCartLink" href="../order.html" hidden style="margin-top:10px">Return to your cart →</a>
             <p class="m-fine">Membership refund and cancellation terms are not published yet. If you need them confirmed before paying, email hello@ntagz.com. Product orders follow our <a href="../terms.html">Returns &amp; Refunds Policy</a>.</p>
@@ -114,32 +149,6 @@
         </div>
       </section>
 
-      <!-- Benefits -->
-      <section aria-labelledby="benH">
-        <div class="m-wrap">
-          <p class="m-eyebrow">Why members join</p>
-          <h2 class="m-h2" id="benH">The value, explained.</h2>
-          <div class="m-split four">
-            <div class="m-box"><h3>Better Prices</h3><p>Pay verified member prices on eligible products.</p></div>
-            <div class="m-box"><h3>More Value on Repeat Orders</h3><p>Get more opportunities to save when ordering regularly.</p></div>
-            <div class="m-box"><h3>One Membership, Eligible Products</h3><p>See which products qualify before purchasing.</p></div>
-            <div class="m-box"><h3>Clear Savings</h3><p>Compare regular and member pricing before checkout.</p></div>
-          </div>
-        </div>
-      </section>
-
-      <!-- How it works -->
-      <section aria-labelledby="howH" style="background:var(--m-soft,#F5F5F7)">
-        <div class="m-wrap">
-          <p class="m-eyebrow">How it works</p>
-          <h2 class="m-h2" id="howH">Three steps.</h2>
-          <ol class="m-steps">
-            <li><h3>Join</h3><p>Sign in and purchase your annual membership. It is active as soon as your payment is verified.</p></li>
-            <li><h3>Shop</h3><p>Browse eligible NFC and QR products as usual. Sign in when you check out.</p></li>
-            <li><h3>Save</h3><p>Member pricing is applied automatically by our checkout. No codes to enter.</p></li>
-          </ol>
-        </div>
-      </section>
 
       <!-- FAQ -->
       <section aria-labelledby="faqH">
@@ -147,32 +156,25 @@
           <p class="m-eyebrow">Questions</p>
           <h2 class="m-h2" id="faqH">Good to know.</h2>
           <div class="m-faq">
-            <details><summary>What is ntagz Membership?</summary><div class="a"><p>A one-year membership that gives you member pricing on eligible ntagz products when you are signed in at checkout.</p></div></details>
-            <details><summary>How much does it cost?</summary><div class="a"><p>₹<span data-fee>999</span> for 12 months, including GST. It is shown before you pay.</p></div></details>
-            <details><summary>How do member prices work?</summary><div class="a"><p>Member prices are a percentage off the regular price: currently <b data-pct-nfc>a discount</b> on NFC cards, tags and accessories and <b data-pct-fin>a discount</b> on Google Review products and printed cards. Our server applies them at checkout. Quantity discounts apply as well; on very large orders the combined discount is capped.</p></div></details>
-            <details><summary>Which products qualify for discounts?</summary><div class="a"><p>The products in the calculator above. Items not listed there, such as the Sample Kit, are not discounted. If a product is not eligible, it is priced as normal.</p></div></details>
-            <details><summary>How do I calculate my savings?</summary><div class="a"><p>Net savings = regular product total − member product total − the membership fee. The calculator does this for any basket you build.</p></div></details>
-            <details><summary>When does my membership start?</summary><div class="a"><p>Immediately after your payment is verified, usually within seconds of paying.</p></div></details>
-            <details><summary>How long is my membership valid?</summary><div class="a"><p>12 months (365 days) from the purchase date.</p></div></details>
-            <details><summary>Does membership renew automatically?</summary><div class="a"><p>No. It is a one-time payment. When it ends you can choose to buy again.</p></div></details>
-            <details><summary>Can I buy products without membership?</summary><div class="a"><p>Yes. Membership is optional. Everything is available at regular prices.</p></div></details>
-            <details><summary>What happens when my membership expires?</summary><div class="a"><p>Your account stays, and orders switch back to regular prices. Past orders are not affected.</p></div></details>
-            <details><summary>What is the cancellation and refund policy?</summary><div class="a"><p>Membership-specific cancellation and refund terms are not published yet and need to be confirmed. Please email hello@ntagz.com before paying if this matters to you. Product orders follow the <a href="../terms.html">Returns &amp; Refunds Policy</a>.</p></div></details>
+            <details><summary>How is qualifying spend calculated?</summary><div class="a"><p>It is the value of your paid orders after any discounts, <b>without GST and shipping</b>. Only orders placed while you were signed in count. Pending, unpaid, cancelled and returned orders do not count.</p></div></details>
+            <details><summary>When does my membership tier update?</summary><div class="a"><p>As soon as an order is paid. Online payments update within moments of payment. UPI or bank-transfer orders count once we mark the payment received.</p></div></details>
+            <details><summary>What happens after a refund?</summary><div class="a"><p>A refund reduces the order’s qualifying value in proportion to the amount refunded, and a cancelled or returned order stops counting. If your spend drops below a threshold your tier can go down. Prices on past orders never change.</p></div></details>
+            <details><summary>Do membership discounts apply to every product?</summary><div class="a"><p>No. Some products are excluded (for example fixed-price kits), and some have a lower ceiling. We show a member price only where one applies, and there is a combined-discount limit that protects our margins.</p></div></details>
+            <details><summary>Can coupons and member discounts be combined?</summary><div class="a"><p>We do not use coupon codes. Cart milestone rewards may be running: a free-shipping reward can sit alongside your member price, but a percentage reward does not stack on member or quantity discounts unless its description says so. Your cart tells you which reward applies and why.</p></div></details>
+            <details><summary>Does the membership expire?</summary><div class="a"><p>Tiers are based on lifetime spend and do not expire. The optional paid Annual Membership lasts 12 months and does not renew automatically.</p></div></details>
+            <details><summary>How do I access my membership on another device?</summary><div class="a"><p>Sign in with the same email on any device. Your tier is stored on your account, not in the browser. We never show rewards based on an email or phone number alone.</p></div></details>
+            <details><summary>What is the cancellation and refund policy for the paid membership?</summary><div class="a"><p>Terms specific to the paid membership are not published yet and need to be confirmed. Please email hello@ntagz.com before paying if this matters to you. Product orders follow the <a href="../terms.html">Returns &amp; Refunds Policy</a>.</p></div></details>
           </div>
         </div>
       </section>
     </main>
-
-    <div class="m-sticky" id="mSticky">
-      <b>₹<span data-fee>999</span> / year</b>
-      <button class="m-btn m-btn-primary" id="mStickyCta" type="button">Become a Member</button>
-    </div>
   </div>
 
   <div id="footer-placeholder"></div>
 
   <script src="../js/catalog.js?v=20261009"></script>
   <script src="../js/catalog-live.js?v=20261010"></script>
-  <script src="../js/membership.js?v=20261012" defer></script>
+  <script src="../js/membership.js?v=20261013" defer></script>
+  <script src="../js/rewards-page.js?v=20261013" defer></script>
 </body>
 </html>
