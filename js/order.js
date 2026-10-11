@@ -384,6 +384,29 @@
       });
   }
 
+  /* ── MEMBER QUOTE (server-priced; members only) ───────────────
+     One status check per page view; quotes are fetched only for active members, debounced, and only re-render when the
+     server answers for the cart currently on screen. Any failure leaves the guest estimate (checkout re-prices anyway). */
+  var MQ = { member: false, key: '', data: null, timer: null };
+  function memberQuoteFor(lineItems, state) {
+    if (!MQ || !MQ.member || !lineItems.length) return null;
+    var items = lineItems.map(function (li) { return { id: li.p.id, qty: li.qty }; });
+    var key = JSON.stringify([items, state]);
+    if (MQ.key === key) return MQ.data;
+    clearTimeout(MQ.timer);
+    MQ.timer = setTimeout(function () {
+      fetch('/api/quote', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: items, state: state }) })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) { MQ.key = key; MQ.data = d && d.you ? d.you : null; calculateQuote(); })
+        .catch(function () { });
+    }, 350);
+    return null;
+  }
+  fetch('/api/membership/status', { credentials: 'same-origin' })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) { if (d && d.membership && d.membership.active) { MQ.member = true; calculateQuote(); } })
+    .catch(function () { });
+
   /* ── MAIN CALCULATION ─────────────────────────────────────── */
   function calculateQuote() {
     // GST is mandatory on every order — always applied.
@@ -468,6 +491,29 @@
     var cgst = includeGst ? Math.round(regNet * 0.09) : 0;
     var sgst = includeGst ? Math.round(regNet * 0.09) : 0;
     var grandTotal = regNet + gstAmount + allIncNet + shippingCharge;
+
+    /* Member prices. Only the server knows whether this customer is an active member, so for members the quote shows the
+       server's numbers for this exact cart: the same amount checkout will charge. Guests keep the local estimate. */
+    var memberOff = 0, mq = memberQuoteFor(lineItems, cState);
+    if (mq && mq.member) {
+      memberOff = mq.memberDiscount;
+      netValue = Math.round((netValue - memberOff) * 100) / 100;
+      gstAmount = mq.gst; cgst = Math.round(mq.gst / 2); sgst = mq.gst - cgst;
+      if (mq.shipping !== shippingCharge && cState !== '') {
+        pillEl.className = mq.shipping === 0 ? 'shipping-info-pill' : 'shipping-info-pill paid';
+        pillEl.textContent = mq.shipping === 0 ? 'Free shipping applied to this order' : 'Shipping: ' + fmt(mq.shipping);
+      }
+      shippingCharge = mq.shipping;
+      grandTotal = mq.amount;
+    }
+    var mRow = $('memberDiscountRow');
+    if (!mRow) {
+      mRow = document.createElement('div'); mRow.id = 'memberDiscountRow'; mRow.className = 'qt-line discount';
+      mRow.innerHTML = '<span class="qt-label">Member Discount</span><span class="qt-val" id="outMemberDiscount"></span>';
+      var dl = $('outDiscountAmt').parentNode; dl.parentNode.insertBefore(mRow, dl.nextSibling);
+    }
+    mRow.style.display = memberOff > 0 ? 'flex' : 'none';
+    $('outMemberDiscount').textContent = '− ' + fmt(memberOff);
 
     $('outSubtotal').textContent = fmt(totalSubtotal);
     $('outDiscountAmt').textContent = totalDiscount > 0 ? '− ' + fmt(totalDiscount) : '₹0';
@@ -607,6 +653,7 @@
       'SUMMARY\n' +
       'Subtotal:       ' + fmt(totalSubtotal) + '\n' +
       'Bulk Discount:  - ' + fmt(totalDiscount) + '\n' +
+      (memberOff > 0 ? 'Member Discount: - ' + fmt(memberOff) + '\n' : '') +
       'Net Value:      ' + fmt(netValue) + '\n' +
       'Shipping:       ' + (hasAllInc ? 'Included' : (cState ? (shippingCharge === 0 ? 'FREE' : fmt(shippingCharge)) : 'TBD')) + '\n' +
       gstLine + '\n' +
@@ -728,7 +775,7 @@
     var tab = document.querySelector('.pay-tab.active');
     var pay = tab && tab.getAttribute('data-paytab');
     var items = selectedIds.map(function (id) { return { id: id, qty: CATALOG.byId(id).fixed ? 1 : (quantities[id] || 0) }; });
-    fetch((window.paymentApi || 'https://ntagz-payments.ambivert.workers.dev/api') + '/orders/offline', {
+    fetch((window.paymentApi || '/api') + '/orders/offline', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true,
       body: JSON.stringify({
         method: pay === 'bank' ? 'bank' : pay === 'upi' ? 'upi' : 'whatsapp', items: items, quoteRef: $('quoteNum').textContent,

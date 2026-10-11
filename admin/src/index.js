@@ -2,6 +2,8 @@
 // Every /api/* route except auth/request + auth/verify requires a valid session, re-checked against the
 // admin allowlist on each request. All SQL is parameterised. No CORS headers: same-origin only.
 
+import PRICING from "../../functions/lib/pricing.js"; // the same engine the payments Worker charges with
+
 const SESSION_TTL = 12 * 3600;
 const OTP_TTL = 600;
 const COOKIE = "ntagz_admin";
@@ -748,6 +750,139 @@ async function setActive(id, body, actor, env) {
   return json(await getProduct(id, env));
 }
 
+// ── Pricing & membership ──────────────────────────────────────────────
+// One page owns member pricing: plan settings (membership_config), per-product member % (products.member_discount_pct),
+// guardrails, a preview priced by the SAME engine checkout uses, and an explicit publish. Nothing changes live prices until
+// publish, which re-validates everything server-side, refuses stale drafts, and records the change in audit_log.
+const SETTING_KEYS = ["fee_paise", "duration_days", "discounts_live", "max_total_discount_pct", "min_margin_pct"];
+
+async function pricingState(env) {
+  const cfg = Object.fromEntries((await env.DB.prepare("SELECT key,value FROM membership_config").all()).results.map((r) => [r.key, r.value]));
+  const { results: rows } = await env.DB.prepare("SELECT id,sku,name,category,price_paise,cost_paise,member_discount_pct,active,all_inclusive FROM products ORDER BY name").all();
+  const version = await sha256(JSON.stringify([SETTING_KEYS.map((k) => cfg[k] ?? null), rows.map((r) => [r.id, r.member_discount_pct, r.price_paise, r.cost_paise])]));
+  return { cfg, rows, version };
+}
+
+// Typed draft: {settings: {fee, duration_days, live, max_total_discount_pct, min_margin_pct}, products: {id: pct}} -> errors + merged state.
+function applyDraft(state, draft) {
+  const errors = {}, cfg = { ...state.cfg }, d = draft && typeof draft === "object" ? draft : {};
+  const s = d.settings && typeof d.settings === "object" ? d.settings : {};
+  const pct2 = (v) => { const n = typeof v === "string" && v.trim() !== "" ? Number(v) : v; return typeof n === "number" && Number.isFinite(n) && Math.abs(Math.round(n * 100) - n * 100) < 1e-6 ? n : null; };
+  if (s.fee !== undefined) { const p = rupeesToPaise(s.fee); if (p === null || p < 100 || p > 10_000_000) errors.fee = "Fee must be between ₹1 and ₹1,00,000"; else cfg.fee_paise = String(p); }
+  if (s.duration_days !== undefined) { const v = intIn(s.duration_days, 1, 1095); if (v === null) errors.duration_days = "Duration must be 1–1095 days"; else cfg.duration_days = String(v); }
+  if (s.live !== undefined) { if (typeof s.live !== "boolean") errors.live = "Invalid"; else cfg.discounts_live = s.live ? "1" : "0"; }
+  if (s.max_total_discount_pct !== undefined) { const v = pct2(s.max_total_discount_pct); if (v === null || v < 0 || v > 90) errors.max_total_discount_pct = "Cap must be 0–90%"; else cfg.max_total_discount_pct = String(v); }
+  if (s.min_margin_pct !== undefined) { const v = pct2(s.min_margin_pct); if (v === null || v < 0 || v > 90) errors.min_margin_pct = "Minimum margin must be 0–90%"; else cfg.min_margin_pct = String(v); }
+  const byId = Object.fromEntries(state.rows.map((r) => [r.id, r]));
+  const rows = state.rows.map((r) => ({ ...r }));
+  const changedProducts = {};
+  const pp = d.products && typeof d.products === "object" ? d.products : {};
+  for (const [id, raw] of Object.entries(pp).slice(0, 500)) {
+    if (!byId[id]) { errors["p:" + id] = "Unknown product"; continue; }
+    const v = pct2(raw);
+    if (v === null || v < 0 || v > PRICING.MAX_MEMBER_PCT) { errors["p:" + id] = `Member discount must be 0–${PRICING.MAX_MEMBER_PCT}% (max 2 decimals)`; continue; }
+    if (v !== Number(byId[id].member_discount_pct)) { changedProducts[id] = { from: Number(byId[id].member_discount_pct), to: v }; rows.find((r) => r.id === id).member_discount_pct = v; }
+  }
+  const changedSettings = {};
+  for (const k of SETTING_KEYS) if ((cfg[k] ?? null) !== (state.cfg[k] ?? null)) changedSettings[k] = { from: state.cfg[k] ?? null, to: cfg[k] };
+  return { errors, cfg, rows, changedSettings, changedProducts };
+}
+
+// Everything the admin needs to judge a (draft) configuration: per-product member prices at every bulk tier, warnings, economics.
+async function evaluate(env, merged) {
+  const settings = PRICING.settingsFrom(merged.cfg);
+  const products = merged.rows.map((r) => {
+    const structure = PRICING.PRODUCTS[r.id];
+    return { ...r, member_discount_pct: Number(r.member_discount_pct), active: !!r.active, sellable: !!structure, fixed: !!(structure && structure.fixed), ...PRICING.memberPriceReport(structure, r, settings) };
+  });
+  const eligible = products.filter((p) => p.active && p.sellable && !p.fixed && p.member_discount_pct > 0);
+  const warnings = [], blockers = [];
+  if (settings.live && !eligible.length) blockers.push("Member pricing is switched on but no active product has a member discount. Members would pay for nothing.");
+  if (eligible.length && !eligible.some((p) => p.cost_paise != null)) warnings.push("No eligible product has a cost price, so only the combined-discount cap protects margins. Add cost prices in Products to enable the minimum-margin check.");
+  if (settings.durationDays !== 365) warnings.push(`Length is ${settings.durationDays} days, but the membership page says "12 months". Update the page copy before publishing.`);
+  const ignored = products.filter((p) => !p.sellable && p.member_discount_pct > 0);
+  if (ignored.length) warnings.push(`${ignored.map((p) => p.name).join(", ")}: not in the checkout catalogue, so the member discount has no effect.`);
+  // Customer economics: eligible spend (incl. GST) a member needs per year before the fee pays for itself, at regular quantities.
+  const pcts = eligible.map((p) => p.tiers[0].memberPct).filter((x) => x > 0).sort((a, b) => a - b);
+  const fee = settings.feePaise / 100;
+  const breakEven = (pct) => (pct > 0 ? Math.round(fee / (pct / 100)) : null);
+  const now_ = now();
+  const m = await env.DB.prepare(`SELECT coalesce(sum(CASE WHEN status='active' AND expires_at>?1 THEN 1 ELSE 0 END),0) active,
+      coalesce(sum(CASE WHEN status='active' AND expires_at>?1 AND expires_at<=?1+2592000 THEN 1 ELSE 0 END),0) expiring,
+      count(*) total, coalesce(sum(price_paid),0) revenue_paise FROM memberships`).bind(now_).first();
+  return {
+    settings: { fee_paise: settings.feePaise, duration_days: settings.durationDays, live: settings.live, max_total_discount_pct: settings.maxTotalPct, min_margin_pct: settings.minMarginPct },
+    products, warnings, blockers, bulk_tiers: PRICING.BULK_TIERS.map((t) => ({ min_pieces: t.min, pct: t.pct })).reverse(),
+    economics: {
+      fee_inr: fee, fee_ex_gst_inr: Math.round(fee / 1.18 * 100) / 100, eligible_products: eligible.length,
+      min_member_pct: pcts[0] ?? null, max_member_pct: pcts[pcts.length - 1] ?? null,
+      break_even_spend_min_inr: breakEven(pcts[pcts.length - 1]), break_even_spend_max_inr: breakEven(pcts[0]),
+    },
+    members: m,
+  };
+}
+
+async function getPricing(env) {
+  const state = await pricingState(env);
+  const ev = await evaluate(env, { cfg: state.cfg, rows: state.rows });
+  const { results: history } = await env.DB.prepare(
+    `SELECT actor,action,detail,created_at FROM audit_log WHERE action='pricing_publish' OR (action IN ('product_update','product_create') AND detail LIKE '%price_paise%')
+     ORDER BY created_at DESC, rowid DESC LIMIT 30`).all();
+  return json({ ...ev, version: state.version, history: history.map((h) => ({ ...h, detail: JSON.parse(h.detail || "{}") })) });
+}
+
+// Prices a sample basket for a guest and a member under the DRAFT configuration (nothing is saved).
+async function previewPricing(body, env) {
+  const state = await pricingState(env);
+  const merged = applyDraft(state, body.draft);
+  if (Object.keys(merged.errors).length) return json({ error: "Please fix the highlighted values", fields: merged.errors }, 400);
+  const ev = await evaluate(env, merged);
+  let basket = null;
+  if (Array.isArray(body.items) && body.items.length) {
+    const items = body.items.slice(0, 30).map((i) => ({ id: String(i && i.id).slice(0, 64), qty: Number(i && i.qty) }));
+    const live = Object.fromEntries(merged.rows.map((r) => [r.id, r]));
+    const inactive = items.find((i) => live[i.id] && !live[i.id].active);
+    const state_ = typeof body.state === "string" ? body.state.slice(0, 50) : "";
+    const settings = PRICING.settingsFrom(merged.cfg);
+    const guest = PRICING.priceCart(items, { products: PRICING.PRODUCTS, live, state: state_, member: false, settings });
+    const member = PRICING.priceCart(items, { products: PRICING.PRODUCTS, live, state: state_, member: true, settings });
+    if (!guest) return json({ error: "Check the basket: every product must be in the checkout catalogue and meet its minimum quantity (10, or 1 for the kit and UHF packs)." }, 400);
+    basket = { guest, member, member_pricing_live: settings.live, note: inactive ? `${live[inactive.id].name} is inactive, so checkout would refuse this basket.` : null };
+  }
+  return json({ ...ev, basket, changes: { settings: merged.changedSettings, products: merged.changedProducts } });
+}
+
+async function publishPricing(body, actor, env) {
+  const state = await pricingState(env);
+  if (body.version !== state.version) return fail(409, "Prices or settings changed since you opened this page (possibly in Products). Reload and review again.");
+  const merged = applyDraft(state, body.draft);
+  if (Object.keys(merged.errors).length) return json({ error: "Please fix the highlighted values", fields: merged.errors }, 400);
+  const nS = Object.keys(merged.changedSettings).length, nP = Object.keys(merged.changedProducts).length;
+  if (!nS && !nP) return fail(400, "Nothing to publish");
+  const ev = await evaluate(env, merged);
+  if (ev.blockers.length) return json({ error: ev.blockers[0], blockers: ev.blockers }, 409);
+  if (body.confirm !== true) return fail(400, "Please confirm publication");
+  const stmts = [];
+  for (const [k, c] of Object.entries(merged.changedSettings))
+    stmts.push(env.DB.prepare("INSERT INTO membership_config (key,value,updated_at) VALUES (?1,?2,unixepoch()) ON CONFLICT(key) DO UPDATE SET value=?2, updated_at=unixepoch()").bind(k, c.to));
+  for (const [id, c] of Object.entries(merged.changedProducts))
+    stmts.push(env.DB.prepare("UPDATE products SET member_discount_pct=?, updated_at=unixepoch() WHERE id=?").bind(c.to, id));
+  stmts.push(env.DB.prepare("INSERT INTO audit_log (id,actor,action,detail) VALUES (?,?,'pricing_publish',?)")
+    .bind(crypto.randomUUID(), actor, JSON.stringify({ settings: merged.changedSettings, products: merged.changedProducts, warnings: ev.warnings })));
+  await env.DB.batch(stmts);
+  return getPricing(env);
+}
+
+async function listMemberships(sp, env) {
+  const filter = sp.get("status");
+  const where = filter === "active" ? "WHERE m.status='active' AND m.expires_at>?1" : filter === "expired" ? "WHERE NOT (m.status='active' AND m.expires_at>?1)" : "WHERE ?1=?1";
+  const { results } = await env.DB.prepare(
+    `SELECT m.id,u.email,u.name,m.status,m.purchased_at,m.expires_at,m.price_paid,m.payment_id,
+            (SELECT count(*) FROM orders o WHERE o.user_id=m.user_id AND o.created_at>=m.purchased_at) orders_since
+     FROM memberships m LEFT JOIN users u ON u.id=m.user_id ${where} ORDER BY m.purchased_at DESC LIMIT 200`).bind(now()).all();
+  return json({ memberships: results.map((r) => ({ ...r, active: r.status === "active" && r.expires_at > now() })) });
+}
+
 // ── Router ────────────────────────────────────────────────────────────
 const PUBLIC_ASSETS = { "/style.css": "/style.css", "/login.js": "/login.js" };
 
@@ -763,7 +898,7 @@ export default {
       if (!asset) {
         const user = await session(request, env);
         if (path === "/") asset = user ? "/app.html" : "/login.html";
-        else if ((path === "/app.js" || path === "/orders.js" || path === "/products.js") && user) asset = path;
+        else if ((path === "/app.js" || path === "/orders.js" || path === "/products.js" || path === "/pricing.js") && user) asset = path;
         else return new Response("Not found", { status: 404, headers: SEC_HEADERS });
       }
       const res = await env.ASSETS.fetch(new Request(new URL(asset, url), { method: "GET" }));
@@ -827,6 +962,10 @@ export default {
         if (pm[2] === "/duplicate" && method === "POST") return await duplicateProduct(pid, actor, env);
         if (pm[2] === "/delete" && method === "POST") return await deleteProduct(pid, actor, env);
       }
+      if (method === "GET" && path === "/api/pricing") return await getPricing(env);
+      if (method === "POST" && path === "/api/pricing/preview") return await previewPricing(body, env);
+      if (method === "POST" && path === "/api/pricing/publish") return await publishPricing(body, actor, env);
+      if (method === "GET" && path === "/api/memberships") return await listMemberships(url.searchParams, env);
       return fail(404, "Not found");
     } catch (e) {
       console.error("admin error", e && e.message);

@@ -69,11 +69,12 @@ global.fetch = async (url, opts) => {
   let pr = await (await call("/api/membership/pricing")).json();
   assert.equal(pr.live, false); assert.deepEqual(pr.products, {}); ok("pricing endpoint: member pricing off -> live:false, no discounts");
   sqlite.prepare("UPDATE membership_config SET value='1' WHERE key='discounts_live'").run();
-  sqlite.prepare("UPDATE membership_config SET value='10' WHERE key='discount_nfc_consumables_pct'").run();
-  sqlite.prepare("UPDATE membership_config SET value='12' WHERE key='discount_finished_products_pct'").run();
+  sqlite.prepare("UPDATE products SET member_discount_pct=10 WHERE id='black-nfc-card'").run(); // per-product % (migration 0010)
+  sqlite.prepare("UPDATE products SET member_discount_pct=12 WHERE id='google-review-nfc-card'").run();
+  sqlite.prepare("UPDATE products SET member_discount_pct=20 WHERE id='sample-kit'").run(); // fixed kit: must stay excluded
   const pres = await call("/api/membership/pricing"); pr = await pres.json();
   assert.equal(pr.live, true); assert.equal(pr.products["black-nfc-card"], 10); assert.equal(pr.products["google-review-nfc-card"], 12);
   assert.equal(pr.products["sample-kit"], undefined); assert.equal(pres.headers.get("Cache-Control"), "public, max-age=300");
-  assert.equal(pr.feePaise, 99900); ok("pricing endpoint: category %s, sample kit excluded, cacheable, no session needed");
+  assert.equal(pr.feePaise, 99900); ok("pricing endpoint: per-product %s, sample kit excluded, cacheable, no session needed");
   console.log(`\nall ${n} hardening checks passed`);
 })().catch((e) => { console.error(e); process.exit(1); });
