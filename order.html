@@ -433,10 +433,12 @@
 <script src="js/catalog-live.js?v=20261010" defer></script>
   <script src="js/cart.js" defer></script>
   <script src="js/cart-ui.js" defer></script>
-  <script src="js/order.js?v=20261011" defer></script>
+  <script src="js/order.js?v=20261012" defer></script>
   <script defer="" src="js/component-loader.js"></script>
   <script>
-    var paymentApi = "https://ntagz-payments.ambivert.workers.dev/api";
+    // Same origin (ntagz.com/api/* is routed to the payments Worker) so the customer's sign-in cookie reaches checkout:
+    // that is how the server knows to apply member prices. A cross-origin call never carries it.
+    var paymentApi = "/api";
     var orderItems = function() {
       var cart = window.NTAGZ_CART.read();
       return Object.keys(cart).map(function(id) { return { id: id, qty: cart[id] }; });

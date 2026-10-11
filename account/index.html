@@ -114,7 +114,7 @@
         <div class="acct-loyalty" id="loyaltyBar"></div>
       </div>
       <a class="nav-item active" data-panel="orders">Order History</a>
-      <a class="nav-item" data-panel="membership">Trade Pass</a>
+      <a class="nav-item" data-panel="membership">Membership</a>
       <a class="nav-item" data-panel="profile">Profile</a>
       <a class="nav-item" data-panel="addresses">Saved Addresses</a>
       <span class="logout-btn" id="logoutBtn">Sign out</span>
@@ -129,7 +129,7 @@
 
       <!-- Membership -->
       <div class="panel-section" id="panelMembership">
-        <div class="panel-head"><h2>NTAGZ Trade Pass</h2></div>
+        <div class="panel-head"><h2>Membership</h2></div>
         <div class="panel-body" id="membershipBody"><p style="color:var(--ink-3);">Loading…</p></div>
       </div>
 
@@ -278,39 +278,27 @@
       // Update sidebar tier badge too
       var tierEl = document.getElementById('userTier');
       if (mem && mem.active) {
-        tierEl.textContent = 'Trade Pass ★'; tierEl.className = 'acct-user-tier tier-pro';
+        tierEl.textContent = 'Member ★'; tierEl.className = 'acct-user-tier tier-pro';
         var expiry = new Date(mem.expiresAt * 1000).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
         body.innerHTML =
           '<div style="background:linear-gradient(135deg,#1a1a1a,#2d1a0e);border-radius:12px;padding:24px 20px;color:#fff;margin-bottom:20px;">' +
-            '<div style="font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,0.5);margin-bottom:6px;">NTAGZ Trade Pass</div>' +
+            '<div style="font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,0.5);margin-bottom:6px;">ntagz Membership</div>' +
             '<div style="font-size:22px;font-weight:700;margin-bottom:4px;">Active</div>' +
             '<div style="font-size:14px;color:rgba(255,255,255,0.6);">Valid until ' + expiry + '</div>' +
           '</div>' +
-          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;">' +
-            '<div style="background:var(--paper);border-radius:10px;padding:14px 16px;">' +
-              '<div style="font-size:11px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:4px;">Welcome Credit</div>' +
-              '<div style="font-size:20px;font-weight:700;color:' + (mem.welcomeCreditUsed ? 'var(--ink-3)' : 'var(--tagz)') + ';">' +
-                (mem.welcomeCreditUsed ? 'Used' : '₹500 available') +
-              '</div>' +
+          '<div style="background:var(--paper);border-radius:10px;padding:14px 16px;margin-bottom:20px;">' +
+            '<div style="font-size:11px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:4px;">Member Since</div>' +
+            '<div style="font-size:18px;font-weight:700;color:var(--ink);">' +
+              new Date(mem.purchasedAt * 1000).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) +
             '</div>' +
-            '<div style="background:var(--paper);border-radius:10px;padding:14px 16px;">' +
-              '<div style="font-size:11px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:4px;">Member Since</div>' +
-              '<div style="font-size:18px;font-weight:700;color:var(--ink);">' +
-                new Date(mem.purchasedAt * 1000).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) +
-              '</div>' +
-            '</div>' +
+            '<div style="font-size:13px;color:var(--ink-3);margin-top:6px;">Member prices are applied automatically at checkout while you are signed in.</div>' +
           '</div>' +
-          (!mem.welcomeCreditUsed ?
-            '<div style="background:#FFF8F0;border:1px solid #FFD9B3;border-radius:10px;padding:14px 16px;font-size:13px;color:#7A4A1A;margin-bottom:20px;">' +
-              '<strong style="display:block;margin-bottom:3px;color:#5C3210;">₹500 credit available</strong>' +
-              'Place an order of ₹4,999 or more — your credit is applied automatically at checkout.' +
-            '</div>' : '') +
-          '<a class="btn btn-outline" href="../membership/" style="font-size:14px;">View Trade Pass details →</a>';
+          '<a class="btn btn-outline" href="../membership/" style="font-size:14px;">View membership details →</a>';
       } else {
         body.innerHTML =
-          '<p style="color:var(--ink-2);font-size:15px;margin-bottom:20px;">You don\'t have an active Trade Pass.</p>' +
-          '<p style="color:var(--ink-3);font-size:14px;line-height:1.6;margin-bottom:24px;">NTAGZ Trade Pass gives you member pricing on NFC consumables, a ₹500 welcome credit on your first qualifying order, and priority quotations.</p>' +
-          '<a class="btn btn-tagz" href="../membership/">Get Trade Pass · ₹999/year →</a>';
+          '<p style="color:var(--ink-2);font-size:15px;margin-bottom:20px;">You don\'t have an active membership.</p>' +
+          '<p style="color:var(--ink-3);font-size:14px;line-height:1.6;margin-bottom:24px;">ntagz Membership gives you member prices on eligible products for a year. Use the calculator on the membership page to check whether it pays off for what you buy.</p>' +
+          '<a class="btn btn-tagz" href="../membership/">See membership & savings →</a>';
       }
     }
 

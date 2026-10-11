@@ -3,7 +3,7 @@
 <meta name="robots" content="noindex,nofollow"><title>NTAGZ Admin — Orders</title><link rel="stylesheet" href="/style.css"></head>
 <body>
 <header><b>NTAGZ <span>Admin</span></b>
-<nav aria-label="Sections"><a href="#/orders" id="nav-orders">Orders</a><a href="#/products" id="nav-products">Products</a></nav><span><span id="who" class="sub"></span> <button class="btn" id="out" type="button">Sign out</button></span></header>
+<nav aria-label="Sections"><a href="#/orders" id="nav-orders">Orders</a><a href="#/products" id="nav-products">Products</a><a href="#/pricing" id="nav-pricing">Pricing</a></nav><span><span id="who" class="sub"></span> <button class="btn" id="out" type="button">Sign out</button></span></header>
 <main id="view-orders">
   <div class="pv-head">
     <div><h1 class="pv-title">Orders</h1><p class="sub">Follow every order from payment to delivery.</p></div>
@@ -38,10 +38,18 @@
   <table class="ptable"><thead><tr><th>Product</th><th>SKU</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th>Actions</th></tr></thead><tbody id="prows"></tbody></table>
   <div class="pager"><button class="btn" id="pprev" type="button">Previous</button><span id="ppageInfo"></span><button class="btn" id="pnext" type="button">Next</button></div>
 </main>
+<main id="view-pricing" hidden>
+  <div class="pv-head">
+    <div><h1 class="pv-title">Pricing &amp; Membership</h1><p class="sub">Member prices, the membership plan and the safety limits. Edits stay a draft until you publish.</p></div>
+    <button class="btn" id="mlistBtn" type="button">Members</button>
+  </div>
+  <div id="pricing" aria-live="polite"><p class="sub">Loading…</p></div>
+</main>
+<div class="draftbar" id="draftbar" hidden><span id="draftinfo"></span><span><button class="btn link" id="draftdiscard" type="button">Discard draft</button> <button class="btn primary" id="draftpublish" type="button">Review &amp; publish</button></span></div>
 <div id="toast" role="status" aria-live="polite" hidden></div>
 <dialog id="ppanel" class="panel" aria-labelledby="pptitle"></dialog>
 <dialog id="sdlg" aria-labelledby="sdtitle"></dialog>
 <dialog id="kdlg" aria-labelledby="kdtitle"></dialog>
 <dialog id="opanel" class="panel" aria-labelledby="optitle"></dialog>
 <dialog id="adlg" aria-labelledby="adtitle"></dialog>
-<script src="/app.js"></script><script src="/orders.js"></script><script src="/products.js"></script></body></html>
+<script src="/app.js"></script><script src="/orders.js"></script><script src="/products.js"></script><script src="/pricing.js"></script></body></html>

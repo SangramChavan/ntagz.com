@@ -128,3 +128,25 @@ h3.sec { margin:18px 0 8px; font-size:12px; text-transform:uppercase; letter-spa
 .tl.now::before { background:var(--accent); box-shadow:0 0 0 3px #ffe3d6; } .tl-title { font-weight:600; } .tl-note { font-size:13px; color:var(--ink); background:var(--soft); border-radius:8px; padding:4px 8px; margin-top:4px; }
 dialog#adlg { width:min(480px, calc(100vw - 24px)); }
 #csv { white-space:nowrap; }
+
+/* ═══ Pricing & Membership ═══ */
+#view-pricing { max-width:1180px; }
+.pcard { background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:12px; }
+.pcard-head { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:4px; } .pcard-head h2 { margin:0; font-size:17px; letter-spacing:-.01em; margin-right:auto; }
+.pgrid { display:grid; grid-template-columns:1fr; gap:12px; margin:12px 0; } .pgrid .field > span:first-child { font-weight:600; font-size:13px; }
+.pin { width:100%; min-height:44px; padding:0 12px; border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--ink); font:inherit; }
+#pall { width:84px; min-height:36px; }
+.note { background:var(--soft); border-radius:10px; padding:10px 12px; font-size:14px; margin:8px 0; } .note.warn { background:#fff6d6; color:#6b4e00; } .note.bad { background:#fdeaea; color:var(--bad); font-weight:600; }
+.rules { margin:8px 0; padding-left:20px; color:var(--ink2); font-size:14px; } .rules li { margin:2px 0; }
+.prtable .inl.pct { width:72px; } .prtable td.notes, .prow .notes { font-size:12px; color:#6b4e00; max-width:280px; } .prtable td.notes .sub { color:var(--ok); }
+.prtable tr.drafted td, .prow.drafted { background:#fff8f3; } .pname { font-weight:600; }
+.prow .editrow label .inl { width:72px; }
+.brow { display:flex; gap:8px; align-items:center; margin:6px 0; flex-wrap:wrap; } .brow select { flex:1; min-width:160px; min-height:40px; padding:0 10px; border:1px solid var(--line); border-radius:10px; background:#fff; font:inherit; } .brow .inl { width:96px; }
+.qline { display:grid; grid-template-columns:1.4fr 1fr 1fr; gap:8px; padding:6px 0; border-bottom:1px solid var(--line); font-size:14px; } .qline b { text-align:right; font-weight:600; } .qline.qhead b { color:var(--ink2); font-size:12px; text-transform:uppercase; letter-spacing:.04em; } .qline:nth-last-of-type(1) { border-bottom:0; }
+.hlist { list-style:none; margin:0; padding:0; } .hlist li { padding:8px 0; border-bottom:1px solid var(--line); font-size:14px; } .hlist li:last-child { border-bottom:0; }
+.draftbar { position:fixed; left:0; right:0; bottom:0; z-index:20; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 16px; background:#fff; border-top:2px solid var(--accent); box-shadow:0 -6px 20px rgba(0,0,0,.08); font-size:14px; }
+body.has-draftbar main { padding-bottom:90px; }
+dialog#sdlg { width:min(760px, calc(100vw - 24px)); }
+@media (min-width:900px) { .pgrid { grid-template-columns:1fr 1fr; } }
+.prtable td.notes, .prow .notes { max-width:none; } .prtable td.notes .pill, .prow .notes .pill { margin:2px 4px 2px 0; white-space:nowrap; }
+@media (max-width:420px) { nav { gap:0; } nav a { padding:8px 7px; font-size:14px; } header .btn { padding:0 8px; } .prow .editrow { flex-wrap:wrap; } }

@@ -52,7 +52,7 @@
         <div class="m-wrap">
           <p class="m-eyebrow">Savings calculator</p>
           <h2 class="m-h2" id="calcH">See what you would actually save.</h2>
-          <p class="m-lede">Pick the products and quantities you buy. We use today’s catalogue prices and your member prices. Nothing is sent to a server while you play.</p>
+          <p class="m-lede">Pick the products and quantities you buy. We use today’s catalogue prices and your member prices. We check the basket against our checkout prices; nothing is saved.</p>
           <div class="m-calc">
             <p class="m-fine" id="mCalcOff" hidden>Member pricing is not available right now. Please check back shortly.</p>
             <div class="m-calc-grid">
@@ -75,7 +75,7 @@
         <div class="m-wrap">
           <p class="m-eyebrow">Member prices</p>
           <h2 class="m-h2" id="prodH">Real products. Real prices.</h2>
-          <p class="m-lede">Prices below are per piece for a single order, before quantity discounts. Quantity discounts and member pricing stack at checkout.</p>
+          <p class="m-lede">Prices below are per piece for a single order, before quantity discounts. Quantity discounts and member pricing combine at checkout, up to a combined limit on very large orders.</p>
           <div class="m-grid" id="mGrid"></div>
         </div>
       </section>
@@ -148,7 +148,7 @@
           <div class="m-faq">
             <details><summary>What is ntagz Membership?</summary><div class="a"><p>A one-year membership that gives you member pricing on eligible ntagz products when you are signed in at checkout.</p></div></details>
             <details><summary>How much does it cost?</summary><div class="a"><p>₹<span data-fee>999</span> for 12 months, including GST. It is shown before you pay.</p></div></details>
-            <details><summary>How do member prices work?</summary><div class="a"><p>Member prices are a percentage off the regular price: currently <b data-pct-nfc>a discount</b> on NFC cards, tags and accessories and <b data-pct-fin>a discount</b> on Google Review products and printed cards. Our server applies them at checkout. Quantity discounts apply as well.</p></div></details>
+            <details><summary>How do member prices work?</summary><div class="a"><p>Member prices are a percentage off the regular price: currently <b data-pct-nfc>a discount</b> on NFC cards, tags and accessories and <b data-pct-fin>a discount</b> on Google Review products and printed cards. Our server applies them at checkout. Quantity discounts apply as well; on very large orders the combined discount is capped.</p></div></details>
             <details><summary>Which products qualify for discounts?</summary><div class="a"><p>The products in the calculator above. Items not listed there, such as the Sample Kit, are not discounted. If a product is not eligible, it is priced as normal.</p></div></details>
             <details><summary>How do I calculate my savings?</summary><div class="a"><p>Net savings = regular product total − member product total − the membership fee. The calculator does this for any basket you build.</p></div></details>
             <details><summary>When does my membership start?</summary><div class="a"><p>Immediately after your payment is verified, usually within seconds of paying.</p></div></details>
@@ -172,6 +172,6 @@
 
   <script src="../js/catalog.js?v=20261009"></script>
   <script src="../js/catalog-live.js?v=20261010"></script>
-  <script src="../js/membership.js?v=20261011" defer></script>
+  <script src="../js/membership.js?v=20261012" defer></script>
 </body>
 </html>

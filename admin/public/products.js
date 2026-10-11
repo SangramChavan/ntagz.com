@@ -332,10 +332,11 @@ $("pclear").onclick = clearFilters;
 $("padd").onclick = () => openPanel(null);
 $("pprev").onclick = () => { P.page--; loadProducts(); }; $("pnext").onclick = () => { P.page++; loadProducts(); };
 function route() {
-  const products = location.hash === "#/products";
-  $("view-orders").hidden = products; $("view-products").hidden = !products;
-  $("nav-orders").setAttribute("aria-current", products ? "false" : "page"); $("nav-products").setAttribute("aria-current", products ? "page" : "false");
-  if (products) { if (!P.loaded) { P.loaded = true; restoreFilters(); refresh(); } } else load().catch(() => {});
+  const view = location.hash === "#/products" ? "products" : location.hash === "#/pricing" ? "pricing" : "orders";
+  for (const v of ["orders", "products", "pricing"]) { $("view-" + v).hidden = v !== view; $("nav-" + v).setAttribute("aria-current", v === view ? "page" : "false"); }
+  if (window.pricingVisible) window.pricingVisible(view === "pricing");
+  if (view === "products") { if (!P.loaded) { P.loaded = true; restoreFilters(); refresh(); } }
+  else if (view === "orders") load().catch(() => {});
 }
 document.querySelectorAll("nav a").forEach((a) => a.addEventListener("click", () => setTimeout(route, 0)));
-window.addEventListener("hashchange", route); route();
+window.addEventListener("hashchange", route); window.addEventListener("DOMContentLoaded", route);
