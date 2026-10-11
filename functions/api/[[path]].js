@@ -535,14 +535,30 @@ async function recordIntent(env, request, txnId, gateway, body, total) {
   } catch (e) { console.error("recordIntent failed:", e && e.message); }
 }
 
-async function finalizeOrder(env, txnId, paymentRef, verifiedPaise) {
-  if (!env.DB || !txnId) return;
+// A gateway payment was verified but no order exists for it. Never silent: a structured log line plus a durable row to reconcile
+// (SELECT * FROM payment_alerts WHERE resolved=0). If D1 itself is down only the log line survives.
+async function alertPayment(env, txnId, gateway, ref, paise, reason) {
+  console.error(`PAYMENT NOT RECORDED txn=${txnId} gateway=${gateway} ref=${ref} paise=${paise} reason=${reason}`);
+  try {
+    await env.DB.prepare("INSERT OR IGNORE INTO payment_alerts (id,txn_id,gateway,payment_ref,amount_paise,reason) VALUES (?,?,?,?,?,?)")
+      .bind(crypto.randomUUID(), txnId, gateway, ref || null, Number.isFinite(paise) ? paise : null, reason).run();
+  } catch (e) { console.error("payment alert not stored:", e && e.message); }
+}
+
+// Returns "recorded" | "already" (order exists from an earlier call) | "failed" (payment verified, no order: customer must be told).
+async function finalizeOrder(env, txnId, paymentRef, verifiedPaise, gateway) {
+  const ref = String(paymentRef || "").slice(0, 128);
+  if (!env.DB || !txnId) { console.error(`PAYMENT NOT RECORDED txn=${txnId} gateway=${gateway} ref=${ref} reason=no database`); return "failed"; }
   try {
     const intent = await env.DB.prepare("SELECT * FROM checkout_intents WHERE txn_id=?").bind(txnId).first();
-    if (!intent) return; // unknown, or already finalised
+    if (!intent) {
+      if (await env.DB.prepare("SELECT 1 AS x FROM orders WHERE txn_id=?").bind(txnId).first()) return "already";
+      await alertPayment(env, txnId, gateway, ref, verifiedPaise, "no checkout intent (never saved or expired)");
+      return "failed";
+    }
     if (verifiedPaise !== null && verifiedPaise !== intent.amount_paise) {
-      console.error("finalizeOrder: verified amount does not match intent", txnId);
-      return;
+      await alertPayment(env, txnId, gateway, ref, verifiedPaise, `paid amount ${verifiedPaise} differs from order amount ${intent.amount_paise}`);
+      return "failed";
     }
     const oid = crypto.randomUUID();
     await env.DB.batch([
@@ -559,10 +575,20 @@ async function finalizeOrder(env, txnId, paymentRef, verifiedPaise) {
       env.DB.prepare(
         "UPDATE users SET loyalty_spend=loyalty_spend+?1, loyalty_tier=CASE WHEN loyalty_spend+?1>=1000000 THEN 'pro' ELSE loyalty_tier END WHERE id=?2 AND changes()=1"
       ).bind(intent.amount_paise, intent.user_id),
-      env.DB.prepare("DELETE FROM checkout_intents WHERE txn_id=?").bind(txnId),
+      // keep the intent unless the order really exists (INSERT OR IGNORE swallows constraint errors), so a retry can finish the job
+      env.DB.prepare("DELETE FROM checkout_intents WHERE txn_id=?1 AND EXISTS (SELECT 1 FROM orders WHERE txn_id=?1)").bind(txnId),
       ...stockStatements(env, oid, txnId, JSON.parse(intent.items_json || "[]")),
     ]);
-  } catch (e) { console.error("finalizeOrder failed:", e && e.message); }
+    if (!await env.DB.prepare("SELECT 1 AS x FROM orders WHERE txn_id=?").bind(txnId).first()) {
+      await alertPayment(env, txnId, gateway || intent.gateway, ref, intent.amount_paise, "order row was not created");
+      return "failed";
+    }
+    return "recorded";
+  } catch (e) {
+    // the batch is atomic, so the intent is still there: the gateway retrying the callback (or the customer reloading) can complete it
+    await alertPayment(env, txnId, gateway, ref, verifiedPaise, `database error: ${String(e && e.message).slice(0, 120)}`);
+    return "failed";
+  }
 }
 
 async function sha256Hex(text) {
@@ -787,10 +813,11 @@ async function onRequest({ request, env }) {
         transaction = { status: body.status };
       }
       const isSuccess = body.status === "success";
-      if (isSuccess) await finalizeOrder(env, body.txnid, String(body.mihpayid || "").slice(0, 128), Math.round(parseFloat(body.amount) * 100));
+      const recorded = isSuccess ? await finalizeOrder(env, body.txnid, String(body.mihpayid || "").slice(0, 128), Math.round(parseFloat(body.amount) * 100), "payu") : null;
       const confirmParams = new URLSearchParams({
         status: isSuccess ? "success" : "failed",
         gateway: "payu",
+        ...(recorded === "failed" && { recorded: "0" }),
         ...(body.txnid  && { txnid:  body.txnid }),
         ...(body.amount && { amount: body.amount }),
       });
@@ -830,8 +857,8 @@ async function onRequest({ request, env }) {
       if (!await verifySignature(orderId, paymentId, signature, env.RAZORPAY_KEY_SECRET)) {
         return json({ error: "Invalid payment signature" }, 400, origin);
       }
-      await finalizeOrder(env, orderId, paymentId, null);
-      return json({ status: "verified", paymentId, orderId }, 200, origin);
+      const recorded = await finalizeOrder(env, orderId, paymentId, null, "razorpay");
+      return json({ status: "verified", paymentId, orderId, recorded: recorded !== "failed" }, 200, origin);
     }
 
     if (url.pathname.endsWith("/payu/checkout")) {

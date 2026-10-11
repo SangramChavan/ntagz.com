@@ -65,6 +65,22 @@ global.fetch = async (url, opts) => {
   const [a, b] = [await start("pay_a"), await start("pay_b")]; // both saw stock=1
   const o1 = await pay(a, "pay_a"), o2 = await pay(b, "pay_b");
   assert.notEqual(o1.status, "on_hold"); assert.equal(o2.status, "on_hold"); assert.equal(o2.payment_status, "paid"); ok("last unit: first buyer fine, second paid order held for admin");
+  // finalizeOrder: verified payments are never silently dropped
+  sqlite.prepare("UPDATE products SET track_stock=0 WHERE id='uhf-rfid-label'").run();
+  const verifyRz = async (id, pid) => (await call("/api/verify-payment", { razorpay_order_id: id, razorpay_payment_id: pid, razorpay_signature: await hmac("rzp_secret", `${id}|${pid}`) })).json();
+  const okId = await start("pay_ok"); let v = await verifyRz(okId, "pay_ok");
+  assert.equal(v.recorded, true); assert.ok(one("SELECT 1 x FROM orders WHERE txn_id=?", okId)); assert.equal(one("SELECT count(*) c FROM payment_alerts").c, 0);
+  v = await verifyRz(okId, "pay_ok"); assert.equal(v.recorded, true); ok("normal and repeated verification: recorded, no alert");
+  v = await verifyRz("order_never_saved", "pay_ghost");
+  assert.equal(v.status, "verified"); assert.equal(v.recorded, false);
+  const al = one("SELECT * FROM payment_alerts WHERE txn_id='order_never_saved'"); assert.ok(al && /no checkout intent/.test(al.reason) && al.payment_ref === "pay_ghost");
+  await verifyRz("order_never_saved", "pay_ghost"); assert.equal(one("SELECT count(*) c FROM payment_alerts WHERE txn_id='order_never_saved'").c, 1); ok("payment with no saved intent: recorded:false, one durable alert (deduped)");
+  const dbId = await start("pay_dberr"); const realBatch = D1.batch; D1.batch = async () => { throw new Error("D1 unavailable"); };
+  v = await verifyRz(dbId, "pay_dberr"); D1.batch = realBatch;
+  assert.equal(v.recorded, false); assert.match(one("SELECT reason FROM payment_alerts WHERE txn_id=?", dbId).reason, /database error/);
+  assert.ok(one("SELECT 1 x FROM checkout_intents WHERE txn_id=?", dbId)); assert.equal(one("SELECT count(*) c FROM orders WHERE txn_id=?", dbId).c, 0); ok("database error: alert stored, intent kept, no order");
+  v = await verifyRz(dbId, "pay_dberr"); assert.equal(v.recorded, true); assert.ok(one("SELECT 1 x FROM orders WHERE txn_id=?", dbId)); ok("retry after the outage completes the order");
+
   // public member pricing endpoint: off by default, mirrors checkout config when on, never needs a session
   let pr = await (await call("/api/membership/pricing")).json();
   assert.equal(pr.live, false); assert.deepEqual(pr.products, {}); ok("pricing endpoint: member pricing off -> live:false, no discounts");

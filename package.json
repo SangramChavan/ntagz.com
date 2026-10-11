@@ -8,7 +8,8 @@
     "test:payment": "node scripts/test-payment-worker.js",
     "start": "node server.js",
     "test:stage2": "for t in admin/stage2/test-*.cjs; do node $t || exit 1; done",
-    "build:static": "bash scripts/build-static.sh"
+    "build:static": "bash scripts/build-static.sh",
+    "test:cutline": "node scripts/test-cutline.js"
   },
   "repository": {
     "type": "git",

@@ -127,3 +127,4 @@ body.m-has-sticky{padding-bottom:72px}
   body.m-has-sticky{padding-bottom:0}
 }
 @media (prefers-reduced-motion:reduce){.m *{transition:none!important}}
+.m [hidden]{display:none!important}

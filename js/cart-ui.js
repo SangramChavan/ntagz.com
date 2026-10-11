@@ -77,12 +77,14 @@
     }
 
     var subtotal = 0;
+    var MP = window.NTAGZ_MEMBER, mv = MP && MP.cartView(cart);   // verified-member server quote, or null
     body.innerHTML = ids.map(function (id) {
       var p = CATALOG.byId(id);
       if (!p) return '';
       var qty = p.fixed ? 1 : cart[id];
       var unit = p.unitLabel || p.unit || 'pc';
       var lineTotal = p.price * qty;
+      var ml = mv && mv.lines[id];
       subtotal += lineTotal;
       return '' +
         '<div class="cart-line" data-cart-line="' + esc(id) + '">' +
@@ -94,7 +96,9 @@
           : qty + ' ' + esc(unit) + (qty === 1 ? '' : 's') + ' · ' + fmtRate(p.price) + '/' + esc(unit)) +
         '</div>' +
         '</div>' +
-        '<div class="cart-line-total">' + fmt(lineTotal) + '</div>' +
+        '<div class="cart-line-total">' + (ml && ml.pct > 0
+          ? '<s>' + fmtRate(ml.regular) + '</s>' + fmtRate(ml.member) + '<span class="mp-save">Member price</span>'
+          : fmt(lineTotal)) + '</div>' +
         '<button type="button" class="cart-line-remove" data-cart-remove="' + esc(id) +
         '" aria-label="Remove ' + esc(p.name) + '">' +
         '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" ' +
@@ -103,9 +107,11 @@
     }).join('');
 
     foot.innerHTML =
-      '<div class="cart-subtotal-row"><span>Subtotal</span><span>' + fmt(subtotal) + '</span></div>' +
+      '<div class="cart-subtotal-row"><span>Subtotal</span><span>' + (mv ? fmtRate(mv.memberSub) : fmt(subtotal)) + '</span></div>' +
+      (mv && mv.savings > 0 ? '<div class="cart-subtotal-row"><span>Member savings</span><span>− ' + fmtRate(mv.savings) + '</span></div>' : '') +
       '<p class="cart-foot-note">GST, bulk discounts and shipping are calculated on the next step.</p>' +
-      '<a href="order.html" class="btn btn-tagz btn-block cart-checkout-btn">Checkout →</a>';
+      '<a href="order.html" class="btn btn-tagz btn-block cart-checkout-btn">Checkout →</a>' +
+      (MP ? MP.footHtml() : '');
   }
 
   /* ── HEADER BADGE ── */
@@ -227,6 +233,10 @@
 
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && drawer.classList.contains('open')) closeDrawer();
+  });
+
+  document.addEventListener('ntagz:member-pricing', function () {
+    if (drawer.classList.contains('open')) renderDrawer();
   });
 
   document.addEventListener('ntagz:cart-change', function () {

@@ -169,6 +169,12 @@
     }).catch(function () { });
   }
 
+  function cartCount() { try { return Object.keys(JSON.parse(localStorage.getItem('ntagz_cart_v1') || '{}')).length; } catch (e) { return 0; } }
+  function cartLink() {                    // "Return to your cart" whenever there is one to return to
+    var n = cartCount(), a = $('mCartLink'); if (!a || !n) return;
+    a.hidden = false; a.textContent = 'Return to your cart (' + n + (n === 1 ? ' item' : ' items') + ') →';
+  }
+
   function loadRzp(cb) {
     if (window.Razorpay) return cb();
     var sc = document.createElement('script'); sc.src = 'https://checkout.razorpay.com/v1/checkout.js';
@@ -195,7 +201,11 @@
               body: JSON.stringify({ razorpay_payment_id: resp.razorpay_payment_id, razorpay_order_id: resp.razorpay_order_id, razorpay_signature: resp.razorpay_signature }) })
               .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
               .then(function (v) {
-                if (v.ok && v.d.ok) location.href = '/account/?membership=activated';
+                if (v.ok && v.d.ok) {
+                  try { sessionStorage.setItem('ntagz.member.choice', 'yes'); localStorage.setItem('ntagz.member.hint', '1'); } catch (e) { }
+                  // someone shopping when they joined goes straight back to their cart (checkout re-prices as a member)
+                  location.href = cartCount() ? '/order.html?membership=activated' : '/account/?membership=activated';
+                }
                 else { status('We could not verify the payment. Email hello@ntagz.com with payment ID ' + resp.razorpay_payment_id + '.', true); busy(false); }
               }).catch(function () { status('Network error while verifying. Email hello@ntagz.com with payment ID ' + resp.razorpay_payment_id + '.', true); busy(false); });
           },
@@ -220,5 +230,5 @@
   }
 
   ctaIds.forEach(function (id) { var b = $(id); if (b) b.onclick = purchase; });
-  init(); checkStatus(); sticky();
+  init(); checkStatus(); sticky(); cartLink();
 })();

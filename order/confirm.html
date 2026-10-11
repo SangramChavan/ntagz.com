@@ -116,10 +116,11 @@
     var txnid   = params.get('txnid')   || params.get('orderId') || '';
     var amount  = params.get('amount')  || '';
     var isSuccess = status === 'success';
+    var unrecorded = isSuccess && params.get('recorded') === '0'; // paid, but our system could not save the order yet
 
-    if (isSuccess && window.NTAGZ_CART) window.NTAGZ_CART.clear();
+    if (isSuccess && !unrecorded && window.NTAGZ_CART) window.NTAGZ_CART.clear();
 
-    if (isSuccess && txnid) {
+    if (isSuccess && !unrecorded && txnid) {
       try {
         var snap = loadSnapshotEarly();
         var parsePaise = function(str) { return Math.round(parseFloat(String(str || '0').replace(/[^\d.]/g, '')) * 100) || 0; };
@@ -153,7 +154,13 @@
     var orderIdHtml = txnid ? '<div class="order-id-box">Order / Transaction ID<strong>' + escHtml(txnid) + '</strong></div>' : '';
     var amountHtml  = (isSuccess && amount) ? '<div class="order-id-box">Amount paid<strong>₹' + escHtml(amount) + '</strong></div>' : '';
 
-    card.innerHTML = isSuccess
+    card.innerHTML = unrecorded
+      ? '<div class="confirm-icon success">✓</div>' +
+        '<h1 class="confirm-title">Payment received</h1>' +
+        '<p class="confirm-subtitle">Your payment went through, but we could not finish saving your order. Please do not pay again. We will confirm it by email, or write to us with the ID below.</p>' +
+        orderIdHtml + amountHtml +
+        '<div class="confirm-actions"><a class="btn btn-tagz" href="mailto:hello@ntagz.com?subject=Payment%20received%20but%20order%20not%20confirmed">Email hello@ntagz.com</a></div>'
+      : isSuccess
       ? '<div class="confirm-icon success">✓</div>' +
         '<h1 class="confirm-title">Order confirmed!</h1>' +
         '<p class="confirm-subtitle">Payment successful. We\'ll prepare your NFC order and ship within 2–3 business days.</p>' +
