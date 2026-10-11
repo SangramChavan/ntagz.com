@@ -28,7 +28,7 @@ const corsHeaders = {
 function json(data, status = 200, origin) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { ...corsHeaders, "Access-Control-Allow-Origin": origin === "https://ntagz.com" ? origin : "https://www.ntagz.com", "Content-Type": "application/json" },
+    headers: { ...corsHeaders, "Access-Control-Allow-Origin": origin === "https://ntagz.com" ? origin : "https://www.ntagz.com", "Content-Type": "application/json", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" },
   });
 }
 
@@ -39,7 +39,7 @@ async function loadPricing(env) {
   const nowMs = Date.now();
   if (pricingCache.db === env.DB && nowMs - pricingCache.at < 30000) return pricingCache.map;
   try {
-    const { results } = await env.DB.prepare("SELECT id,name,price_paise,active,track_stock,stock_qty,low_stock_threshold FROM products").all();
+    const { results } = await env.DB.prepare("SELECT id,name,price_paise,active,track_stock,stock_qty,low_stock_threshold,preorder_enabled,preorder_message,preorder_dispatch,preorder_max,preordered_qty FROM products").all();
     const map = {};
     for (const r of results) map[r.id] = r;
     pricingCache = { db: env.DB, at: nowMs, map };
@@ -56,7 +56,13 @@ function unavailableReason(items, pricing) {
     if (!row) continue;
     const name = row.name || item.id;
     if (!row.active) return `${name} is currently unavailable`;
-    if (row.track_stock && Number.isInteger(item.qty) && item.qty > row.stock_qty) return row.stock_qty > 0 ? `Only ${row.stock_qty} of ${name} available` : `${name} is out of stock`;
+    if (row.track_stock && Number.isInteger(item.qty)) {
+      const room = row.preorder_enabled ? (row.preorder_max == null ? Infinity : Math.max(row.preorder_max - row.preordered_qty, 0)) : 0;
+      if (item.qty > row.stock_qty + room) {
+        if (!row.preorder_enabled) return row.stock_qty > 0 ? `Only ${row.stock_qty} of ${name} available` : `${name} is out of stock`;
+        return `Only ${row.stock_qty + room} of ${name} available (${row.stock_qty} ready to ship, ${room} for pre-order)`;
+      }
+    }
   }
   return null;
 }
@@ -174,8 +180,7 @@ async function getSession(request, env) {
 }
 
 async function sendOtp(email, otp, env) {
-  if (!env.RESEND_API_KEY) return; // dev: skip email, log to console
-  console.log(`OTP for ${email}: ${otp}`);
+  if (!env.RESEND_API_KEY) { console.log(`OTP for ${email}: ${otp}`); return; } // dev only: never logged when email is configured
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json" },
@@ -190,7 +195,7 @@ async function sendOtp(email, otp, env) {
 }
 
 function jsonAuth(data, status, allowedOrigin, cookieHeader) {
-  const headers = { ...corsHeaders, "Access-Control-Allow-Origin": allowedOrigin, "Content-Type": "application/json" };
+  const headers = { ...corsHeaders, "Access-Control-Allow-Origin": allowedOrigin, "Content-Type": "application/json", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
   if (cookieHeader) headers["Set-Cookie"] = cookieHeader;
   return new Response(JSON.stringify(data), { status, headers });
 }
@@ -220,6 +225,22 @@ async function handleMembership(url, request, env, allowedOrigin) {
   if (!env.DB) return new Response(JSON.stringify({ error: "Database not configured" }), { status: 503, headers: { "Content-Type": "application/json" } });
   const path = url.pathname;
   const method = request.method;
+
+  // GET /api/membership/pricing — public, no session. Member discount % per product, from the same config checkout uses,
+  // so the membership page shows exactly what checkout will charge. {live:false} when member pricing is switched off.
+  if (method === "GET" && path.endsWith("/membership/pricing")) {
+    const { results } = await env.DB.prepare(
+      `SELECT key, value FROM membership_config WHERE key IN ('fee_paise','discounts_live','discount_nfc_consumables_pct','discount_finished_products_pct')`
+    ).all();
+    const cfg = Object.fromEntries(results.map((r) => [r.key, r.value]));
+    const live = cfg.discounts_live === "1";
+    const pct = { nfc_consumables: parseFloat(cfg.discount_nfc_consumables_pct) || 0, finished_products: parseFloat(cfg.discount_finished_products_pct) || 0 };
+    const products = {};
+    if (live) for (const [id, p] of Object.entries(PRODUCTS)) if (p.category && pct[p.category] > 0) products[id] = pct[p.category];
+    const res = jsonAuth({ live, feePaise: parseInt(cfg.fee_paise, 10) || 99900, products }, 200, allowedOrigin);
+    res.headers.set("Cache-Control", "public, max-age=300");
+    return res;
+  }
 
   // GET /api/membership/status
   if (method === "GET" && path.endsWith("/membership/status")) {
@@ -274,12 +295,25 @@ async function handleMembership(url, request, env, allowedOrigin) {
     // Idempotent: check if already recorded
     const already = await env.DB.prepare(`SELECT id FROM memberships WHERE razorpay_order_id=?`).bind(razorpay_order_id).first();
     if (already) return jsonAuth({ ok: true, membershipId: already.id }, 200, allowedOrigin);
+    // The signature only proves *a* Razorpay order was paid. Confirm it is this user's Trade Pass order, paid in full.
+    const rp = await fetch(`https://api.razorpay.com/v1/orders/${encodeURIComponent(razorpay_order_id)}`, {
+      headers: { Authorization: "Basic " + btoa(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`) },
+    }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    if (!rp || rp.amount !== 99900 || rp.amount_paid !== 99900 || rp.receipt !== `tp-${u.user_id.slice(0, 8)}`) {
+      return jsonAuth({ error: "Payment does not match a Trade Pass order" }, 400, allowedOrigin);
+    }
     const memId = crypto.randomUUID();
     const now = Math.floor(Date.now() / 1000);
-    await env.DB.prepare(
-      `INSERT INTO memberships (id, user_id, status, purchased_at, expires_at, welcome_credit_paise, price_paid, payment_id, razorpay_order_id)
-       VALUES (?, ?, 'active', ?, ?, 50000, 99900, ?, ?)`
-    ).bind(memId, u.user_id, now, now + 365 * 86400, razorpay_payment_id, razorpay_order_id).run();
+    try {
+      await env.DB.prepare(
+        `INSERT INTO memberships (id, user_id, status, purchased_at, expires_at, welcome_credit_paise, price_paid, payment_id, razorpay_order_id)
+         VALUES (?, ?, 'active', ?, ?, 50000, 99900, ?, ?)`
+      ).bind(memId, u.user_id, now, now + 365 * 86400, razorpay_payment_id, razorpay_order_id).run();
+    } catch { // lost a race against the unique index: return the winner
+      const w = await env.DB.prepare(`SELECT id FROM memberships WHERE razorpay_order_id=?`).bind(razorpay_order_id).first();
+      if (w) return jsonAuth({ ok: true, membershipId: w.id }, 200, allowedOrigin);
+      return jsonAuth({ error: "Could not record membership" }, 500, allowedOrigin);
+    }
     return jsonAuth({ ok: true, membershipId: memId, expiresAt: now + 365 * 86400 }, 200, allowedOrigin);
   }
 
@@ -310,8 +344,14 @@ async function handleAccounts(url, request, env, allowedOrigin) {
     const otp = String(100000 + (arr[0] % 900000));
     const id = crypto.randomUUID();
     const expires = Math.floor(Date.now() / 1000) + 600;
-    await env.DB.prepare("DELETE FROM otp_tokens WHERE email = ?").bind(email).run();
-    await env.DB.prepare("INSERT INTO otp_tokens (id, email, otp, expires_at) VALUES (?, ?, ?, ?)").bind(id, email, otp, expires).run();
+    // Max 3 codes per email per 15 minutes (stops email bombing and endless invalidation of a victim's code).
+    const sent = await env.DB.prepare("SELECT count(*) AS n FROM otp_tokens WHERE email=? AND created_at > unixepoch() - 900").bind(email).first();
+    if (sent && sent.n >= 3) return jsonAuth({ error: "Too many codes requested. Try again in a few minutes." }, 429, allowedOrigin);
+    const otpHash = await sha256Hex(`ntagz:otp:${email}:${otp}`);
+    await env.DB.batch([
+      env.DB.prepare("UPDATE otp_tokens SET used=1 WHERE email=? AND used=0").bind(email),
+      env.DB.prepare("INSERT INTO otp_tokens (id, email, otp, expires_at) VALUES (?, ?, ?, ?)").bind(id, email, otpHash, expires),
+    ]);
     await sendOtp(email, otp, env);
     return jsonAuth({ sent: true }, 200, allowedOrigin);
   }
@@ -321,10 +361,13 @@ async function handleAccounts(url, request, env, allowedOrigin) {
     const email = typeof body.email === "string" ? body.email.trim().toLowerCase().slice(0, 254) : "";
     const otp   = typeof body.otp   === "string" ? body.otp.trim().slice(0, 6) : "";
     if (!email || !/^\d{6}$/.test(otp)) return jsonAuth({ error: "Invalid request" }, 400, allowedOrigin);
+    // Newest live code only; each guess burns one of 5 attempts (atomic), so 6 digits cannot be brute-forced.
     const token = await env.DB.prepare(
-      "SELECT id FROM otp_tokens WHERE email=? AND otp=? AND expires_at>unixepoch() AND used=0"
-    ).bind(email, otp).first();
+      "SELECT id, otp FROM otp_tokens WHERE email=? AND expires_at>unixepoch() AND used=0 AND attempts<5 ORDER BY created_at DESC, rowid DESC LIMIT 1"
+    ).bind(email).first();
     if (!token) return jsonAuth({ error: "Invalid or expired code" }, 401, allowedOrigin);
+    const burn = await env.DB.prepare("UPDATE otp_tokens SET attempts=attempts+1 WHERE id=? AND attempts<5").bind(token.id).run();
+    if (burn.meta.changes !== 1 || !safeEqual(token.otp, await sha256Hex(`ntagz:otp:${email}:${otp}`))) return jsonAuth({ error: "Invalid or expired code" }, 401, allowedOrigin);
     await env.DB.prepare("UPDATE otp_tokens SET used=1 WHERE id=?").bind(token.id).run();
     let user = await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first();
     if (!user) {
@@ -454,20 +497,42 @@ const OFFLINE_METHODS = ["upi", "bank", "whatsapp"];
 // ignored insert deducts nothing. Deduction is clamped at zero (never negative) and every change gets a movement row.
 function stockStatements(env, orderId, txnId, items) {
   const out = [];
+  const merged = new Map(); // one stock line per product (order_stock_lines is keyed by order+product)
   for (const it of items) {
     if (!it || typeof it.id !== "string" || !Number.isInteger(it.qty) || it.qty < 1) continue;
+    merged.set(it.id, (merged.get(it.id) || 0) + it.qty);
+  }
+  for (const [id, qty] of merged) {
+    // Order matters: allocation reads stock_qty, so it runs before the deduction below.
     out.push(
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO order_stock_lines (order_id,product_id,ready_qty,pre_qty)
+         SELECT ?1,id,min(stock_qty,?2),CASE WHEN preorder_enabled=1 THEN ?2-min(stock_qty,?2) ELSE 0 END
+         FROM products WHERE id=?3 AND track_stock=1 AND EXISTS (SELECT 1 FROM orders WHERE id=?1)`
+      ).bind(orderId, qty, id),
+      env.DB.prepare( // non-preorder shortfall (concurrent buyers): hold the paid order for the admin instead of silently shipping short
+        `UPDATE orders SET status='on_hold' WHERE id=?1 AND status IN ('placed','confirmed')
+         AND EXISTS (SELECT 1 FROM order_stock_lines WHERE order_id=?1 AND product_id=?3 AND pre_qty=0 AND ready_qty<?2)`
+      ).bind(orderId, qty, id),
+      env.DB.prepare(
+        `UPDATE products SET preordered_qty=preordered_qty+coalesce((SELECT pre_qty FROM order_stock_lines WHERE order_id=?1 AND product_id=?2),0), updated_at=unixepoch()
+         WHERE id=?2 AND preorder_enabled=1 AND track_stock=1 AND EXISTS (SELECT 1 FROM orders WHERE id=?1)`
+      ).bind(orderId, id),
       env.DB.prepare(
         `INSERT INTO inventory_movements (id,product_id,type,qty_change,prev_stock,new_stock,reason,reference,admin,idempotency_key)
          SELECT ?1,id,'out',-min(stock_qty,?2),stock_qty,max(stock_qty-?2,0),'Order sale',?3,'system',?4
          FROM products WHERE id=?5 AND track_stock=1 AND stock_qty>0 AND EXISTS (SELECT 1 FROM orders WHERE id=?4)`
-      ).bind(crypto.randomUUID(), it.qty, txnId, orderId, it.id),
+      ).bind(crypto.randomUUID(), qty, txnId, orderId, id),
       env.DB.prepare(
         `UPDATE products SET stock_qty=max(stock_qty-?1,0), updated_at=unixepoch()
          WHERE id=?2 AND track_stock=1 AND EXISTS (SELECT 1 FROM orders WHERE id=?3)`
-      ).bind(it.qty, it.id, orderId),
+      ).bind(qty, id, orderId),
     );
   }
+  out.push(env.DB.prepare(
+    `UPDATE orders SET is_preorder=1, status='preorder_confirmed' WHERE id=?1 AND status IN ('placed','confirmed')
+     AND EXISTS (SELECT 1 FROM order_stock_lines WHERE order_id=?1 AND pre_qty>0)`
+  ).bind(orderId));
   return out;
 }
 
@@ -572,7 +637,7 @@ async function recordOfflineOrder(request, env, body, origin) {
   return json({ ok: true, orderRef: txnId, total: total.amount }, 200, origin);
 }
 
-const STATUS_LABELS = { placed: "Order placed", confirmed: "Confirmed", processing: "Processing", packed: "Packed", shipped: "Shipped", out_for_delivery: "Out for delivery", delivered: "Delivered", on_hold: "On hold", cancelled: "Cancelled", delivery_failed: "Delivery failed", returned: "Returned" };
+const STATUS_LABELS = { placed: "Order placed", confirmed: "Confirmed", processing: "Processing", packed: "Packed", shipped: "Shipped", out_for_delivery: "Out for delivery", delivered: "Delivered", on_hold: "On hold", cancelled: "Cancelled", delivery_failed: "Delivery failed", returned: "Returned", preorder_confirmed: "Pre-order confirmed", awaiting_stock: "Awaiting stock", ready_to_pack: "Ready to pack" };
 
 // Whitelisted customer view of an order. Unknown order and wrong token are indistinguishable (same 404).
 async function trackOrder(url, env, origin) {
@@ -581,25 +646,30 @@ async function trackOrder(url, env, origin) {
   if (!/^[0-9a-fA-F-]{8,64}$/.test(o) || !/^[0-9a-f]{32}$/.test(t)) return notFound();
   if (!env.DB) return json({ error: "Tracking unavailable" }, 503, origin);
   try {
-    const ord = await env.DB.prepare("SELECT id, status, payment_status, total, items_json, state, pincode, created_at, is_preorder, track_token FROM orders WHERE id = ?").bind(o).first();
+    const ord = await env.DB.prepare("SELECT id, status, payment_status, total, items_json, state, pincode, created_at, is_preorder, expected_dispatch, track_token FROM orders WHERE id = ?").bind(o).first();
     if (!ord || !safeEqual(String(ord.track_token || ""), t)) return notFound();
-    const [pays, evs, ships, prods] = await Promise.all([
+    const [pays, evs, ships, prods, lines] = await Promise.all([
       env.DB.prepare("SELECT created_at FROM payments WHERE order_id = ?").bind(ord.id).all(),
-      env.DB.prepare("SELECT kind, status, public_note, created_at FROM order_events WHERE order_id = ? AND customer_visible = 1 AND kind IN ('status','shipment')").bind(ord.id).all(),
+      env.DB.prepare("SELECT kind, status, public_note, created_at FROM order_events WHERE order_id = ? AND customer_visible = 1 AND kind IN ('status','shipment','dispatch')").bind(ord.id).all(),
       env.DB.prepare("SELECT courier, awb, tracking_url, shipped_on, est_delivery FROM shipments WHERE order_id = ? ORDER BY created_at").bind(ord.id).all(),
       env.DB.prepare("SELECT id, name FROM products").all(),
+      env.DB.prepare("SELECT product_id, ready_qty, pre_qty FROM order_stock_lines WHERE order_id = ?").bind(ord.id).all(),
     ]);
+    const stockLine = Object.fromEntries((lines.results || []).map((l) => [l.product_id, l]));
     const names = Object.fromEntries((prods.results || []).map((p) => [p.id, p.name]));
     let raw = []; try { raw = JSON.parse(ord.items_json || "[]"); } catch {}
-    const items = (Array.isArray(raw) ? raw : []).map((i) => ({ name: names[i.id] || String(i.id), qty: Number(i.qty) || 0 }));
+    const items = (Array.isArray(raw) ? raw : []).map((i) => {
+      const l = stockLine[i.id];
+      return { name: names[i.id] || String(i.id), qty: Number(i.qty) || 0, ...(l ? { ready_qty: l.ready_qty, pre_qty: l.pre_qty } : {}) };
+    });
     const journey = [
       { kind: "placed", label: "Order placed", at: ord.created_at, note: null },
       ...(pays.results || []).map((p) => ({ kind: "payment", label: "Payment received", at: p.created_at, note: null })),
-      ...(evs.results || []).map((e) => ({ kind: e.kind, status: e.status, label: STATUS_LABELS[e.status] || e.status || "Update", at: e.created_at, note: e.public_note || null })),
+      ...(evs.results || []).map((e) => ({ kind: e.kind, status: e.status, label: e.kind === "dispatch" ? "Expected dispatch updated" : STATUS_LABELS[e.status] || e.status || "Update", at: e.created_at, note: e.public_note || null })),
     ].sort((a, b) => a.at - b.at);
     return json({
       ref: ord.id.slice(0, 8), placed_at: ord.created_at, status: ord.status, status_label: STATUS_LABELS[ord.status] || ord.status,
-      payment_status: ord.payment_status, is_preorder: !!ord.is_preorder, items, total_paise: ord.total,
+      payment_status: ord.payment_status, is_preorder: !!ord.is_preorder, expected_dispatch: ord.expected_dispatch || null, items, total_paise: ord.total,
       ship_to: { state: ord.state, pincode: ord.pincode }, shipments: ships.results || [], journey,
     }, 200, origin);
   } catch { return json({ error: "Tracking unavailable" }, 503, origin); }
@@ -619,7 +689,13 @@ async function onRequest({ request, env }) {
     if (!pricing) return json({ error: "Catalogue unavailable" }, 503, origin);
     const items = Object.values(pricing).map((r) => ({
       id: r.id, price: r.price_paise / 100, active: !!r.active,
-      available: !r.track_stock || r.stock_qty > 0, low: !!r.track_stock && r.stock_qty > 0 && r.stock_qty <= r.low_stock_threshold,
+      available: !r.track_stock || r.stock_qty > 0 || (!!r.preorder_enabled && (r.preorder_max == null || r.preordered_qty < r.preorder_max)),
+      low: !!r.track_stock && r.stock_qty > 0 && r.stock_qty <= r.low_stock_threshold,
+      left: r.track_stock && r.stock_qty > 0 && r.stock_qty <= r.low_stock_threshold ? r.stock_qty : null,
+      preorder: r.track_stock && r.preorder_enabled ? {
+        message: r.preorder_message || null, dispatch: r.preorder_dispatch || null, ready_qty: r.stock_qty,
+        max_qty: r.preorder_max == null ? null : Math.max(r.preorder_max - r.preordered_qty, 0),
+      } : null,
     }));
     const res = json(items, 200, origin);
     res.headers.set("Cache-Control", "public, max-age=60");

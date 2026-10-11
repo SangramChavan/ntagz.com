@@ -114,7 +114,10 @@ dialog.panel[open] { display:flex; } dialog.panel::backdrop { background:rgba(0,
 .pill.pre { background:#efe8ff; color:#5b3fb5; }
 .pill.st-placed, .pill.st-confirmed { background:#e8f0fe; color:#1d4fb8; } .pill.st-processing, .pill.st-packed { background:#fff1e0; color:var(--warn); }
 .pill.st-shipped, .pill.st-out_for_delivery { background:#e6f4ff; color:#0b5cad; } .pill.st-delivered { background:#e7f6ec; color:var(--ok); }
-.pill.st-on_hold, .pill.st-delivery_failed { background:#fff6d6; color:#8a6500; } .pill.st-cancelled, .pill.st-returned { background:#fdeaea; color:var(--bad); }
+.pill.st-on_hold, .pill.st-delivery_failed { background:#fff6d6; color:#8a6500; } .pill.st-preorder_confirmed, .pill.st-ready_to_pack { background:#efe8ff; color:#5b3fb5; } .pill.st-awaiting_stock { background:#fff1e0; color:var(--warn); }
+.preorder { border:1px solid var(--line); border-radius:12px; padding:10px 12px; display:grid; gap:8px; } .preorder .row { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; }
+.prow .pre-note { font-size:12px; color:#5b3fb5; margin-top:3px; }
+.pill.st-cancelled, .pill.st-returned { background:#fdeaea; color:var(--bad); }
 .opanel-body { padding:16px 20px 24px; overflow:auto; flex:1; } dialog#opanel .panel-head > div > div { margin-top:6px; }
 .next { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
 h3.sec { margin:18px 0 8px; font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink2); }

@@ -2661,3 +2661,7 @@
     /* Live catalogue overlay */
     .product-card.live-hidden { display: none !important; }
     .add-btn-off { opacity: .6; pointer-events: none; }
+
+    /* Pre-order cards */
+    .pre-note { font-size: 12px; line-height: 1.35; color: #8a5a00; margin-top: 2px; overflow-wrap: anywhere; }
+    .low-note { font-size: 12px; font-weight: 700; margin-top: 2px; }

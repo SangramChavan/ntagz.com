@@ -11,6 +11,7 @@ const STATUS_LABEL = {
   placed: "Order placed", confirmed: "Confirmed", processing: "Processing", packed: "Packed", shipped: "Shipped",
   out_for_delivery: "Out for delivery", delivered: "Delivered", on_hold: "On hold", cancelled: "Cancelled",
   delivery_failed: "Delivery failed", returned: "Returned",
+  preorder_confirmed: "Pre-order confirmed", awaiting_stock: "Awaiting stock", ready_to_pack: "Ready to pack",
 };
 const FULFILMENT = Object.keys(STATUS_LABEL);
 // Orders do not have to pass through every stage: forward skips are allowed where a stage can be unnecessary.
@@ -23,21 +24,27 @@ const TRANSITIONS = {
   out_for_delivery: ["delivered", "delivery_failed"],
   delivery_failed: ["out_for_delivery", "shipped", "returned", "cancelled"],
   delivered: ["returned"],
-  on_hold: ["confirmed", "processing", "packed", "cancelled"],
+  on_hold: ["confirmed", "processing", "packed", "preorder_confirmed", "awaiting_stock", "ready_to_pack", "cancelled"],
+  preorder_confirmed: ["awaiting_stock", "ready_to_pack", "on_hold", "cancelled"],
+  awaiting_stock: ["ready_to_pack", "on_hold", "cancelled"],
+  ready_to_pack: ["processing", "packed", "shipped", "on_hold", "cancelled"],
   cancelled: [], returned: [],
 };
 const ACTION_LABEL = {
   confirmed: "Confirm Order", processing: "Mark as Processing", packed: "Mark as Packed", shipped: "Ship Order",
   out_for_delivery: "Mark as Out for Delivery", delivered: "Mark as Delivered", on_hold: "Put On Hold",
   cancelled: "Cancel Order", returned: "Mark as Returned", delivery_failed: "Mark Delivery Failed",
+  preorder_confirmed: "Confirm Pre-order", awaiting_stock: "Mark Awaiting Stock", ready_to_pack: "Mark Ready to Pack",
 };
+const PREORDER_ONLY = ["preorder_confirmed", "awaiting_stock", "ready_to_pack"];
 const NEEDS_CONFIRM = ["cancelled", "returned", "delivery_failed", "on_hold"];
-const allowedActions = (status) => (TRANSITIONS[status] || []).map((to) => ({ to, label: ACTION_LABEL[to], confirm: NEEDS_CONFIRM.includes(to), form: to === "shipped" }));
+// Pre-order stages are only offered on pre-orders (the server still accepts them from any allowed state).
+const allowedActions = (status, isPre) => (TRANSITIONS[status] || []).filter((to) => isPre || !PREORDER_ONLY.includes(to)).map((to) => ({ to, label: ACTION_LABEL[to], confirm: NEEDS_CONFIRM.includes(to), form: to === "shipped" }));
 const VIEWS = { // admin filter chips -> SQL (fixed fragments; never built from request text)
   new: "status IN ('placed','confirmed')", paid: "payment_status='paid'",
   payment_pending: "payment_status='unpaid' AND status NOT IN ('cancelled','returned')",
   processing: "status='processing'", packed: "status='packed'", shipped: "status='shipped'", out_for_delivery: "status='out_for_delivery'",
-  delivered: "status='delivered'", on_hold: "status='on_hold'", cancelled: "status='cancelled'", returned: "status='returned'", preorders: "is_preorder=1",
+  delivered: "status='delivered'", on_hold: "status='on_hold'", awaiting_stock: "status='awaiting_stock'", cancelled: "status='cancelled'", returned: "status='returned'", preorders: "is_preorder=1",
 };
 const SORTS = { created_at: "created_at", total: "total", name: "name" };
 const PAGE_SIZE = 25;
@@ -131,8 +138,8 @@ async function authVerify(body, env) {
     "SELECT id, otp_hash, attempts FROM admin_otps WHERE email=? AND expires_at>? ORDER BY created_at DESC LIMIT 1"
   ).bind(email, now()).first();
   if (!row || row.attempts >= 5) return fail(401, "Invalid or expired code");
-  await env.DB.prepare("UPDATE admin_otps SET attempts=attempts+1 WHERE id=?").bind(row.id).run();
-  if (!safeEqual(row.otp_hash, await sha256(`${email}:${otp}`))) return fail(401, "Invalid or expired code");
+  const burn = await env.DB.prepare("UPDATE admin_otps SET attempts=attempts+1 WHERE id=? AND attempts<5").bind(row.id).run(); // atomic: parallel guesses cannot exceed 5
+  if (burn.meta.changes !== 1 || !safeEqual(row.otp_hash, await sha256(`${email}:${otp}`))) return fail(401, "Invalid or expired code");
   await env.DB.prepare("DELETE FROM admin_otps WHERE email=?").bind(email).run(); // single use
   const token = randomHex(32);
   await env.DB.batch([
@@ -148,7 +155,7 @@ async function authVerify(body, env) {
 
 // ── Orders ────────────────────────────────────────────────────────────
 const COLS = "id,txn_id,quote_ref,name,phone,email,address,pincode,state,gstin,items_json,subtotal,gst,total," +
-  "payment_method,payment_status,paid_paise,status,tracking_id,courier,is_preorder,created_at,updated_at";
+  "payment_method,payment_status,paid_paise,status,tracking_id,courier,is_preorder,expected_dispatch,created_at,updated_at";
 
 function parseItems(json_) {
   try { const a = JSON.parse(json_); return Array.isArray(a) ? a : []; } catch { return []; }
@@ -212,9 +219,10 @@ async function getOrder(id, env) {
   const timeline = [
     { kind: "placed", label: "Order placed", at: o.created_at },
     ...pays.results.map((p) => ({ kind: "payment", label: `Payment received (${p.method})`, at: p.created_at, actor: p.recorded_by })),
-    ...events.results.map((e) => ({ kind: e.kind, status: e.status, label: STATUS_LABEL[e.status] || e.kind, note: e.note, public_note: e.public_note, customer_visible: !!e.customer_visible, actor: e.actor, at: e.created_at })),
+    ...events.results.map((e) => ({ kind: e.kind, status: e.status, label: e.kind === "dispatch" ? "Expected dispatch" : STATUS_LABEL[e.status] || e.kind, note: e.note, public_note: e.public_note, customer_visible: !!e.customer_visible, actor: e.actor, at: e.created_at })),
   ].sort((x, y) => x.at - y.at);
-  return { ...shape(o), ...(tok ? { track_url: `https://ntagz.com/track.html?o=${id}&t=${tok}` } : {}), is_preorder: !!o.is_preorder, payments: pays.results, shipments, timeline, actions: allowedActions(o.status), status_label: STATUS_LABEL[o.status] || o.status };
+  const lines = await env.DB.prepare("SELECT l.product_id,p.name,l.ready_qty,l.pre_qty FROM order_stock_lines l LEFT JOIN products p ON p.id=l.product_id WHERE l.order_id=? ORDER BY l.rowid").bind(id).all();
+  return { ...shape(o), stock_lines: lines.results.map((l) => ({ ...l, name: l.name || l.product_id })), ...(tok ? { track_url: `https://ntagz.com/track.html?o=${id}&t=${tok}` } : {}), is_preorder: !!o.is_preorder, payments: pays.results, shipments, timeline, actions: allowedActions(o.status, !!o.is_preorder), status_label: STATUS_LABEL[o.status] || o.status };
 }
 
 const MANUAL_ORDER_METHODS = ["cash", "cod", "upi", "bank", "whatsapp"];
@@ -308,13 +316,54 @@ async function changeStatus(id, body, actor, env) {
   const eid = crypto.randomUUID();
   let res;
   try {
-    res = await env.DB.batch([
+    const stmts = [
       env.DB.prepare(`INSERT INTO order_events (id,order_id,kind,status,note,public_note,actor,idempotency_key)
                       SELECT ?1,id,'status',?2,?3,?4,?5,?6 FROM orders WHERE id=?7 AND status=?8`).bind(eid, to, note, pub, actor, key, id, o.status),
       env.DB.prepare("UPDATE orders SET status=?1, updated_at=unixepoch() WHERE id=?2 AND status=?3 AND EXISTS (SELECT 1 FROM order_events WHERE id=?4)").bind(to, id, o.status, eid),
       env.DB.prepare("INSERT INTO audit_log (id,actor,action,order_id,detail) SELECT ?1,?2,'status',?3,?4 WHERE EXISTS (SELECT 1 FROM order_events WHERE id=?5)").bind(crypto.randomUUID(), actor, id, JSON.stringify({ from: o.status, to }), eid),
-    ]);
+    ];
+    // Cancel gives its stock reservation back in the same batch. Order matters: the movement row reads stock before the update.
+    // Every statement needs this request's event (so only the winner of a race releases) and unreleased lines (so it happens once).
+    if (to === "cancelled") stmts.push(
+      env.DB.prepare(`INSERT INTO inventory_movements (id,product_id,type,qty_change,prev_stock,new_stock,reason,reference,admin,idempotency_key)
+                      SELECT lower(hex(randomblob(16))),l.product_id,'in',l.ready_qty,p.stock_qty,p.stock_qty+l.ready_qty,'Order cancelled',l.order_id,?2,'cancel-'||l.order_id
+                      FROM order_stock_lines l JOIN products p ON p.id=l.product_id
+                      WHERE l.order_id=?1 AND l.released=0 AND l.ready_qty>0 AND EXISTS (SELECT 1 FROM order_events WHERE id=?3)`).bind(id, actor, eid),
+      env.DB.prepare(`UPDATE products SET stock_qty=stock_qty+(SELECT l.ready_qty FROM order_stock_lines l WHERE l.order_id=?1 AND l.product_id=products.id),
+                        preordered_qty=max(preordered_qty-(SELECT l.pre_qty FROM order_stock_lines l WHERE l.order_id=?1 AND l.product_id=products.id),0), updated_at=unixepoch()
+                      WHERE id IN (SELECT product_id FROM order_stock_lines WHERE order_id=?1 AND released=0) AND EXISTS (SELECT 1 FROM order_events WHERE id=?2)`).bind(id, eid),
+      env.DB.prepare("UPDATE order_stock_lines SET released=1 WHERE order_id=?1 AND released=0 AND EXISTS (SELECT 1 FROM order_events WHERE id=?2)").bind(id, eid));
+    res = await env.DB.batch(stmts);
   } catch { return json(await getOrder(id, env)); } // unique-key race: another identical request won
+  if (res[0].meta.changes !== 1) return fail(409, "The order changed while you were working. Refresh and try again.");
+  return json(await getOrder(id, env));
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const prettyDate = (d) => `${Number(d.slice(8))} ${MONTHS[Number(d.slice(5, 7)) - 1]} ${d.slice(0, 4)}`;
+
+// Expected dispatch date for a pre-order (a planning date, not a delivery promise). Recorded as a customer-visible event.
+async function setDispatch(id, body, actor, env) {
+  const key = keyOf(body);
+  if (!key) return fail(400, "Missing idempotency key");
+  const d = body.expected_dispatch === undefined || body.expected_dispatch === null ? "" : text(body.expected_dispatch, 10);
+  if (d && !validDate(d)) return json({ error: "Enter a valid date", fields: { expected_dispatch: "Enter a valid date" } }, 400);
+  const o = await env.DB.prepare("SELECT status,is_preorder FROM orders WHERE id=?").bind(id).first();
+  if (!o) return fail(404, "Order not found");
+  if (await dupKey(env, id, key)) return json(await getOrder(id, env));
+  if (!o.is_preorder) return fail(409, "Only pre-orders have an expected dispatch date");
+  if (["cancelled", "returned", "delivered"].includes(o.status)) return fail(409, `This order is ${STATUS_LABEL[o.status].toLowerCase()}`);
+  const pub = text(body.public_note, 300) || (d ? `Expected dispatch: ${prettyDate(d)}` : "Expected dispatch date removed");
+  const eid = crypto.randomUUID();
+  let res;
+  try {
+    res = await env.DB.batch([
+      env.DB.prepare(`INSERT INTO order_events (id,order_id,kind,status,public_note,customer_visible,actor,idempotency_key)
+                      SELECT ?1,id,'dispatch',status,?2,1,?3,?4 FROM orders WHERE id=?5 AND is_preorder=1 AND status=?6`).bind(eid, pub, actor, key, id, o.status),
+      env.DB.prepare("UPDATE orders SET expected_dispatch=?1, updated_at=unixepoch() WHERE id=?2 AND EXISTS (SELECT 1 FROM order_events WHERE id=?3)").bind(d || null, id, eid),
+      env.DB.prepare("INSERT INTO audit_log (id,actor,action,order_id,detail) SELECT ?1,?2,'dispatch',?3,?4 WHERE EXISTS (SELECT 1 FROM order_events WHERE id=?5)").bind(crypto.randomUUID(), actor, id, JSON.stringify({ expected_dispatch: d || null }), eid),
+    ]);
+  } catch { return json(await getOrder(id, env)); }
   if (res[0].meta.changes !== 1) return fail(409, "The order changed while you were working. Refresh and try again.");
   return json(await getOrder(id, env));
 }
@@ -397,12 +446,12 @@ async function exportCsv(sp, env) {
 
 // ── Products & inventory ──────────────────────────────────────────────
 const PSORTS = { name: "name", price: "price_paise", stock: "stock_qty", updated: "updated_at", newest: "created_at" };
-const PCOLS = "id,sku,name,description,category,image_url,price_paise,mrp_paise,gst_rate,all_inclusive,unit,stock_qty,low_stock_threshold,active,track_stock,cost_paise,built_in,created_at,updated_at";
+const PCOLS = "id,sku,name,description,category,image_url,price_paise,mrp_paise,gst_rate,all_inclusive,unit,stock_qty,low_stock_threshold,active,track_stock,cost_paise,built_in,preorder_enabled,preorder_message,preorder_dispatch,preorder_max,preordered_qty,created_at,updated_at";
 const GST_RATES = [0, 5, 12, 18, 28];
 const IMAGE_OK = /^(https:\/\/(www\.)?ntagz\.com\/|images\/)[\w\-./]{1,200}$/;
 
 const stockStatus = (p) => (p.stock_qty <= 0 ? "out" : p.stock_qty <= p.low_stock_threshold ? "low" : "in");
-const pshape = (p) => ({ ...p, active: !!p.active, track_stock: !!p.track_stock, built_in: !!p.built_in, all_inclusive: !!p.all_inclusive, stock_status: stockStatus(p) });
+const pshape = (p) => ({ ...p, active: !!p.active, track_stock: !!p.track_stock, built_in: !!p.built_in, all_inclusive: !!p.all_inclusive, preorder_enabled: !!p.preorder_enabled, stock_status: stockStatus(p) });
 
 function rupeesToPaise(v) {
   if (typeof v === "string" && v.trim() === "") return null; // blank is "missing", not zero
@@ -467,7 +516,23 @@ function validateProduct(b, partial) {
   }
   if (b.active !== undefined) f.active = b.active ? 1 : 0;
   if (b.track_stock !== undefined) f.track_stock = b.track_stock ? 1 : 0; // 1 = checkout enforces and deducts stock
+  if (b.preorder_enabled !== undefined) f.preorder_enabled = b.preorder_enabled ? 1 : 0;
+  for (const [k, max] of [["preorder_message", 200], ["preorder_dispatch", 100]]) { // preordered_qty is never writable
+    if (b[k] === undefined) continue;
+    const v = b[k] === null ? "" : b[k];
+    if (typeof v !== "string" || v.trim().length > max) errors[k] = `Keep this under ${max} characters`; else f[k] = v.trim() || null;
+  }
+  if (b.preorder_max !== undefined) {
+    if (b.preorder_max === null || b.preorder_max === "") f.preorder_max = null;
+    else { const v = intIn(b.preorder_max, 0, 1_000_000); if (v === null) errors.preorder_max = "Enter a whole number, 0 or more"; else f.preorder_max = v; }
+  }
   return { f, errors };
+}
+
+// Pre-orders need stock tracking (ready stock ships now, the rest is a pre-order). Checked against the merged result.
+function preorderRule(f, cur, errors) {
+  const pre = f.preorder_enabled ?? cur.preorder_enabled, track = f.track_stock ?? cur.track_stock;
+  if (pre && !track) errors.preorder_enabled = "Turn on stock tracking first";
 }
 
 function productFilters(sp) {
@@ -540,6 +605,7 @@ async function createProduct(body, actor, env) {
   const b = { ...body };
   if (typeof b.sku !== "string" || !b.sku.trim()) b.sku = await genSku(env, typeof b.name === "string" ? b.name : ""); // SKU is optional: generated when blank
   const { f, errors } = validateProduct(b, false);
+  preorderRule(f, {}, errors);
   const opening = intIn(b.opening_stock ?? 0, 0, 1_000_000);
   if (opening === null) errors.opening_stock = "Stock must be a whole number, 0 or more";
   if (Object.keys(errors).length) return json({ error: "Please fix the highlighted fields", fields: errors }, 400);
@@ -547,9 +613,9 @@ async function createProduct(body, actor, env) {
   const pid = await uniqueProductId(env, f.name);
   const thr = f.low_stock_threshold ?? 10;
   const stmts = [env.DB.prepare(
-    `INSERT INTO products (id,sku,name,description,category,image_url,price_paise,mrp_paise,cost_paise,gst_rate,unit,stock_qty,low_stock_threshold,active,track_stock)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
-  ).bind(pid, f.sku, f.name, f.description ?? "", f.category, f.image_url ?? null, f.price_paise, f.mrp_paise ?? null, f.cost_paise ?? null, f.gst_rate ?? 18, f.unit ?? "pc", opening, thr, f.active ?? 1, f.track_stock ?? 0)];
+    `INSERT INTO products (id,sku,name,description,category,image_url,price_paise,mrp_paise,cost_paise,gst_rate,unit,stock_qty,low_stock_threshold,active,track_stock,preorder_enabled,preorder_message,preorder_dispatch,preorder_max)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+  ).bind(pid, f.sku, f.name, f.description ?? "", f.category, f.image_url ?? null, f.price_paise, f.mrp_paise ?? null, f.cost_paise ?? null, f.gst_rate ?? 18, f.unit ?? "pc", opening, thr, f.active ?? 1, f.track_stock ?? 0, f.preorder_enabled ?? 0, f.preorder_message ?? null, f.preorder_dispatch ?? null, f.preorder_max ?? null)];
   if (opening > 0) stmts.push(env.DB.prepare(
     "INSERT INTO inventory_movements (id,product_id,type,qty_change,prev_stock,new_stock,reason,admin,idempotency_key) VALUES (?,?,'opening',?,0,?,'Opening stock',?,?)"
   ).bind(crypto.randomUUID(), pid, opening, opening, actor, "opening"));
@@ -604,8 +670,9 @@ async function deleteProduct(id, actor, env) {
 async function updateProduct(id, body, actor, env) {
   if ("stock_qty" in body || "stock" in body) return fail(400, "Stock can only be changed through a stock adjustment");
   const { f, errors } = validateProduct(body, true);
-  if (Object.keys(errors).length) return json({ error: "Please fix the highlighted fields", fields: errors }, 400);
   const cur = await env.DB.prepare(`SELECT ${PCOLS} FROM products WHERE id=?`).bind(id).first();
+  if (cur) preorderRule(f, cur, errors);
+  if (Object.keys(errors).length) return json({ error: "Please fix the highlighted fields", fields: errors }, 400);
   if (!cur) return fail(404, "Product not found");
   if (f.sku && f.sku.toLowerCase() !== cur.sku.toLowerCase() && await env.DB.prepare("SELECT 1 FROM products WHERE lower(sku)=lower(?) AND id<>?").bind(f.sku, id).first())
     return json({ error: "SKU already exists", fields: { sku: "This SKU is already in use" } }, 409);
@@ -734,7 +801,7 @@ export default {
       if (method === "GET" && path === "/api/orders") return await listOrders(url.searchParams, env);
       if (method === "GET" && path === "/api/orders.csv") return await exportCsv(url.searchParams, env);
 
-      const m = path.match(/^\/api\/orders\/([0-9a-fA-F-]{8,64})(\/cash-received|\/payment-received|\/fulfilment|\/status|\/ship|\/shipments\/[0-9a-fA-F-]{8,64})?$/);
+      const m = path.match(/^\/api\/orders\/([0-9a-fA-F-]{8,64})(\/cash-received|\/payment-received|\/fulfilment|\/status|\/ship|\/dispatch|\/shipments\/[0-9a-fA-F-]{8,64})?$/);
       if (m) {
         const id = m[1];
         if (!m[2] && method === "GET") {
@@ -744,6 +811,7 @@ export default {
         if ((m[2] === "/cash-received" || m[2] === "/payment-received") && method === "POST") return await paymentReceived(id, body, actor, env);
         if ((m[2] === "/fulfilment" || m[2] === "/status") && method === "POST") return await changeStatus(id, body, actor, env);
         if (m[2] === "/ship" && method === "POST") return await shipOrder(id, body, actor, env);
+        if (m[2] === "/dispatch" && method === "POST") return await setDispatch(id, body, actor, env);
         if (m[2] && m[2].startsWith("/shipments/") && method === "POST") return await correctShipment(id, m[2].slice(11), body, actor, env);
       }
       if (method === "GET" && path === "/api/products") return await listProducts(url.searchParams, env);

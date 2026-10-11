@@ -2323,3 +2323,15 @@ body.has-order-bar .wa-float { bottom: 88px; }
 
 .prod-card:disabled { opacity: .55; cursor: not-allowed; }
 .prod-oos { display: block; margin-top: 4px; font-size: 12px; font-weight: 700; color: var(--ink-3); }
+
+/* Pre-order / stock status (live catalogue) */
+.prod-pre, .prod-ready, .prod-low, .prod-premsg { display: block; margin-top: 4px; font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
+.prod-pre { display: inline-block; align-self: flex-start; padding: 2px 8px; border-radius: 99px; font-weight: 700; background: #fff3d6; color: #8a5a00; }
+.prod-ready { font-weight: 700; color: #1d7a4a; }
+.prod-low { font-weight: 700; color: var(--ink-2); }
+.prod-premsg { color: var(--ink-3); }
+.isplit, .icap { font-size: 12px; line-height: 1.35; margin-top: 3px; color: #8a5a00; overflow-wrap: anywhere; }
+.isplit:empty { display: none; }
+.icap { color: var(--ink-3); }
+.preorder-note { margin: 12px 0 0; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+.preorder-note[hidden] { display: none; }

@@ -37,3 +37,6 @@ INSERT OR IGNORE INTO membership_config (key, value) VALUES
   ('discount_finished_products_pct', '8'),        -- indicative
   ('min_margin_pct',                 '20'),       -- floor: never discount below 20% margin
   ('discounts_live',                 '0');        -- 0 = pricing feature disabled (safe default)
+
+-- One membership per Razorpay order (idempotent; apply to prod with: wrangler d1 execute ntagz-db --remote --file db/membership-schema.sql)
+CREATE UNIQUE INDEX IF NOT EXISTS uq_memberships_rpo ON memberships(razorpay_order_id) WHERE razorpay_order_id IS NOT NULL;

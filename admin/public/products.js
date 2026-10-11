@@ -26,7 +26,8 @@ function pparams() {
 
 // ── small building blocks ────────────────────────────────────────────
 function thumb(p) { return p.image_url ? el("img", { class: "thumb", src: imgSrc(p.image_url), alt: "", loading: "lazy", width: "40", height: "40" }) : el("span", { class: "thumb" }); }
-const stockNote = (p) => el("span", { class: "stock-note " + p.stock_status }, el("i", { class: "dot", "aria-hidden": "true" }), STOCK_LABEL[p.stock_status]);
+const stockNote = (p) => el("span", { class: "stock-note " + p.stock_status }, el("i", { class: "dot", "aria-hidden": "true" }), STOCK_LABEL[p.stock_status],
+  p.preorder_enabled ? el("span", { class: "pill pre" }, "Pre-order") : "", p.preordered_qty > 0 ? el("span", { class: "pre-note" }, `${p.preordered_qty} pre-ordered`) : "");
 
 function commitOnEnter(input) { input.addEventListener("keydown", (e) => { if (e.key === "Enter") input.blur(); else if (e.key === "Escape") { input.value = input.defaultValue; input.blur(); } }); }
 
@@ -166,7 +167,7 @@ async function deleteProduct(p, fromPanel) {
 // ── add / edit side panel ────────────────────────────────────────────
 const PANEL = { id: null, snapshot: "", dirty: false, saving: false };
 const fval = (id) => { const n = $(id); return n ? (n.type === "checkbox" ? String(n.checked) : n.value) : ""; };
-const FORM_IDS = ["name", "price", "opening_stock", "sku", "description", "category", "image_url", "cost", "low_stock_threshold", "mrp", "gst_rate", "active", "track_stock"];
+const FORM_IDS = ["name", "price", "opening_stock", "sku", "description", "category", "image_url", "cost", "low_stock_threshold", "mrp", "gst_rate", "active", "track_stock", "preorder_enabled", "preorder_message", "preorder_dispatch", "preorder_max"];
 const snapshot = () => JSON.stringify(FORM_IDS.map(fval));
 const markDirty = () => { PANEL.dirty = snapshot() !== PANEL.snapshot; };
 
@@ -200,6 +201,16 @@ async function openPanel(id) {
   const active = el("input", { id: "active", type: "checkbox" }); active.checked = p ? p.active : true;
   const track = el("input", { id: "track_stock", type: "checkbox" }); track.checked = !!(p && p.track_stock);
 
+  const pre = el("input", { id: "preorder_enabled", type: "checkbox" }); pre.checked = !!(p && p.preorder_enabled);
+  const preMsg = el("input", { id: "preorder_message", value: v("preorder_message"), maxlength: "200", placeholder: "Shown to customers, e.g. Ships after the next batch arrives" });
+  const preDisp = el("input", { id: "preorder_dispatch", value: v("preorder_dispatch"), maxlength: "100", placeholder: "e.g. Within 7-10 business days" });
+  const preMax = el("input", { id: "preorder_max", value: v("preorder_max"), inputmode: "numeric", placeholder: "No limit" });
+  const syncPre = () => { // pre-orders need stock tracking
+    if (!track.checked) pre.checked = false;
+    pre.disabled = !track.checked; [preMsg, preDisp, preMax].forEach((x) => { x.disabled = !pre.checked; });
+  };
+  track.addEventListener("change", syncPre); pre.addEventListener("change", syncPre); syncPre();
+
   const save = el("button", { class: "btn primary", id: "psave", type: "submit" }, "Save Product");
   const again = p ? "" : el("button", { class: "btn", id: "psaveagain", type: "button" }, "Save & Add Another");
   const msg = el("div", { class: "msg", id: "pmsg", role: "alert" });
@@ -212,7 +223,11 @@ async function openPanel(id) {
     el("div", { class: "field" }, el("label", { class: "check" }, active, " Active (available to customers)")),
     el("details", { class: "more" }, el("summary", {}, "More options"),
       el("div", { class: "two" }, field("mrp", "MRP / List Price (₹)", mrp), field("gst_rate", "GST Rate", gst)),
-      el("div", { class: "field" }, el("label", { class: "check" }, track, " Track stock on the storefront"), el("div", { class: "hint" }, "On: checkout blocks quantities above stock and deducts sold units. Turn on after a stock count."))),
+      el("div", { class: "field" }, el("label", { class: "check" }, track, " Track stock on the storefront"), el("div", { class: "hint" }, "On: checkout blocks quantities above stock and deducts sold units. Turn on after a stock count.")),
+      el("div", { class: "field", id: "f-preorder_enabled" }, el("label", { class: "check" }, pre, " Allow pre-orders"), el("div", { class: "hint" }, "When stock runs out, customers can still order. Needs stock tracking. Ready stock ships first; the rest is a pre-order you fulfil later."), el("div", { class: "err", id: "e-preorder_enabled", role: "alert" })),
+      field("preorder_message", "Pre-order message", preMsg), field("preorder_dispatch", "Expected dispatch", preDisp),
+      field("preorder_max", "Max pre-order quantity", preMax, { hint: "Leave blank for no limit" }),
+      p ? el("div", { class: "hint" }, `Pre-ordered so far: ${p.preordered_qty} (updated automatically, not editable)`) : ""),
     el("datalist", { id: "catlist" }, cats.map((c) => el("option", { value: c }))), msg,
     el("div", { class: "panel-actions" }, save, again, el("button", { class: "btn", type: "button", onclick: () => requestClose() }, "Cancel")));
   const extras = p ? el("div", { class: "panel-extra" },
@@ -224,16 +239,18 @@ async function openPanel(id) {
   const submit = async (another) => {
     if (PANEL.saving) return; // duplicate-submit guard
     showErrors({}); $("pmsg").textContent = "";
-    const body = { name: name.value, sku: sku.value, description: desc.value, category: cat.value, image_url: img.value, price: price.value, mrp: mrp.value, cost: cost.value, gst_rate: Number(gst.value), low_stock_threshold: thr.value, active: active.checked, track_stock: track.checked };
+    const body = { name: name.value, sku: sku.value, description: desc.value, category: cat.value, image_url: img.value, price: price.value, mrp: mrp.value, cost: cost.value, gst_rate: Number(gst.value), low_stock_threshold: thr.value, active: active.checked, track_stock: track.checked, preorder_enabled: pre.checked, preorder_message: preMsg.value, preorder_dispatch: preDisp.value, preorder_max: preMax.value };
     if (!p) body.opening_stock = stock.value;
+    const notes = [];
+    if (body.preorder_enabled && !(p && p.preorder_enabled)) notes.push("Pre-orders turn on: customers can order beyond ready stock and the extra units are tracked as pre-orders.");
     if (p) {
-      const notes = [], np = Number(price.value);
+      const np = Number(price.value);
       if (price.value.trim() !== "" && Number.isFinite(np) && np >= 0 && Math.round(np * 100) !== p.price_paise) notes.push(`Price: ${inr(p.price_paise)} → ${inr(Math.round(np * 100))}. Applies to future purchases only; past orders keep their prices.`);
       if (sku.value.trim() && sku.value.trim().toUpperCase() !== p.sku) notes.push(`SKU: ${p.sku} → ${sku.value.trim().toUpperCase()}.`);
       if (!body.active && p.active) notes.push("The product will become inactive and disappear from the storefront and checkout.");
       if (body.track_stock && !p.track_stock) notes.push(`Stock tracking turns on: customers can't order more than the current stock (${p.stock_qty}).`);
-      if (notes.length && !(await ask("Confirm changes", notes, "Save changes"))) return;
     }
+    if (notes.length && !(await ask("Confirm changes", notes, "Save changes"))) return;
     PANEL.saving = true; save.disabled = true; if (again) again.disabled = true; save.textContent = "Saving…";
     try {
       const r = await fetch(p ? `/api/products/${p.id}` : "/api/products", { method: "POST", headers: { "Content-Type": "application/json", "X-Requested-With": "ntagz-admin" }, body: JSON.stringify(body) });

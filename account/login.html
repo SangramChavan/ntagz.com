@@ -126,6 +126,7 @@
         var data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Verification failed');
         var next = new URLSearchParams(location.search).get('next') || '/account/';
+        if (!/^\/(?![\/\\])/.test(next)) next = '/account/';
         location.href = next;
       } catch(e) { showError(e.message); }
       finally { setLoading(verifyBtn, false); }

@@ -108,6 +108,27 @@
     }).join('');
   }
 
+  /* ── PRE-ORDER HELPERS (live.preorder comes from the admin catalogue) ── */
+  function preOf(p) { return (p.live && p.live.preorder) || null; }
+  /* Largest quantity the server will accept; Infinity = uncapped. */
+  function capFor(p) {
+    var pre = preOf(p);
+    return pre && pre.max_qty != null ? pre.ready_qty + pre.max_qty : Infinity;
+  }
+  function isUnavailable(p) {
+    return !!(p.live && p.live.available === false) || (!p.fixed && capFor(p) < CATALOG.moqFor(p));
+  }
+  function clampQty(p, q) { return Math.min(q, capFor(p)); }
+  /* "X ready to ship, Y pre-order (dispatch: …)" — empty unless part of the line is pre-order. */
+  function splitText(p, qty) {
+    var pre = preOf(p);
+    if (!pre || qty <= 0) return '';
+    var ready = Math.min(qty, pre.ready_qty), po = qty - ready;
+    if (po <= 0) return '';
+    return (ready > 0 ? fmtNum(ready) + ' ready to ship, ' : '') + fmtNum(po) + ' pre-order' +
+      (pre.dispatch ? ' (dispatch: ' + pre.dispatch + ')' : '');
+  }
+
   /* ── PRODUCT GRID ─────────────────────────────────────────── */
   function renderGrid() {
     var grid = $('productGrid');
@@ -118,7 +139,20 @@
     grid.innerHTML = visible.map(function (p) {
       var selected = selectedIds.indexOf(p.id) > -1;
       var unit = p.unitLabel || p.unit || 'pc';
-      var soldOut = p.live && p.live.available === false;
+      var soldOut = isUnavailable(p);
+      var pre = preOf(p);
+      var status = '';
+      if (soldOut) status = '<span class="prod-oos">Out of stock</span>';
+      else if (pre) {
+        status = pre.ready_qty === 0
+          ? '<span class="prod-pre">Pre-order</span>'
+          : '<span class="prod-ready">Ready to order</span>';
+        if (pre.message) status += '<span class="prod-premsg">' + esc(pre.message) + '</span>';
+        if (pre.dispatch) status += '<span class="prod-premsg">Dispatch: ' + esc(pre.dispatch) + '</span>';
+      }
+      if (!soldOut && p.live && p.live.low && p.live.left) {
+        status += '<span class="prod-low">Only ' + fmtNum(p.live.left) + ' left</span>';
+      }
       return '' +
         '<button type="button" class="prod-card' + (p.fixed ? ' bundle-card' : '') +
         (selected ? ' selected' : '') + '" data-id="' + esc(p.id) + '" aria-pressed="' +
@@ -132,7 +166,7 @@
         '<span class="prod-name">' + esc(p.name) + '</span>' +
         '<span class="prod-code">' + esc(p.sku) + (p.fixed ? ' · 70 pcs' : '') + '</span>' +
         '<span class="prod-price">' + fmtRate(p.price) + '<span>/' + esc(unit) + '</span></span>' +
-        (soldOut ? '<span class="prod-oos">Out of stock</span>' : '') +
+        status +
         '</span>' +
         '</button>';
     }).join('');
@@ -180,11 +214,13 @@
       var moq = CATALOG.moqFor(p);
       var unit = p.unitLabel || p.unit || 'pc';
 
+      var cap = capFor(p);
       var qtyCtrl = p.fixed
         ? '<span class="fixed-qty-label">Fixed · 1 kit</span>'
         : '<button type="button" class="qty-btn" data-act="dec" data-id="' + esc(id) +
           '" aria-label="Decrease quantity">&minus;</button>' +
-          '<input class="qty-input" type="number" min="' + moq + '" step="1" value="' + qty +
+          '<input class="qty-input" type="number" min="' + moq + '"' + (cap !== Infinity ? ' max="' + cap + '"' : '') +
+          ' step="1" value="' + qty +
           '" id="qty-' + esc(id) + '" data-id="' + esc(id) + '" aria-label="Quantity for ' + esc(p.name) + '">' +
           '<button type="button" class="qty-btn" data-act="inc" data-id="' + esc(id) +
           '" aria-label="Increase quantity">+</button>';
@@ -197,6 +233,8 @@
         '<div class="iprice">' + (p.fixed
           ? fmtRate(p.price) + '/kit · ' + esc(p.fixedLabel)
           : fmtRate(p.price) + '/' + esc(unit) + ' · ' + esc(p.sku)) + '</div>' +
+        '<div class="isplit" id="split-' + esc(id) + '">' + esc(splitText(p, qty)) + '</div>' +
+        (cap !== Infinity && !p.fixed ? '<div class="icap">Max ' + fmtNum(cap) + ' available</div>' : '') +
         '</div>' +
         '<div class="qty-ctrl">' + qtyCtrl + '</div>' +
         '<div class="item-total" id="total-' + esc(id) + '">' +
@@ -241,7 +279,7 @@
     var moq = CATALOG.moqFor(p);
     var step = p.step || (moq >= 10 ? 10 : 1);
     var current = quantities[id] || moq;
-    quantities[id] = Math.max(moq, current + delta * step);
+    quantities[id] = Math.max(moq, clampQty(p, current + delta * step));
     var inp = $('qty-' + id);
     if (inp) inp.value = quantities[id];
     updateItemTotal(id);
@@ -252,7 +290,11 @@
   function setQty(id, val) {
     // Allow free typing (multi-digit entry), but never go negative.
     var parsed = parseInt(val, 10);
-    quantities[id] = isNaN(parsed) ? 0 : Math.max(0, parsed);
+    quantities[id] = isNaN(parsed) ? 0 : clampQty(CATALOG.byId(id), Math.max(0, parsed));
+    if (!isNaN(parsed) && String(quantities[id]) !== String(val).trim()) {
+      var inp = $('qty-' + id);
+      if (inp) inp.value = quantities[id];
+    }
     updateItemTotal(id);
     calculateQuote();
     syncCart();
@@ -276,6 +318,8 @@
     var qty = p.fixed ? 1 : (quantities[id] || 0);
     var el = $('total-' + id);
     if (el) el.textContent = qty > 0 ? fmt(p.price * qty) : '—';
+    var sp = $('split-' + id);
+    if (sp) sp.textContent = splitText(p, qty);
   }
 
   /* ── PINCODE LOOKUP ───────────────────────────────────────── */
@@ -440,6 +484,26 @@
     }
 
     $('bankQuoteRef').textContent = quoteNum;
+
+    /* Pre-order note: ready lines ship now, pre-order parts later (no promise beyond the admin's message). */
+    var note = $('preorderNote');
+    if (!note) {
+      note = document.createElement('p');
+      note.id = 'preorderNote'; note.className = 'preorder-note';
+      var gt = document.querySelector('.qc-grand-total');
+      if (gt && gt.parentNode) gt.parentNode.insertBefore(note, gt);
+    }
+    var anyPre = false, anyReady = false;
+    lineItems.forEach(function (li) {
+      var pre = preOf(li.p);
+      if (pre && li.qty > pre.ready_qty) anyPre = true;
+      if (!pre || pre.ready_qty > 0) anyReady = true;
+    });
+    note.hidden = !anyPre;
+    note.textContent = anyPre
+      ? (anyReady ? 'Ready items ship now; pre-order items are dispatched later, as per their pre-order message.'
+                  : 'Pre-order items are dispatched later, as per their pre-order message.')
+      : '';
 
     /* Shipping row */
     var shRow = $('shippingRow');
@@ -741,7 +805,11 @@
       if (!data || !window.NTAGZ_LIVE.apply(CATALOG, data)) return;
       selectedIds = selectedIds.filter(function (id) {
         var p = CATALOG.byId(id);
-        return !(p && p.live && (p.live.active === false || p.live.available === false));
+        return !(p && p.live && p.live.active === false) && !(p && isUnavailable(p));
+      });
+      selectedIds.forEach(function (id) {
+        var p = CATALOG.byId(id);
+        if (!p.fixed && quantities[id]) quantities[id] = clampQty(p, quantities[id]);
       });
       renderGrid();
       renderSelectedItems();

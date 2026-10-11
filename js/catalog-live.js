@@ -37,8 +37,16 @@
       var p = catalog.byId && catalog.byId(row.id);
       if (!p || typeof row.price !== 'number' || !isFinite(row.price) || row.price < 0) return;
       if (p.price !== row.price) { p.price = row.price; changed = true; }
-      var live = { active: row.active !== false, available: row.available !== false, low: !!row.low };
-      if (!p.live || p.live.active !== live.active || p.live.available !== live.available) changed = true;
+      var pre = row.preorder && typeof row.preorder === 'object' ? {
+        message: typeof row.preorder.message === 'string' ? row.preorder.message : '',
+        dispatch: typeof row.preorder.dispatch === 'string' ? row.preorder.dispatch : '',
+        ready_qty: Math.max(0, parseInt(row.preorder.ready_qty, 10) || 0),
+        max_qty: row.preorder.max_qty == null ? null : Math.max(0, parseInt(row.preorder.max_qty, 10) || 0)
+      } : null;
+      var left = row.low && Number.isInteger(row.left) && row.left > 0 ? row.left : null;
+      var live = { active: row.active !== false, available: row.available !== false, low: !!row.low, left: left, preorder: pre };
+      if (!p.live || p.live.active !== live.active || p.live.available !== live.available || p.live.low !== live.low ||
+          p.live.left !== live.left || JSON.stringify(p.live.preorder) !== JSON.stringify(live.preorder)) changed = true;
       p.live = live;
     });
     return changed;

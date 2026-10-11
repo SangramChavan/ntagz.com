@@ -21,7 +21,7 @@ const pay = async (rzId, pid) => call("/api/verify-payment", { razorpay_order_id
   // ── public catalogue endpoint ──
   let r = await call("/api/catalog"); assert.equal(r.status, 200); let cat = await r.json();
   assert.equal(cat.length, 17); const bc = cat.find((c) => c.id === "black-nfc-card");
-  assert.deepEqual(Object.keys(bc).sort(), ["active", "available", "id", "low", "price"]); assert.equal(bc.price, 30); assert.equal(bc.available, true); ok("GET /api/catalog: 17 products, price + availability only (no stock counts)");
+  assert.deepEqual(Object.keys(bc).sort(), ["active", "available", "id", "left", "low", "preorder", "price"]); assert.equal(bc.left, null); assert.equal(bc.preorder, null); assert.equal(bc.price, 30); assert.equal(bc.available, true); ok("GET /api/catalog: 17 products, price + availability only (no stock counts)");
   assert.equal(r.headers.get("Cache-Control"), "public, max-age=60"); ok("catalogue is cacheable for 60s");
   assert.equal((await call("/api/catalog", { x: 1 })).status, 405); ok("catalogue is read-only");
 

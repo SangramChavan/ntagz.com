@@ -173,6 +173,33 @@
           return false;
         });
       }
+      var pre = p.live.preorder;
+      if (p.live.available && pre) {
+        var priceBox = card.querySelector('.product-price');
+        if (priceBox && !card.querySelector('.pre-note') && pre.dispatch) {
+          var pn = document.createElement('div');
+          pn.className = 'pre-note';
+          pn.textContent = 'Dispatch: ' + pre.dispatch;
+          priceBox.appendChild(pn);
+        }
+        if (pre.ready_qty === 0) Array.prototype.forEach.call(card.querySelectorAll('.add-btn'), function (btn) {
+          /* cart-ui.js strips "Order" from unwired button labels, so wait until it has wired this one. */
+          var tries = 0;
+          (function label() {
+            if (btn.dataset.cartWired || tries++ > 20) btn.textContent = 'Pre-order';
+            else setTimeout(label, 100);
+          })();
+        });
+      }
+      if (p.live.available && p.live.low && p.live.left && !card.querySelector('.low-note')) {
+        var pb = card.querySelector('.product-price');
+        if (pb) {
+          var ln = document.createElement('div');
+          ln.className = 'low-note';
+          ln.textContent = 'Only ' + p.live.left + ' left';
+          pb.appendChild(ln);
+        }
+      }
       if (!p.live.available) {
         Array.prototype.forEach.call(card.querySelectorAll('.add-btn'), function (btn) {
           var off = document.createElement('span');

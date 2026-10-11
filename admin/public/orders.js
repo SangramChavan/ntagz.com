@@ -1,8 +1,8 @@
 // Orders screen: chips, search, list, side panel with timeline, status actions, shipment form, AWB corrections, payment recording.
 // Shares $, el, api, inr, when with app.js. All text is inserted with textContent.
 const O = { page: 1, pages: 1, view: "", sort: "created_at", dir: "desc", loaded: false };
-const VIEW_CHIPS = [["", "All"], ["new", "New"], ["paid", "Paid"], ["payment_pending", "Payment pending"], ["processing", "Processing"], ["packed", "Packed"], ["shipped", "Shipped"], ["out_for_delivery", "Out for delivery"], ["delivered", "Delivered"], ["preorders", "Pre-orders"], ["cancelled", "Cancelled"]];
-const STATUS_TXT = { placed: "Order placed", confirmed: "Confirmed", processing: "Processing", packed: "Packed", shipped: "Shipped", out_for_delivery: "Out for delivery", delivered: "Delivered", on_hold: "On hold", cancelled: "Cancelled", delivery_failed: "Delivery failed", returned: "Returned" };
+const VIEW_CHIPS = [["", "All"], ["new", "New"], ["paid", "Paid"], ["payment_pending", "Payment pending"], ["processing", "Processing"], ["packed", "Packed"], ["shipped", "Shipped"], ["out_for_delivery", "Out for delivery"], ["delivered", "Delivered"], ["preorders", "Pre-orders"], ["awaiting_stock", "Awaiting stock"], ["cancelled", "Cancelled"]];
+const STATUS_TXT = { placed: "Order placed", confirmed: "Confirmed", processing: "Processing", packed: "Packed", shipped: "Shipped", out_for_delivery: "Out for delivery", delivered: "Delivered", on_hold: "On hold", cancelled: "Cancelled", delivery_failed: "Delivery failed", returned: "Returned", preorder_confirmed: "Pre-order confirmed", awaiting_stock: "Awaiting stock", ready_to_pack: "Ready to pack" };
 const COURIERS = ["Delhivery", "Blue Dart", "DTDC", "India Post", "Ekart Logistics", "Trackon", "Xpressbees", "Shiprocket", "Ecom Express"];
 const todayIST = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 const dayText = (d) => (d ? new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—");
@@ -12,6 +12,7 @@ const payPill = (o) => el("span", { class: "pill " + o.payment_status }, o.payme
 const fulPill = (o) => el("span", { class: "pill st-" + o.status }, STATUS_TXT[o.status] || o.status);
 const methodTxt = (o) => (o.payment_method || "—").toUpperCase();
 const orderRef = (o) => o.id.slice(0, 8);
+const dispatchLine = (o) => (o.is_preorder && o.expected_dispatch ? el("div", { class: "sub" }, "Dispatch: " + dayText(o.expected_dispatch)) : "");
 
 function oparams() {
   const p = new URLSearchParams();
@@ -40,10 +41,11 @@ async function load() {
       el("div", { class: "row" }, el("span", { class: "id" }, o.name || "Guest"), el("b", {}, inr(o.total))),
       el("div", { class: "sub" }, `${orderRef(o)} · ${when(o.created_at)}`),
       el("div", {}, payPill(o), fulPill(o), o.is_preorder ? el("span", { class: "pill pre" }, "Pre-order") : ""),
+      dispatchLine(o),
       o.tracking_id ? el("div", { class: "sub" }, `${o.courier || ""} · ${o.tracking_id}`) : "")));
     $("rows").replaceChildren(...d.orders.map((o) => el("tr", { tabindex: "0", onclick: () => openOrder(o.id), onkeydown: (e) => { if (e.key === "Enter") openOrder(o.id); } },
       el("td", { class: "mono" }, orderRef(o)), el("td", {}, when(o.created_at)), el("td", {}, o.name || "Guest", el("div", { class: "sub" }, o.phone || "")),
-      el("td", {}, payPill(o), el("div", { class: "sub" }, methodTxt(o))), el("td", {}, fulPill(o), o.is_preorder ? el("span", { class: "pill pre" }, "Pre-order") : ""),
+      el("td", {}, payPill(o), el("div", { class: "sub" }, methodTxt(o))), el("td", {}, fulPill(o), o.is_preorder ? el("span", { class: "pill pre" }, "Pre-order") : "", dispatchLine(o)),
       el("td", {}, inr(o.total)), el("td", {}, o.courier || "—"), el("td", { class: "mono" }, o.tracking_id || "—"))));
   } catch (e) {
     $("list").replaceChildren(el("p", { class: "msg" }, "Could not load orders: " + e.message, " ", el("button", { class: "btn small", type: "button", onclick: load }, "Retry")));
@@ -112,6 +114,19 @@ function editShipmentDialog(o, s) {
   });
 }
 
+// ── pre-order: expected dispatch date ────────────────────────────────
+function dispatchDialog(o) {
+  const date = el("input", { id: "expected_dispatch", type: "date", value: o.expected_dispatch || "" });
+  const pub = el("textarea", { id: "apub", rows: "2", maxlength: "300", placeholder: "Message the customer will see (optional)" }), k = key();
+  actionDialog("Update expected dispatch", [el("p", { class: "sub" }, `${o.name || "Order"} · ${orderRef(o)}`), labeled("expected_dispatch", "Expected dispatch date", date, "A planning date, not a delivery promise. Clear it to remove."), labeled("apub", "Note for the customer", pub, "Optional. Otherwise the date is shown as-is on their tracking page.")], "Save", {
+    onSubmit: async () => { const d = await postForm(`/api/orders/${o.id}/dispatch`, { expected_dispatch: date.value, public_note: pub.value, idempotency_key: k }); toast("Expected dispatch updated"); $("adlg").close(); await openOrder(o.id, d); load(); },
+  });
+}
+const preorderSection = (o) => !o.is_preorder ? [] : [el("h3", { class: "sec" }, "Pre-order"),
+  el("div", { class: "preorder" },
+    ...(o.stock_lines.length ? o.stock_lines.map((l) => el("div", { class: "row" }, el("span", {}, l.name), el("span", { class: "sub" }, `ready ${l.ready_qty} / pre-order ${l.pre_qty}`))) : [el("p", { class: "sub" }, "No stock reservation recorded for this order.")]),
+    el("div", { class: "row" }, el("span", {}, "Expected dispatch: ", el("b", {}, dayText(o.expected_dispatch))), !["cancelled", "returned", "delivered"].includes(o.status) ? el("button", { class: "btn small", type: "button", onclick: () => dispatchDialog(o) }, "Update expected dispatch") : ""))];
+
 // ── record payment (cash / UPI / bank), unchanged rules ──────────────
 function paymentDialog(o) {
   const manual = !["cash", "cod"].includes(o.payment_method), k = key();
@@ -130,7 +145,7 @@ async function openOrder(id, preloaded) {
   let o = preloaded;
   if (!o || !o.timeline) { try { o = await api("/api/orders/" + id); } catch (e) { return toast(e.message, true); } }
   const manualPay = ["cash", "cod", "upi", "bank", "whatsapp"].includes(o.payment_method) && o.payment_status === "unpaid" && o.status !== "cancelled" && (o.payment_method !== "cod" || o.status === "delivered");
-  const primary = o.actions.find((a) => ["confirmed", "processing", "packed", "shipped", "out_for_delivery", "delivered"].includes(a.to));
+  const primary = o.actions.find((a) => ["confirmed", "preorder_confirmed", "awaiting_stock", "ready_to_pack", "processing", "packed", "shipped", "out_for_delivery", "delivered"].includes(a.to));
   const others = o.actions.filter((a) => a !== primary);
   const actionBtn = (a, main) => el("button", { class: main ? "btn primary" : "btn small" + (["cancelled", "returned"].includes(a.to) ? " danger" : ""), type: "button", onclick: () => startAction(o, a) }, a.label);
   const shipCards = o.shipments.map((s) => el("div", { class: "ship" },
@@ -150,6 +165,7 @@ async function openOrder(id, preloaded) {
       o.track_url ? el("button", { class: "btn small", type: "button", onclick: async () => { try { await navigator.clipboard.writeText(o.track_url); toast("Tracking link copied"); } catch { toast("Copy failed", true); } } }, "Copy customer tracking link") : "",
       el("div", { class: "next" }, primary ? actionBtn(primary, true) : el("span", { class: "sub" }, o.actions.length ? "" : `This order is ${o.status_label.toLowerCase()}.`), ...others.map((a) => actionBtn(a, false))),
       manualPay ? el("button", { class: "btn", type: "button", onclick: () => paymentDialog(o) }, ["cash", "cod"].includes(o.payment_method) ? "Mark cash as received" : "Record payment received") : "",
+      ...preorderSection(o),
       el("h3", { class: "sec" }, "Shipments"), ...(shipCards.length ? shipCards : [el("p", { class: "sub" }, "Nothing shipped yet.")]),
       el("h3", { class: "sec" }, "Order journey"), el("ol", { class: "timeline" }, tl),
       el("h3", { class: "sec" }, "Customer"), el("dl", {}, ...row("Name", o.name || "—"), ...row("Phone", o.phone || "—"), ...row("Email", o.email || "—"), ...row("Ship to", [o.address, o.state, o.pincode].filter(Boolean).join(", ") || "—"), ...row("GSTIN", o.gstin || "—")),

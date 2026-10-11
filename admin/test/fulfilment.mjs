@@ -5,7 +5,7 @@ const H = { "Content-Type": "application/json", "X-Requested-With": "ntagz-admin
 let cookie = "", n = 0; const ok = (m) => console.log(`ok ${++n} ${m}`);
 const call = (p, b) => fetch(BASE + p, { method: b === undefined ? "GET" : "POST", headers: { ...(b === undefined ? {} : H), ...(cookie ? { Cookie: cookie } : {}) }, body: b === undefined ? undefined : JSON.stringify(b) });
 const key = () => crypto.randomUUID();
-const ORD = { cash: "22222222-aaaa-bbbb-cccc-000000000002", online: "11111111-aaaa-bbbb-cccc-000000000001", upi: "55555555-aaaa-bbbb-cccc-000000000005", wa: "66666666-aaaa-bbbb-cccc-000000000006", cod: "33333333-aaaa-bbbb-cccc-000000000003", payu: "44444444-aaaa-bbbb-cccc-000000000004" };
+const ORD = { cash: "22222222-aaaa-bbbb-cccc-000000000002", online: "11111111-aaaa-bbbb-cccc-000000000001", upi: "55555555-aaaa-bbbb-cccc-000000000005", wa: "66666666-aaaa-bbbb-cccc-000000000006", cod: "33333333-aaaa-bbbb-cccc-000000000003", payu: "44444444-aaaa-bbbb-cccc-000000000004", pre: "77777777-aaaa-bbbb-cccc-000000000007" };
 const status = (id, to, extra = {}) => call(`/api/orders/${id}/status`, { to, idempotency_key: key(), ...extra });
 const get = async (id) => (await call("/api/orders/" + id)).json();
 
@@ -54,7 +54,7 @@ let l = await (await call("/api/orders?q=DL1234567890")).json(); assert.equal(l.
 for (const [view, expect] of [["shipped", (o) => o.status === "shipped"], ["delivered", (o) => o.status === "delivered"], ["payment_pending", (o) => o.payment_status === "unpaid"], ["paid", (o) => o.payment_status === "paid"], ["new", (o) => ["placed", "confirmed"].includes(o.status)]]) {
   l = await (await call("/api/orders?view=" + view)).json(); assert.ok(l.total >= 1, view); assert.ok(l.orders.every(expect), view);
 } ok("filter views (shipped, delivered, payment pending, paid, new) return the right orders");
-l = await (await call("/api/orders?view=preorders")).json(); assert.equal(l.total, 0); l = await (await call("/api/orders?view=nonsense")).json(); assert.equal(l.total, 6); ok("pre-orders view is empty until used; unknown views are ignored");
+l = await (await call("/api/orders?view=preorders")).json(); assert.equal(l.total, 1); assert.equal(l.orders[0].id, ORD.pre); l = await (await call("/api/orders?view=nonsense")).json(); assert.equal(l.total, 7); ok("pre-orders view lists the pre-order; unknown views are ignored");
 
 // corrections
 d = await get(ORD.cash); const sid = d.shipments[1].id;
@@ -75,6 +75,55 @@ assert.equal((await status(ORD.cash, "delivered")).status, 409); ok("closed orde
 r = await status(ORD.upi, "cancelled"); assert.equal(r.status, 400); r = await status(ORD.upi, "cancelled", { confirm: true, note: "Customer asked" }); d = await r.json(); assert.equal(d.status, "cancelled"); assert.equal(d.timeline.at(-1).note, "Customer asked"); ok("cancel needs explicit confirmation and keeps the reason");
 assert.equal((await ship(ORD.upi, {})).status, 409); ok("cancelled orders cannot be shipped");
 assert.equal((await call(`/api/orders/${ORD.online}`)).status, 200); d = await get(ORD.online); assert.equal(d.payment_status, "paid"); assert.equal(d.timeline[0].kind, "placed"); assert.ok(d.timeline.some((t) => t.kind === "payment") === (d.payments.length > 0)); ok("timeline starts with 'Order placed'; payments appear as their own events");
+
+// ── pre-orders ──
+{
+  const prod = async () => (await call("/api/products/nfc-coin")).json();
+  const dispatch = (id, b) => call(`/api/orders/${id}/dispatch`, { idempotency_key: key(), ...b });
+  let p = await prod(); assert.equal(p.stock_qty, 0); assert.equal(p.preordered_qty, 3);
+  d = await get(ORD.pre); assert.equal(d.is_preorder, true); assert.equal(d.stock_lines.length, 1); assert.deepEqual([d.stock_lines[0].product_id, d.stock_lines[0].ready_qty, d.stock_lines[0].pre_qty], ["nfc-coin", 2, 3]); assert.ok(d.stock_lines[0].name); assert.equal(d.expected_dispatch, null);
+  assert.deepEqual(to(d), ["awaiting_stock", "ready_to_pack", "on_hold", "cancelled"]); ok("pre-order exposes stock lines and its own status actions");
+  assert.equal(to(await get(ORD.upi)).includes("awaiting_stock"), false); ok("non-pre-orders are not offered pre-order stages");
+
+  // dispatch endpoint
+  assert.equal((await dispatch(ORD.online, { expected_dispatch: "2026-11-05" })).status, 409); ok("dispatch date rejected for a normal order");
+  assert.equal((await dispatch("00000000-0000-0000-0000-000000000000", {})).status, 404);
+  assert.equal((await call(`/api/orders/${ORD.pre}/dispatch`, { expected_dispatch: "2026-11-05" })).status, 400); ok("dispatch needs an idempotency key");
+  for (const bad of ["2026-02-30", "soon", "11/05/2026", "2026-13-01"]) { r = await dispatch(ORD.pre, { expected_dispatch: bad }); assert.equal(r.status, 400, bad); assert.ok((await r.json()).fields.expected_dispatch); } ok("invalid dates rejected");
+  const dk = key(); r = await call(`/api/orders/${ORD.pre}/dispatch`, { idempotency_key: dk, expected_dispatch: "2026-11-05" }); d = await r.json();
+  assert.equal(r.status, 200); assert.equal(d.expected_dispatch, "2026-11-05"); let ev = d.timeline.filter((t) => t.kind === "dispatch"); assert.equal(ev.length, 1);
+  assert.equal(ev[0].customer_visible, true); assert.equal(ev[0].public_note, "Expected dispatch: 5 Nov 2026"); assert.equal(ev[0].actor, "admin@example.test"); assert.equal(d.status, "preorder_confirmed"); ok("dispatch date saved with an automatic customer-visible note");
+  for (let i = 0; i < 3; i++) await call(`/api/orders/${ORD.pre}/dispatch`, { idempotency_key: dk, expected_dispatch: "2026-11-05" });
+  d = await get(ORD.pre); assert.equal(d.timeline.filter((t) => t.kind === "dispatch").length, 1); ok("replayed dispatch request creates no duplicate event");
+  const dr = await Promise.all(Array.from({ length: 4 }, () => dispatch(ORD.pre, { expected_dispatch: "2026-11-08", public_note: "Batch delayed a few days" })));
+  assert.ok(dr.every((x) => x.status === 200 || x.status === 409)); d = await get(ORD.pre); assert.equal(d.expected_dispatch, "2026-11-08"); assert.ok(d.timeline.some((t) => t.kind === "dispatch" && t.public_note === "Batch delayed a few days")); ok("admin note replaces the automatic text; concurrent updates stay consistent");
+  d = await (await dispatch(ORD.pre, { expected_dispatch: "" })).json(); assert.equal(d.expected_dispatch, null); assert.equal(d.timeline.filter((t) => t.kind === "dispatch").at(-1).public_note, "Expected dispatch date removed"); ok("dispatch date can be removed");
+  await dispatch(ORD.pre, { expected_dispatch: "2026-11-10" });
+  l = await (await call("/api/orders?view=preorders")).json(); assert.equal(l.orders[0].expected_dispatch, "2026-11-10"); ok("list rows carry expected_dispatch");
+
+  // pre-order status flow
+  assert.equal((await status(ORD.pre, "packed")).status, 409); assert.equal((await status(ORD.pre, "processing")).status, 409); ok("pre-order cannot skip to packing before it is ready");
+  assert.equal((await status(ORD.pre, "awaiting_stock")).status, 200); d = await get(ORD.pre); assert.equal(d.status_label, "Awaiting stock"); assert.deepEqual(to(d), ["ready_to_pack", "on_hold", "cancelled"]);
+  l = await (await call("/api/orders?view=awaiting_stock")).json(); assert.equal(l.total, 1);
+  assert.equal((await status(ORD.pre, "on_hold")).status, 200); assert.deepEqual(to(await get(ORD.pre)), ["confirmed", "processing", "packed", "preorder_confirmed", "awaiting_stock", "ready_to_pack", "cancelled"]);
+  assert.equal((await status(ORD.pre, "ready_to_pack")).status, 200); assert.deepEqual(to(await get(ORD.pre)), ["processing", "packed", "shipped", "on_hold", "cancelled"]); ok("pre-order flows awaiting stock -> on hold -> ready to pack, and payment is never touched");
+  d = await get(ORD.pre); assert.equal(d.payment_status, "paid"); assert.equal(d.paid_paise, 59000);
+  assert.equal((await status(ORD.pre, "preorder_confirmed")).status, 409); ok("ready to pack cannot go back to pre-order confirmed");
+
+  // cancel releases stock once
+  p = await prod(); assert.equal(p.stock_qty, 0); assert.equal(p.preordered_qty, 3);
+  const ck = key(), cancel = () => call(`/api/orders/${ORD.pre}/status`, { to: "cancelled", confirm: true, idempotency_key: ck });
+  r = await cancel(); d = await r.json(); assert.equal(r.status, 200); assert.equal(d.status, "cancelled");
+  p = await prod(); assert.equal(p.stock_qty, 2); assert.equal(p.preordered_qty, 0);
+  assert.deepEqual(p.movements[0] && [p.movements[0].type, p.movements[0].qty_change, p.movements[0].prev_stock, p.movements[0].new_stock, p.movements[0].reason, p.movements[0].reference, p.movements[0].admin], ["in", 2, 0, 2, "Order cancelled", ORD.pre, "admin@example.test"]); ok("cancel returns ready stock, clears pre-ordered units and logs a stock movement");
+  for (let i = 0; i < 3; i++) await cancel();
+  await Promise.all(Array.from({ length: 4 }, () => call(`/api/orders/${ORD.pre}/status`, { to: "cancelled", confirm: true, idempotency_key: key() })));
+  p = await prod(); assert.equal(p.stock_qty, 2); assert.equal(p.preordered_qty, 0); assert.equal(p.movements.filter((m) => m.reason === "Order cancelled").length, 1); ok("replayed and concurrent cancels release stock exactly once");
+  assert.equal((await dispatch(ORD.pre, { expected_dispatch: "2026-12-01" })).status, 409); ok("cancelled pre-orders cannot get a dispatch date");
+  // an order with no stock lines cancels fine and moves no stock
+  const before = JSON.stringify((await (await call("/api/products/summary")).json())); r = await status(ORD.wa, "cancelled", { confirm: true }); assert.equal(r.status, 200); assert.equal((await r.json()).status, "cancelled");
+  assert.equal(JSON.stringify((await (await call("/api/products/summary")).json())), before); assert.equal((await prod()).stock_qty, 2); ok("cancelling an order without stock lines is fine and moves no stock");
+}
 // customer tracking link: detail only
 {
   const a = await get(ORD.cash), b = await get(ORD.online);

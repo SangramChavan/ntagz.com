@@ -58,7 +58,7 @@ document.getElementById("carrier").addEventListener("change", (e) => {
   ];
   const ALIAS = { pending: "placed", created: "placed", confirmed: "placed", payment: "paid", payment_confirmed: "paid",
     in_transit: "shipped", dispatched: "shipped" };
-  const EXC = ["on_hold", "delivery_failed", "cancelled", "returned"];
+  const EXC = ["on_hold", "delivery_failed", "cancelled", "returned", "preorder_confirmed", "awaiting_stock", "ready_to_pack"];
   const norm = (k) => ALIAS[k] || k;
   const idx = (k) => STAGES.findIndex((s) => s[0] === norm(k));
 
@@ -109,7 +109,11 @@ document.getElementById("carrier").addEventListener("change", (e) => {
 
   function timeline(d) {
     const ev = {};
-    for (const j of d.journey || []) ev[norm(j.status || j.kind)] = j;
+    const notes = [];
+    for (const j of d.journey || []) {
+      if (j.kind === "dispatch") notes.push(j); /* expectation updates, not a stage */
+      else ev[norm(j.status || j.kind)] = j;
+    }
     let cur = Math.max(idx(d.status), -1);
     for (const k in ev) cur = Math.max(cur, idx(k));
     if (cur < 0) cur = 0;
@@ -130,8 +134,21 @@ document.getElementById("carrier").addEventListener("change", (e) => {
       if (i === cur && exc) {
         const e = ev[exc];
         add("exception", (d.status_label || exc.replace(/_/g, " ")), e || null, "!");
+        for (const n of notes) add("exception", n.label || "Expected dispatch updated", n, "!");
       }
     });
+    if (!exc) { /* dispatch updates still show when the status is a normal stage */
+      let last = ol.children[Math.min(cur, ol.children.length - 1)];
+      notes.forEach((n) => {
+        const li = el("li", "tl-item exception");
+        li.append(el("span", "tl-dot", "!"));
+        const b = el("div", "tl-body");
+        b.append(el("div", "tl-label", n.label || "Expected dispatch updated"), el("div", "tl-when", when(n.at)));
+        if (n.note) b.append(el("div", "tl-note", n.note));
+        li.append(b);
+        last.after(li); last = li;
+      });
+    }
     return ol;
   }
 
@@ -140,10 +157,18 @@ document.getElementById("carrier").addEventListener("change", (e) => {
     sum.append(el("h2", null, "Order " + d.ref));
     sum.append(row("Placed on", day(d.placed_at)));
     sum.append(row("Payment", d.payment_status === "paid" ? "Paid" : "Unpaid"));
-    sum.append(row("Status", (d.status_label || d.status) + (d.is_preorder ? " (pre-order)" : "")));
+    sum.append(row("Status", (d.status_label || d.status) + (d.is_preorder && !/pre-?order/i.test(d.status_label || "") ? " (pre-order)" : "")));
     if (d.ship_to) sum.append(row("Ship to", [d.ship_to.state, d.ship_to.pincode].filter(Boolean).join(" - ")));
+    if (d.expected_dispatch && /^\d{4}-\d{2}-\d{2}$/.test(d.expected_dispatch)) {
+      const dt = new Date(d.expected_dispatch + "T00:00:00+05:30");
+      if (!isNaN(dt)) sum.append(row("Expected dispatch", day(dt / 1000) + " (expected, not a delivery date)"));
+    }
     const ul = el("ul", "ov-items");
-    for (const i of d.items || []) ul.append(el("li", null, i.name + " × " + i.qty));
+    for (const i of d.items || []) {
+      const split = i.ready_qty != null && i.pre_qty != null && i.pre_qty > 0
+        ? " (" + i.ready_qty + " ready, " + i.pre_qty + " pre-order)" : "";
+      ul.append(el("li", null, i.name + " × " + i.qty + split));
+    }
     sum.append(ul, row("Total", inr(d.total_paise)));
     const nodes = [sum];
 
