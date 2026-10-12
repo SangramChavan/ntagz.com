@@ -2658,6 +2658,7 @@
       .wa-float svg { width: 24px; height: 24px; }
       .ftab { min-height: 44px; } /* 10px padding left these filter tabs at ~43px */
       .price-opt-label { font-size: 11px; } /* 10px uppercase was hard to read on a phone */
+      .rfid-table tbody td a, .rfid-table-foot-note a { display: inline-flex; align-items: center; min-height: 44px; } /* 11px inline links were 17px tall */
     }
 
     /* Live catalogue overlay */
