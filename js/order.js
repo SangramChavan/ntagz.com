@@ -96,18 +96,6 @@
     correctLevel: QRCode.CorrectLevel.M
   });
 
-  /* ── TIER TABLE (rendered from the catalogue) ─────────────── */
-  function renderTiers() {
-    var host = $('tierRows');
-    if (!host) return;
-    host.innerHTML = TIERS.map(function (t) {
-      var range = t.max === Infinity
-        ? fmtNum(t.min) + '+ pcs'
-        : fmtNum(t.min) + ' – ' + fmtNum(t.max) + ' pcs';
-      return '<div class="tier-row"><span>' + range + '</span><b>' + esc(t.label) + '</b></div>';
-    }).join('');
-  }
-
   /* ── PRE-ORDER HELPERS (live.preorder comes from the admin catalogue) ── */
   function preOf(p) { return (p.live && p.live.preorder) || null; }
   /* Largest quantity the server will accept; Infinity = uncapped. */
@@ -942,7 +930,6 @@
   }
 
   /* ── INIT ─────────────────────────────────────────────────── */
-  renderTiers();
   renderGrid();
   renderSelectedItems();
   calculateQuote();
