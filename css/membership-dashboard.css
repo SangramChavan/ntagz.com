@@ -63,7 +63,7 @@
 @media (prefers-color-scheme: dark){
   .md{--md-ink:#F0EDE8;--md-ink2:#B8B2A8;--md-line:#3A342E;--md-soft:#1A1714;--md-tint:#3A2416;--md-orange-text:#FF9A66;--md-ok:#4ADE80;--md-bad:#FF8A80}
   .md-card,.md-tip,.md-ms{background:#24201A}
-  .md-btn{color:#1F1C20}
+  .md .md-btn{color:#1F1C20}
   .md-btn.md-ghost{background:#24201A}
   .md-pill.on{background:rgba(74,222,128,.16);color:#4ADE80}
   .md-warn{background:#3A1E1C;color:#FFB4A8}

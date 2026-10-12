@@ -160,7 +160,7 @@
    keep dark text (same as the light design) so contrast holds. */
 @media (prefers-color-scheme: dark){
   .m{--m-orange-text:#FF9A66;--m-orange-tint:#3A2416;--m-ink:#F0EDE8;--m-ink-2:#B8B2A8;--m-line:#3A342E;--m-soft:#1A1714;background:#100F0C}
-  .m-btn-primary{color:#1F1C20}
+  .m .m-btn-primary{color:#1F1C20}
   .m-btn-ghost,.m-box,.m-steps li,.m-calc,.m-field input,.m-tier,.m-my .card,.m-join{background:#24201A}
   .m-field input{color:var(--m-ink)}
   .m-steps li::before{color:#1F1C20}
