@@ -3,7 +3,7 @@
 <meta name="robots" content="noindex,nofollow"><title>NTAGZ Admin — Orders</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/crm.css"></head>
 <body>
 <header><b>NTAGZ <span>Admin</span></b>
-<nav aria-label="Sections"><a href="#/orders" id="nav-orders">Orders</a><a href="#/products" id="nav-products">Products</a><a href="#/pricing" id="nav-pricing">Pricing</a><a href="#/rewards" id="nav-rewards">Rewards</a><a href="#/customers" id="nav-customers">Customers</a></nav><span><span id="who" class="sub"></span> <button class="btn" id="out" type="button">Sign out</button></span></header>
+<nav aria-label="Sections"><a href="#/orders" id="nav-orders">Orders</a><a href="#/products" id="nav-products">Products</a><a href="#/pricing" id="nav-pricing">Pricing</a><a href="#/rewards" id="nav-rewards">Rewards</a><a href="#/customers" id="nav-customers">Customers</a><a href="#/membership" id="nav-membership">Membership</a></nav><span><span id="who" class="sub"></span> <button class="btn" id="out" type="button">Sign out</button></span></header>
 <main id="view-orders">
   <div class="pv-head">
     <div><h1 class="pv-title">Orders</h1><p class="sub">Follow every order from payment to delivery.</p></div>
@@ -52,6 +52,7 @@
   <div id="rewards" aria-live="polite"><p class="sub">Loading…</p></div>
 </main>
 <main id="view-customers" hidden><div id="crm-root" aria-live="polite"><p class="sub">Loading…</p></div></main>
+<main id="view-membership" hidden><div id="membership-root" aria-live="polite"><p class="sub">Loading…</p></div></main>
 <div class="draftbar" id="draftbar" hidden><span id="draftinfo"></span><span><button class="btn link" id="draftdiscard" type="button">Discard draft</button> <button class="btn primary" id="draftpublish" type="button">Review &amp; publish</button></span></div>
 <div id="toast" role="status" aria-live="polite" hidden></div>
 <dialog id="ppanel" class="panel" aria-labelledby="pptitle"></dialog>
@@ -61,4 +62,4 @@
 <dialog id="kdlg" aria-labelledby="kdtitle"></dialog>
 <dialog id="opanel" class="panel" aria-labelledby="optitle"></dialog>
 <dialog id="adlg" aria-labelledby="adtitle"></dialog>
-<script src="/app.js"></script><script src="/orders.js"></script><script src="/products.js"></script><script src="/pricing.js"></script><script src="/rewards.js"></script><script src="/customers.js"></script><script src="/crm-analytics.js"></script><script src="/crm-campaigns.js"></script></body></html>
+<script src="/app.js"></script><script src="/orders.js"></script><script src="/products.js"></script><script src="/pricing.js"></script><script src="/rewards.js"></script><script src="/customers.js"></script><script src="/crm-analytics.js"></script><script src="/crm-campaigns.js"></script><script src="/membership.js"></script></body></html>

@@ -32,7 +32,7 @@
   function stat(label, value) { var d = el('div', 'm-stat'); d.appendChild(el('span', null, label)); d.appendChild(el('b', null, value)); return d; }
 
   function renderMine() {
-    var sec = $('rewards'), host = $('rwMine'); if (!me) { sec.hidden = true; return; }
+    var sec = $('rwMineWrap'), host = $('rwMine'); if (!me) { sec.hidden = true; return; }
     sec.hidden = false; host.textContent = '';
     var a = el('div', 'card');
     a.appendChild(el('h3', null, (me.tier ? me.tier.name : 'Free') + ' tier'));
@@ -76,22 +76,22 @@
     det.appendChild(ul); h.appendChild(det); host.appendChild(h);
   }
 
-  function cta() {
-    var b = $('mRewardsCta'); if (!b) return;
-    if (me) { b.textContent = 'View My Rewards'; b.setAttribute('href', '#rewards'); }
-    else { b.textContent = 'Join Free'; b.setAttribute('href', '/account/login.html?next=' + encodeURIComponent('/membership/#rewards')); }
+  /* Runs only when the membership page reports (via js/membership.js) that spending tiers are live: no extra requests otherwise. */
+  function start() {
+    fetch('/api/rewards/tiers', { credentials: 'omit' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+      if (d) {
+        tiers = d.tiers || []; live = !!d.live; $('rwOff').hidden = live;
+        var c = $('rwCombine'); if (c && d.combine === 'stack') c.textContent = 'If you have both, the two discounts can combine on a product, up to a combined limit.';
+      }
+      renderTiers();
+    }).catch(function () { renderTiers(); });
+
+    fetch('/api/rewards/me', { credentials: 'include' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+      me = d; renderTiers(); renderMine();
+    }).catch(function () { });
   }
-
-  fetch('/api/rewards/tiers', { credentials: 'omit' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
-    if (d) {
-      tiers = d.tiers || []; live = !!d.live; $('rwOff').hidden = live;
-      var c = $('rwCombine'); if (c && d.combine === 'stack') c.textContent = 'If you have both, the two discounts can combine on a product, up to a combined limit.';
-    }
-    renderTiers();
-  }).catch(function () { renderTiers(); });
-
-  fetch('/api/rewards/me', { credentials: 'include' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
-    me = d; cta(); renderTiers(); renderMine();
-    if (me && location.hash === '#rewards') { var s = $('rewards'); if (s) s.scrollIntoView(); }
-  }).catch(function () { cta(); });
+  var started = false;
+  function maybe(P) { if (started || !P || !P.loyaltyLive) return; started = true; start(); }
+  document.addEventListener('ntagz:pricing', function (e) { maybe(e.detail); });
+  maybe(window.NTAGZ_PRICING);
 })();

@@ -387,21 +387,65 @@
   /* ── MEMBER QUOTE (server-priced; members only) ───────────────
      One status check per page view; quotes are fetched only for active members, debounced, and only re-render when the
      server answers for the cart currently on screen. Any failure leaves the guest estimate (checkout re-prices anyway). */
-  var MQ = { member: false, key: '', data: null, timer: null };
+  var MQ = { member: false, key: '', data: null, pts: null, timer: null, redeem: 0, items: '', err: '' };
+  /* Rewards points are spent on online payments only (Razorpay / PayU): offline UPI / bank / WhatsApp orders are priced without them. */
+  function onlinePay() { var t = document.querySelector('.pay-tab.active'), k = t && t.getAttribute('data-paytab'); return k === 'razorpay' || k === 'payu'; }
+  function effRedeem() { return MQ.redeem > 0 && onlinePay() ? MQ.redeem : 0; }
+  window.NTAGZ_REDEEM = effRedeem; /* read by the payment buttons in order.html; the server re-prices and decides how many points are allowed */
   function memberQuoteFor(lineItems, state) {
     if (!MQ || !MQ.member || !lineItems.length) return null;
     var items = lineItems.map(function (li) { return { id: li.p.id, qty: li.qty }; });
-    var key = JSON.stringify([items, state]);
+    var ik = JSON.stringify(items);
+    if (MQ.items !== ik) { MQ.items = ik; MQ.redeem = 0; MQ.err = ''; } /* the cart changed: any points choice is void */
+    var rd = effRedeem(), key = JSON.stringify([items, state, rd]);
     if (MQ.key === key) return MQ.data;
     clearTimeout(MQ.timer);
     MQ.timer = setTimeout(function () {
-      fetch('/api/quote', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: items, state: state }) })
-        .then(function (r) { return r.ok ? r.json() : null; })
-        .then(function (d) { MQ.key = key; MQ.data = d && d.you ? d.you : null; calculateQuote(); })
+      var body = { items: items, state: state }; if (rd > 0) body.redeemPoints = rd;
+      fetch('/api/quote', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+        .then(function (r) { return r.json().catch(function () { return null; }).then(function (d) { return { r: r, d: d }; }); })
+        .then(function (x) {
+          if (x.r.status === 409 && rd > 0 && x.d && x.d.error) { MQ.redeem = 0; MQ.err = String(x.d.error); calculateQuote(); return; } /* server refused: show its words, re-quote without points */
+          var d = x.r.ok ? x.d : null;
+          MQ.key = key; MQ.data = d && d.you ? d.you : null; MQ.pts = d && d.points ? d.points : null; calculateQuote();
+        })
         .catch(function () { });
     }, 350);
     return null;
   }
+  /* Points control: only what the server returned is displayed; nothing is priced here. */
+  function renderPoints(mq) {
+    var box = $('ptsBox'), p = MQ.pts;
+    if (!box) return;
+    if (!MQ.member || !p || !mq) { box.hidden = true; return; }
+    box.hidden = false;
+    var online = onlinePay(), can = p.available >= p.minRedeem, usable = p.maxUsable >= p.minRedeem;
+    $('ptsAvail').textContent = fmtNum(p.available) + ' points available (worth ' + fmtRate(p.available * p.valuePaise / 100) + ')';
+    $('ptsControl').hidden = !can;
+    var on = MQ.redeem > 0 && online;
+    $('ptsUse').checked = on; $('ptsUse').disabled = !online || (!usable && !on);
+    $('ptsAmtRow').hidden = !on;
+    if (on) { var n = $('ptsNum'); n.min = p.minRedeem; n.max = Math.max(p.maxUsable, p.redeemed || 0); n.value = p.redeemed || MQ.redeem; }
+    var msg = MQ.err || '';
+    if (!msg && can && !online) msg = 'Points can be used with Razorpay or PayU payments. Choose one of them to use your points.';
+    else if (!msg && !can) msg = 'You can use points once you have ' + fmtNum(p.minRedeem) + ' or more (each point is worth ' + fmtRate(p.valuePaise / 100) + ').';
+    else if (!msg && can && online && !usable) msg = p.note || ('This order can use at most ' + fmtNum(p.maxUsable) + ' points; the minimum is ' + fmtNum(p.minRedeem) + '.');
+    else if (!msg && on && p.redeemed > 0) msg = (p.note ? p.note + ' ' : '') + 'Using ' + fmtNum(p.redeemed) + ' points takes ' + fmtRate(p.discountPaise / 100) + ' off. Up to ' + fmtNum(p.maxUsable) + ' points can be used on this order.';
+    else if (!msg && can && online) msg = 'Up to ' + fmtNum(p.maxUsable) + ' points can be used on this order (' + p.maxRedeemPct + '% of its eligible value at most).';
+    var note = $('ptsNote'); note.textContent = msg; note.className = 'pts-note' + (MQ.err ? ' err' : '');
+    var earn = $('ptsEarn');
+    earn.hidden = !(p.willEarn > 0);
+    earn.textContent = p.willEarn > 0 ? 'You’ll earn about ' + fmtNum(p.willEarn) + ' points on this order' + (p.earnOn === 'delivered' ? ' once it is delivered.' : ' once payment is confirmed.') : '';
+  }
+  (function () {
+    var use = $('ptsUse'), num = $('ptsNum'), max = $('ptsMax'); if (!use) return;
+    use.addEventListener('change', function () { MQ.err = ''; MQ.redeem = use.checked && MQ.pts ? Math.max(MQ.pts.maxUsable, 0) : 0; calculateQuote(); });
+    num.addEventListener('change', function () {
+      MQ.err = ''; var p = MQ.pts, v = parseInt(num.value, 10);
+      MQ.redeem = p && v > 0 ? Math.min(Math.max(v, p.minRedeem), Math.max(p.maxUsable, p.minRedeem)) : 0; calculateQuote();
+    });
+    max.addEventListener('click', function () { MQ.err = ''; if (MQ.pts) MQ.redeem = MQ.pts.maxUsable; calculateQuote(); });
+  })();
   fetch('/api/membership/status', { credentials: 'same-origin' })
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (d) {
@@ -500,11 +544,12 @@
 
     /* Member prices. Only the server knows whether this customer is an active member, so for members the quote shows the
        server's numbers for this exact cart: the same amount checkout will charge. Guests keep the local estimate. */
-    var memberOff = 0, rewardOff = 0, mq = memberQuoteFor(lineItems, cState);
+    var memberOff = 0, rewardOff = 0, pointsOff = 0, mq = memberQuoteFor(lineItems, cState);
     if (mq && (mq.member || mq.campaign)) {
       memberOff = mq.memberDiscount;
       rewardOff = mq.campaign && mq.campaign.type === 'percent_off' ? mq.campaignDiscountPaise / 100 : 0;
-      netValue = Math.round((netValue - memberOff - rewardOff) * 100) / 100;
+      pointsOff = (mq.pointsDiscountPaise || 0) / 100;
+      netValue = Math.round((netValue - memberOff - rewardOff - pointsOff) * 100) / 100;
       gstAmount = mq.gst; cgst = Math.round(mq.gst / 2); sgst = mq.gst - cgst;
       if (mq.shipping !== shippingCharge && cState !== '') {
         pillEl.className = mq.shipping === 0 ? 'shipping-info-pill' : 'shipping-info-pill paid';
@@ -535,6 +580,17 @@
       $('rewardLabel').textContent = 'Reward: ' + mq.campaign.name;
       $('outReward').textContent = mq.campaign.type === 'percent_off' ? '− ' + fmt(rewardOff) : 'Free shipping';
     }
+
+    /* Rewards points redeemed (server-confirmed), taken off after every other discount. */
+    var pRow = $('pointsRow');
+    if (!pRow) {
+      pRow = document.createElement('div'); pRow.id = 'pointsRow'; pRow.className = 'qt-line discount';
+      pRow.innerHTML = '<span class="qt-label" id="pointsLabel">Rewards points</span><span class="qt-val" id="outPoints"></span>';
+      rRow.parentNode.insertBefore(pRow, rRow.nextSibling);
+    }
+    pRow.style.display = mq && mq.pointsRedeemed > 0 ? 'flex' : 'none';
+    if (mq && mq.pointsRedeemed > 0) { $('pointsLabel').textContent = 'Rewards points (' + fmtNum(mq.pointsRedeemed) + ')'; $('outPoints').textContent = '− ' + fmtRate(pointsOff); }
+    renderPoints(mq);
 
     $('outSubtotal').textContent = fmt(totalSubtotal);
     $('outDiscountAmt').textContent = totalDiscount > 0 ? '− ' + fmt(totalDiscount) : '₹0';
@@ -777,7 +833,7 @@
   Array.prototype.forEach.call(
     document.querySelectorAll('[data-paytab]'),
     function (btn) {
-      btn.addEventListener('click', function () { switchPayTab(btn.dataset.paytab); });
+      btn.addEventListener('click', function () { switchPayTab(btn.dataset.paytab); if (MQ.member) calculateQuote(); });
     }
   );
 

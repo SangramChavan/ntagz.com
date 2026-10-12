@@ -87,6 +87,7 @@ async function saveMilestones(ctx) {
 async function milestoneStats(ctx) {
   const { results } = await ctx.env.DB.prepare(`SELECT m.id, m.label, m.threshold_paise, m.bonus_points, m.active,
       (SELECT count(*) FROM points_ledger l WHERE l.kind='bonus' AND l.ref=m.id) awarded,
+      (SELECT coalesce(sum(points),0) FROM points_ledger l WHERE l.kind='bonus' AND l.ref=m.id) points_issued,
       (SELECT coalesce(-sum(points),0) FROM points_ledger l WHERE l.kind='bonus_reverse' AND l.ref=m.id) taken_back
     FROM reward_milestones m ORDER BY m.threshold_paise`).all();
   return ctx.json({ milestones: results.map((r) => ({ ...r, active: !!r.active })) });
@@ -197,12 +198,14 @@ async function analytics(ctx) {
         (SELECT coalesce(sum(CAST(json_extract(j.value,'$.qty') AS INTEGER) * p.cost_paise),0) FROM orders o2, json_each(o2.items_json) j JOIN products p ON p.id=json_extract(j.value,'$.id')
           WHERE o2.points_basis_paise>0 AND o2.payment_status='paid' AND o2.status NOT IN ('cancelled','returned') AND o2.created_at>=?1 AND o2.created_at<?2 AND p.cost_paise IS NOT NULL) cost_paise,
         (SELECT count(*) FROM orders o3, json_each(o3.items_json) j JOIN products p ON p.id=json_extract(j.value,'$.id')
-          WHERE o3.points_basis_paise>0 AND o3.payment_status='paid' AND o3.status NOT IN ('cancelled','returned') AND o3.created_at>=?1 AND o3.created_at<?2 AND p.cost_paise IS NULL) lines_without_cost
+          WHERE o3.points_basis_paise>0 AND o3.payment_status='paid' AND o3.status NOT IN ('cancelled','returned') AND o3.created_at>=?1 AND o3.created_at<?2 AND p.cost_paise IS NULL) lines_without_cost,
+        (SELECT count(*) FROM orders o4, json_each(o4.items_json) j JOIN products p ON p.id=json_extract(j.value,'$.id')
+          WHERE o4.points_basis_paise>0 AND o4.payment_status='paid' AND o4.status NOT IN ('cancelled','returned') AND o4.created_at>=?1 AND o4.created_at<?2 AND p.cost_paise IS NOT NULL) lines_with_cost
         FROM orders o WHERE o.points_basis_paise>0 AND o.payment_status='paid' AND o.paid_paise>0 AND o.status NOT IN ('cancelled','returned') AND o.created_at>=?1 AND o.created_at<?2`).bind(r.from, r.to).first(),
-    env.DB.prepare("SELECT (SELECT count(DISTINCT user_id) FROM memberships WHERE status IN ('active','expired') AND price_paid>0) paying, (SELECT count(DISTINCT user_id) FROM orders WHERE user_id IS NOT NULL AND payment_status='paid') buyers").first(),
+    env.DB.prepare("SELECT (SELECT count(DISTINCT m.user_id) FROM memberships m WHERE m.status IN ('active','expired') AND m.price_paid>0 AND EXISTS (SELECT 1 FROM orders o WHERE o.user_id=m.user_id AND o.payment_status='paid')) paying, (SELECT count(DISTINCT user_id) FROM orders WHERE user_id IS NOT NULL AND payment_status='paid') buyers").first(),
   ]);
   const st = await POINTS.loadSettings(env.DB);
-  const costKnown = econ.lines_without_cost === 0 && econ.orders > 0;
+  const costKnown = econ.lines_without_cost === 0 && econ.lines_with_cost > 0;
   const cost = costKnown ? econ.cost_paise : null;
   const discounts = econ.member_savings + econ.points_discount;
   return ctx.json({

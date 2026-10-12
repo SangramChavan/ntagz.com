@@ -1198,7 +1198,7 @@ async function saveCampaign(body, actor, env) {
 
 // ── Router ────────────────────────────────────────────────────────────
 const PUBLIC_ASSETS = { "/style.css": "/style.css", "/login.js": "/login.js" };
-const CRM_ASSETS = new Set(["/customers.js", "/crm-analytics.js", "/crm-campaigns.js", "/crm.css"]); // served only to signed-in admins
+const CRM_ASSETS = new Set(["/customers.js", "/crm-analytics.js", "/crm-campaigns.js", "/crm.css", "/membership.js"]); // served only to signed-in admins
 
 export default {
   async scheduled(_event, env, ctx) { ctx.waitUntil(Promise.all([crmScheduled(env), membershipTick(env).catch((e) => console.error('membership tick failed:', e && e.message))])); },

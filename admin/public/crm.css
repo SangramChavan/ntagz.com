@@ -88,3 +88,34 @@
 .crm-gloss dd { font-size:14px; } .crm-ret { max-width:320px; margin:10px 0; }
 /* the fifth top-level nav link (Customers) overflowed the sticky header on phones: let the header wrap and the nav scroll */
 @media (max-width:520px) { header { flex-wrap:wrap; } header nav { order:3; width:100%; overflow-x:auto; scrollbar-width:none; } header nav a { flex:none; } }
+
+/* membership admin */
+#view-membership { max-width:1180px; }
+#membership-root { min-width:0; }
+.mb-table { display:grid; gap:8px; margin:10px 0; min-width:0; }
+.mb-row { display:grid; grid-template-columns:minmax(0,1fr); gap:8px; background:#fff; border:1px solid var(--line); border-radius:12px; padding:12px; min-width:0; }
+.mb-row > div { min-width:0; overflow-wrap:anywhere; }
+.mb-row > div[data-label]:not([data-label=""])::before { content:attr(data-label); display:block; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink2); margin-bottom:2px; }
+.mb-head { display:none; }
+.mb-row .field > label { font-size:0; display:block; } .mb-row .field input { width:100%; min-height:44px; padding:0 12px; border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--ink); }
+.mb-row .field.bad input { border-color:var(--bad); }
+.mb-search input { width:100%; min-height:44px; padding:0 12px; border:1px solid var(--line); border-radius:12px; background:#fff; margin-bottom:8px; }
+.mb-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.mb-list { list-style:none; margin:0; padding:0; display:grid; gap:8px; }
+.mb-lrow { display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; }
+.mb-chartwrap { display:grid; gap:12px; margin:12px 0; }
+.mb-chart { width:100%; max-width:420px; height:auto; display:block; } .mb-chart .bar { fill:var(--accent); } .mb-chart .lbl { font-size:11px; fill:var(--ink); }
+.pill.warn { background:#fff1e0; color:var(--warn); }
+#membership-root .field input[type=checkbox] { width:22px; height:22px; min-height:0; }
+#membership-root .switch { min-height:44px; }
+#membership-root .pgrid .field input, #membership-root .pgrid .field select { width:100%; min-height:44px; padding:0 12px; border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--ink); }
+#membership-root .pgrid .field.bad input { border-color:var(--bad); }
+dialog#mcust .ca-tiles { grid-template-columns:repeat(2,minmax(0,1fr)); }
+@media (min-width:900px) {
+  .mb-row { grid-template-columns:var(--mbc); align-items:center; gap:10px; border-radius:0; border-width:0 0 1px; padding:10px 12px; }
+  .mb-table { gap:0; border:1px solid var(--line); border-radius:12px; overflow:hidden; background:#fff; }
+  .mb-row > div[data-label]::before { display:none !important; }
+  .mb-head { display:grid; background:#fafafa; color:var(--ink2); font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+  .mb-ms { --mbc:1.5fr 1.1fr 1fr 1fr 2.2fr auto; } .mb-pr { --mbc:2fr 1fr 1fr 1.3fr 1.6fr; } .mb-cu { --mbc:2fr 1fr 1.2fr 1fr auto; } .mb-pt { --mbc:1fr 1fr; }
+  .mb-chartwrap { grid-template-columns:minmax(0,1fr) minmax(0,1fr); align-items:center; }
+}
