@@ -35,10 +35,11 @@
         <p class="m-price" id="mPrice">Annual membership</p>
         <ul class="m-chips" id="mChips" aria-label="Membership benefits"></ul>
         <div class="m-cta">
-          <a class="m-btn m-btn-primary" id="mHeroCta" href="/account/login.html?next=%2Fmembership%2F">Join Membership</a>
+          <a class="m-btn m-btn-primary" id="mHeroCta" href="/account/login.html?next=%2Fmembership%2F%3Fjoin%3D1">Join Membership</a>
           <a class="m-btn m-btn-ghost" id="mHeroGhost" href="#how">See how it works</a>
         </div>
         <p class="m-status" id="mHeroStatus" role="status"></p>
+        <div class="m-done" id="mDone" role="status" tabindex="-1" hidden></div>
         <p class="m-note" id="mHeroNote"></p>
         <p class="m-honest" id="mHonest">Member prices lower what you pay on eligible products. Rewards points are extra credit you earn on orders and spend on later ones. What you save depends on what you buy and how often, so check the estimate below before you join.</p>
         <noscript><p class="m-banner">Turn on JavaScript to see today’s fee, member prices and rewards figures. They are loaded live so they are always current.</p></noscript>
@@ -150,7 +151,7 @@
             <p class="m-price" id="mJoinPrice"></p>
             <p class="m-lede m-center" id="mJoinText">Check the estimate above for your own numbers. Membership is a one-time payment with no automatic renewal.</p>
             <div class="m-cta">
-              <a class="m-btn m-btn-primary" id="mFinalCta" href="/account/login.html?next=%2Fmembership%2F">Join Membership</a>
+              <a class="m-btn m-btn-primary" id="mFinalCta" href="/account/login.html?next=%2Fmembership%2F%3Fjoin%3D1">Join Membership</a>
             </div>
             <p class="m-status" id="mFinalStatus" role="status"></p>
             <a class="m-btn m-btn-ghost" id="mCartLink" href="../order.html" hidden>Return to your cart →</a>
@@ -163,6 +164,7 @@
 
   <div id="footer-placeholder"></div>
 
+  <script src="../js/member-calc.js?v=20261013" defer></script>
   <script src="../js/membership-dashboard.js?v=20261013" defer></script>
   <script src="../js/membership.js?v=20261013" defer></script>
   <script src="../js/rewards-page.js?v=20261013" defer></script>

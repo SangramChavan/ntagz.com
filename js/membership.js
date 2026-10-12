@@ -14,7 +14,7 @@
   var pts = function (n) { return nf0.format(n); };
   var day = function (s) { return new Date(s * 1000).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); };
   var el = function (tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
-  var LOGIN = '/account/login.html?next=' + encodeURIComponent('/membership/');
+  var LOGIN = '/account/login.html?next=' + encodeURIComponent('/membership/?join=1');   // ?join=1: after sign-in, carry straight on to payment
 
   var P = null;          // /api/membership/pricing
   var M = null;          // /api/membership/me (null = signed out or unknown)
@@ -27,33 +27,26 @@
     return d + ' days';
   }
   function canBuy() { return !!(P && P.live && P.feePaise >= 100); }
+  /* Earn rate in words, from the server's configuration: the flat rate below the first tier, then each tier's rate. */
+  function rateText() {
+    var p = P.points, t = p.tiers || [], all = t.map(function (x) { return x.pointsPer100; }).concat(p.earnPer100), lo = Math.min.apply(null, all), hi = Math.max.apply(null, all);
+    return lo === hi ? pts(lo) + ' points per ₹100' : pts(lo) + ' to ' + pts(hi) + ' points per ₹100';
+  }
+  function rateDetail() {
+    var p = P.points, t = p.tiers || [];
+    if (!t.length) return pts(p.earnPer100) + ' points per ₹100.';
+    return pts(p.earnPer100) + ' points per ₹100 to begin with, then ' + t.map(function (x) { return pts(x.pointsPer100) + ' from ' + paise(x.minSpendPaise) + ' of qualifying spend (' + x.name + ')'; }).join(', ') + '.';
+  }
   function hasPts() { return !!(P && P.points); }
   function msList() { return hasPts() && P.milestones ? P.milestones : []; }
 
-  /* ── pure estimate (also used by the self-check). All inputs/outputs in rupees; points are whole numbers. ── */
-  function calc(i, c) {
-    var cl = function (v, lo, hi) { v = Number(v); if (!isFinite(v)) v = 0; return Math.min(Math.max(v, lo), hi); };
-    var V = cl(i.order, 0, 1e7), N = Math.floor(cl(i.count, 0, 365)), share = cl(i.share, 0, 100), use = cl(i.use, 0, 100);
-    var annual = V * N, eligible = annual * share / 100, savings = eligible * c.pct / 100;
-    var perOrder = V - V * share / 100 * c.pct / 100;                       // what an order costs at member prices (basis for points)
-    var r = { annual: annual, eligible: eligible, savings: savings, earned: 0, used: 0, usedValue: 0, unused: 0, fee: c.fee, perRupee: share / 100 * c.pct / 100 };
-    if (c.pts && perOrder > 0 && perOrder >= c.pts.minOrder) {
-      r.earned = Math.floor(perOrder * c.pts.earnPer100 / 100) * N;
-      var cap = Math.floor(perOrder * N * c.pts.maxRedeemPct / 100 / c.pts.value);   // per-order redemption ceiling, summed over the year
-      r.used = Math.min(Math.floor(r.earned * use / 100), cap);
-      r.usedValue = r.used * c.pts.value; r.unused = r.earned - r.used;
-      r.perRupee += (1 - share / 100 * c.pct / 100) * (c.pts.earnPer100 / 100) * (use / 100) * c.pts.value;
-    }
-    r.net = r.savings + r.usedValue - c.fee;
-    r.breakEven = r.perRupee > 0 ? c.fee / r.perRupee : null;
-    return r;
-  }
-  window.NTAGZ_CALC = calc;
+  /* The estimate itself lives in js/member-calc.js (pure, tested against the real pricing engine and points rules). */
+  var calc = window.NTAGZ_CALC;
 
   /* ── hero / copy that depends on what is switched on ── */
   function renderHero() {
     var live = !!P.live, p = hasPts();
-    $('mTag').textContent = live && p ? 'Buy smarter. Save on member prices. Earn rewards every time you shop.' : live ? 'Buy smarter. Save on member prices.' : p ? 'Buy smarter. Earn rewards every time you shop.' : 'Membership is not open right now.';
+    $('mTag').textContent = live && p ? 'Shop smarter. Get exclusive member prices and earn rewards as you shop.' : live ? 'Buy smarter. Save on member prices.' : p ? 'Buy smarter. Earn rewards every time you shop.' : 'Membership is not open right now.';
     var pr = $('mPrice'); pr.textContent = '';
     if (canBuy()) {
       pr.appendChild(document.createTextNode(paise(P.feePaise) + ' '));
@@ -66,7 +59,7 @@
     var chips = $('mChips'); chips.textContent = '';
     var add = function (t) { chips.appendChild(el('li', null, t)); };
     if (live && maxPct > 0) add('Member prices up to ' + maxPct + '% off');
-    if (p) add(pts(P.points.earnPer100) + ' points per ₹100');
+    if (p) add('Earn ' + rateText());
     if (msList().length) add('Bonus points at milestones');
     if (canBuy()) add('No auto-renewal');
     $('mJoinPrice').textContent = canBuy() ? paise(P.feePaise) + ' / ' + duration(P.durationDays) : '';
@@ -78,7 +71,7 @@
     var p = P.points;
     if (P.live && maxPct > 0) host.appendChild(benefitCard('Member-only prices', 'Lower prices on eligible products, up to ' + maxPct + '% off, applied automatically at checkout while you are signed in. Quantity and member discounts together never go beyond ' + P.maxTotalDiscountPct + '%.'));
     if (p) {
-      host.appendChild(benefitCard('Rewards points', 'Earn ' + pts(p.earnPer100) + ' points for every ₹100 of eligible product value you buy. Each point is worth ' + paise(p.valuePaise) + ' at checkout.'));
+      host.appendChild(benefitCard('Rewards points', 'Earn ' + rateText() + ' of eligible product value you buy, depending on your spending tier. Each point is worth ' + paise(p.valuePaise) + ' at checkout.'));
       host.appendChild(benefitCard('Use points at checkout', 'Redeem from ' + pts(p.minRedeem) + ' points, for up to ' + p.maxRedeemPct + '% of an order’s eligible value. Points last ' + duration(p.validDays) + ' from the day they are earned.'));
     }
     var ms = msList();
@@ -91,7 +84,7 @@
     var p = P.points, step = function (h, t) { var li = el('li'); li.appendChild(el('h3', null, h)); li.appendChild(el('p', null, t)); host.appendChild(li); };
     step('Join', canBuy() ? 'Pay ' + paise(P.feePaise) + ' once for ' + duration(P.durationDays) + ', counted from the day your payment is confirmed. Sign in with your email so the membership is linked to your account.' : 'Membership is not on sale right now.');
     step('Shop as usual', (P.live ? 'Member prices appear on eligible products in your cart and at checkout while you are signed in. ' : '') +
-      (p ? 'Earn ' + pts(p.earnPer100) + ' points per ₹100 of eligible value (without GST or shipping). They are added ' + (p.earnOn === 'paid' ? 'once your payment is confirmed.' : 'once the order is delivered; until then they show as pending.') : ''));
+      (p ? 'Earn ' + rateText() + ' of eligible value (without GST or shipping). They are added ' + (p.earnOn === 'paid' ? 'once your payment is confirmed.' : 'once the order is delivered; until then they show as pending.') : ''));
     step(p ? 'Use your points' : 'Save at checkout', p ? 'Each point is worth ' + paise(p.valuePaise) + '. Use at least ' + pts(p.minRedeem) + ' points, up to ' + p.maxRedeemPct + '% of an order’s eligible value, when you pay online. Points expire ' + duration(p.validDays) + ' after you earn them.' : 'You pay the member price, calculated by our server at checkout.');
   }
 
@@ -101,7 +94,7 @@
     var p = P.points, row = function (a, b, c) { var tr = el('tr'); tr.appendChild(el('th', null, a)); tr.lastChild.setAttribute('scope', 'row'); tr.appendChild(el('td', null, b)); tr.appendChild(el('td', 'yes', c)); body.appendChild(tr); };
     if (P.live && maxPct > 0) row('Prices on eligible products', 'Regular price', 'Member price, up to ' + maxPct + '% off');
     if (p) {
-      row('Rewards points', 'Not earned', pts(p.earnPer100) + ' per ₹100');
+      row('Rewards points', 'Not earned', rateText());
       row('Use points at checkout', 'No', 'Up to ' + p.maxRedeemPct + '% of an order');
     }
     if (msList().length) row('Milestone bonus points', 'No', msList().length + (msList().length === 1 ? ' milestone' : ' milestones') + ' per year');
@@ -110,7 +103,7 @@
   }
 
   /* ── calculator ── */
-  function calcCfg() { var p = P.points; return { pct: P.live ? Math.min(avgPct, P.maxTotalDiscountPct || 100) : 0, fee: P.feePaise / 100, pts: p ? { earnPer100: p.earnPer100, value: p.valuePaise / 100, maxRedeemPct: p.maxRedeemPct, minOrder: p.minOrderPaise / 100 } : null }; }
+  function calcCfg() { var p = P.points; return { pct: P.live ? Math.min(avgPct, P.maxTotalDiscountPct || 100) : 0, fee: P.feePaise / 100, pts: p ? { earnPer100: p.earnPer100, value: p.valuePaise / 100, maxRedeemPct: p.maxRedeemPct, minOrder: p.minOrderPaise / 100, tiers: (p.tiers || []).map(function (t) { return { minSpend: t.minSpendPaise / 100, pointsPer100: t.pointsPer100 }; }) } : null }; }
   function line(box, label, value, cls) { var d = el('div', 'm-line' + (cls ? ' ' + cls : '')); d.appendChild(el('span', null, label)); d.appendChild(el('b', null, value)); box.appendChild(d); }
   function group(box, t) { box.appendChild(el('h3', 'm-grp', t)); }
   function renderCalc() {
@@ -125,6 +118,7 @@
     if (c.pts) {
       group(box, 'Estimated rewards');
       line(box, 'Points earned in a year', pts(r.earned) + ' pts');
+      if (r.rate != null) line(box, 'Points rate you would reach', pts(r.rate) + ' per ₹100', 'sub');
       line(box, 'Points you expect to use', pts(r.used) + ' pts → + ' + rs(r.usedValue));
       line(box, 'Points left unused (not counted)', pts(r.unused) + ' pts', 'sub');
     }
@@ -183,7 +177,7 @@
     }
     if (P.live) q('Which products have member prices?', ['Member prices apply to eligible products only, from ' + minPct + '% to ' + maxPct + '% off depending on the product. Some products, such as fixed-price kits, are excluded. Quantity discounts and member prices combine up to ' + P.maxTotalDiscountPct + '%. The price you see at checkout is final.']);
     if (p) {
-      q('How do I earn points?', ['You earn ' + pts(p.earnPer100) + ' points for every ₹100 of eligible product value, counted after discounts and without GST or shipping, on orders placed while signed in as an active member. ' +
+      q('How do I earn points?', ['You earn points on eligible product value, counted after discounts and without GST or shipping, on orders placed while signed in as an active member. The rate depends on your spending tier: ' + rateDetail() + ' ' +
         (p.earnOn === 'paid' ? 'Points are added once your payment is confirmed.' : 'Points are added once the order is delivered. Until then they show as pending in your account.') +
         (p.minOrderPaise > 0 ? ' Orders with less than ' + paise(p.minOrderPaise) + ' of eligible value do not earn points.' : '')]);
       q('What is a point worth?', ['Each point is worth ' + paise(p.valuePaise) + ' off at checkout.']);
@@ -207,21 +201,22 @@
     var m = M && M.membership, active = !!(m && m.active);
     if (!P) return { label: 'Join Membership', href: LOGIN };
     if (active) {
-      if (M.renewal && M.renewal.canRenew && canBuy()) return { label: 'Renew Membership', act: buy, ghost: { label: 'View my rewards', href: dashShown() ? '#rewards' : '/account/' } };
+      if (M.renewal && M.renewal.canRenew && canBuy()) return { label: 'Renew Membership · ' + paise(P.feePaise), act: buy, ghost: { label: 'View my rewards', href: dashShown() ? '#rewards' : '/account/' } };
       return { label: dashShown() && M.live ? 'View my rewards' : 'View my membership', href: dashShown() ? '#rewards' : '/account/' };
     }
     if (!canBuy()) return { label: 'Not available right now', disabled: true };
-    if (m && m.lastExpiry) return { label: 'Renew Membership', act: buy };
-    return { label: 'Join Membership', act: buy };
+    var price = paise(P.feePaise);
+    if (m && m.lastExpiry) return { label: 'Renew Membership · ' + price, act: buy };
+    return { label: 'Become a Member · ' + price + '/' + (P.durationDays === 365 ? 'year' : duration(P.durationDays)), act: buy };
   }
   function dashShown() { var m = M && M.membership; return !!(m && (m.active || m.lastExpiry)); }
-  function applyCta() {
-    cta = ctaFor();
+  function applyCta(override) {
+    cta = override || ctaFor();
     [$('mHeroCta'), $('mFinalCta')].forEach(function (a) {
       a.textContent = cta.label; a.setAttribute('href', cta.href || (cta.act ? LOGIN : '#')); a.classList.toggle('is-disabled', !!cta.disabled);
       if (cta.disabled) a.setAttribute('aria-disabled', 'true'); else a.removeAttribute('aria-disabled');
     });
-    var g = $('mHeroGhost'), gg = cta.ghost || { label: 'See how it works', href: '#how' };
+    var g = $('mHeroGhost'), gg = cta.ghost || (canBuy() ? { label: 'Calculate My Savings', href: '#calculator' } : { label: 'See how it works', href: '#how' });
     g.textContent = gg.label; g.setAttribute('href', gg.href);
     var m = M && M.membership, note = '';
     if (m && m.active) note = 'Active until ' + day(m.expiresAt) + '.' + (M.renewal && M.renewal.canRenew && M.renewal.startsAt ? ' Renewing now starts a new year on ' + day(M.renewal.startsAt) + ', when your current term ends, so no time is lost.' : '');
@@ -262,6 +257,19 @@
     sc.onload = cb; sc.onerror = function () { status('Could not load the payment window. Please try again.', true); busy(false); };
     document.head.appendChild(sc);
   }
+  /* Shown only after verify-payment answered ok: status, validity and what to do next. No automatic redirect, so nothing is lost on refresh. */
+  function confirmed(d) {
+    status('');
+    var box = $('mDone'); box.textContent = '';
+    box.appendChild(el('h2', null, d.renewed ? 'Your membership is renewed' : 'Welcome to Ntagz Rewards Membership'));
+    box.appendChild(el('p', null, 'Payment confirmed. ' + (d.renewed ? 'Your new year begins when your current term ends and runs until ' : 'Your membership is active until ') + day(d.expiresAt) + '.'));
+    var ul = el('ul'), item = function (t, href) { var li = el('li'), a = el('a', null, t); a.href = href; li.appendChild(a); ul.appendChild(li); };
+    if (cartCount()) item('Return to your cart. Member prices apply at checkout while you are signed in.', '/order.html');
+    item('Browse products', '/product/'); item('See your membership and rewards in your account', '/account/');
+    box.appendChild(ul); box.hidden = false; box.focus();
+    M = { live: hasPts(), membership: { active: true, expiresAt: d.expiresAt }, renewal: { canRenew: false } };
+    working = false; applyCta({ label: 'You are a member', href: '/account/', ghost: { label: 'Keep shopping', href: '/product/' } });
+  }
   function jsonRes(r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, status: r.status, d: d }; }); }
   function buy() {
     if (working || !canBuy()) return;
@@ -281,9 +289,8 @@
                 body: JSON.stringify({ razorpay_payment_id: resp.razorpay_payment_id, razorpay_order_id: resp.razorpay_order_id, razorpay_signature: resp.razorpay_signature }) })
                 .then(jsonRes).then(function (v) {
                   if (v.ok && v.d && v.d.ok) {
-                    status(v.d.renewed ? 'Payment confirmed. Your membership is renewed.' : 'Payment confirmed. Welcome to Ntagz Rewards Membership.');
                     try { sessionStorage.setItem('ntagz.member.choice', 'yes'); localStorage.setItem('ntagz.member.hint', '1'); } catch (e) { }
-                    setTimeout(function () { location.href = !v.d.renewed && cartCount() ? '/order.html?membership=activated' : '/account/?membership=activated'; }, 900);
+                    confirmed(v.d);
                   } else { status('We could not verify the payment. Email hello@ntagz.com with payment ID ' + resp.razorpay_payment_id + '.', true); busy(false); }
                 }).catch(function () { status('Network error while verifying. Email hello@ntagz.com with payment ID ' + resp.razorpay_payment_id + '.', true); busy(false); });
             },
@@ -331,7 +338,14 @@
     return onMe(d);
   }).then(function () {
     if (!P) return;
-    applyCta(); renderMilestones(); showDash();
+    applyCta(); renderMilestones(); showDash(); resumeJoin();
   }).catch(function () { if (!P) fail(); });
+  /* Signed-out visitors who pressed Join come back from sign-in with ?join=1: carry straight on to payment (buy() re-checks the session). */
+  function resumeJoin() {
+    if (!/[?&]join=1(&|$)/.test(location.search)) return;
+    try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) { }
+    var m = M && M.membership;
+    if (canBuy() && !(m && m.active && !(M.renewal && M.renewal.canRenew))) buy();
+  }
   cartLink();
 })();

@@ -389,8 +389,34 @@ async function publicRewards(env) {
     if (!st.live) return out;
     out.points = { earnPer100: st.earnPer100, valuePaise: st.valuePaise, minRedeem: st.minRedeem, maxRedeemPct: st.maxRedeemPct, validDays: st.validDays, earnOn: st.earnOn, minOrderPaise: st.minOrderPaise, restoreOnCancel: st.restoreOnCancel, clawback: st.clawback };
     out.milestones = (await env.DB.prepare("SELECT id,label,threshold_paise AS thresholdPaise,bonus_points AS bonusPoints FROM reward_milestones WHERE active=1 ORDER BY threshold_paise").all()).results;
+    // Tier earn rates (migration 0015): below the first tier a member earns the flat earnPer100; from each tier's spend, that tier's rate.
+    out.points.tiers = (await LOYALTY.loadTiers(env.DB)).filter((t) => t.points_per_100 !== null && t.points_per_100 !== undefined && t.min_spend_paise > 0)
+      .map((t) => ({ name: t.name, minSpendPaise: t.min_spend_paise, pointsPer100: Number(t.points_per_100) }));
     return out;
   } catch (e) { console.error("rewards info unavailable:", e && e.message); return off; }
+}
+
+// Creates the membership for a verified, fully paid Razorpay membership order. Idempotent: memberships.razorpay_order_id is UNIQUE, so the browser's
+// verify call, a webhook and any replay all end at the same single row. A renewal starts when the current term ends; a first purchase or a lapsed
+// member starts now.
+async function activateMembership(env, { userId, orderId, paymentId, amount, days }) {
+  const found = (id) => env.DB.prepare("SELECT id,expires_at FROM memberships WHERE razorpay_order_id=?").bind(id).first();
+  const dup = await found(orderId);
+  if (dup) return { id: dup.id, expiresAt: dup.expires_at, existing: true };
+  const memId = crypto.randomUUID(), now = Math.floor(Date.now() / 1000);
+  const cur = await env.DB.prepare("SELECT max(expires_at) e FROM memberships WHERE user_id=? AND status='active' AND expires_at>?").bind(userId, now).first();
+  const start = cur && cur.e > now ? cur.e : now;
+  try {
+    await env.DB.prepare(
+      `INSERT INTO memberships (id, user_id, status, purchased_at, expires_at, welcome_credit_paise, price_paid, payment_id, razorpay_order_id)
+       VALUES (?, ?, 'active', ?, ?, 0, ?, ?, ?)`
+    ).bind(memId, userId, start, start + days * 86400, amount, paymentId, orderId).run();
+  } catch (e) { // lost a race against the unique index: return the winner
+    const w = await found(orderId);
+    if (w) return { id: w.id, expiresAt: w.expires_at, existing: true };
+    throw e;
+  }
+  return { id: memId, expiresAt: start + days * 86400, renewed: start > now, existing: false };
 }
 
 async function handleMembership(url, request, env, allowedOrigin) {
@@ -498,7 +524,7 @@ async function handleMembership(url, request, env, allowedOrigin) {
         Authorization: "Basic " + btoa(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`),
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ amount: feePaise, currency: "INR", receipt: `tp-${u.user_id.slice(0, 8)}`, notes: { kind: "membership", days: String(settings.durationDays) } }),
+      body: JSON.stringify({ amount: feePaise, currency: "INR", receipt: `tp-${u.user_id.slice(0, 8)}`, notes: { kind: "membership", days: String(settings.durationDays), uid: u.user_id } }),
     });
     if (!rpRes.ok) { const t = await rpRes.text().catch(() => ""); console.error("Razorpay order error:", t); return jsonAuth({ error: "Payment setup failed" }, 502, allowedOrigin); }
     const order = await rpRes.json();
@@ -516,8 +542,8 @@ async function handleMembership(url, request, env, allowedOrigin) {
     const valid = await verifySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature, env.RAZORPAY_KEY_SECRET);
     if (!valid) return jsonAuth({ error: "Signature mismatch" }, 400, allowedOrigin);
     // Idempotent: check if already recorded
-    const already = await env.DB.prepare(`SELECT id FROM memberships WHERE razorpay_order_id=?`).bind(razorpay_order_id).first();
-    if (already) return jsonAuth({ ok: true, membershipId: already.id }, 200, allowedOrigin);
+    const already = await env.DB.prepare(`SELECT id,expires_at FROM memberships WHERE razorpay_order_id=?`).bind(razorpay_order_id).first();
+    if (already) return jsonAuth({ ok: true, membershipId: already.id, expiresAt: already.expires_at }, 200, allowedOrigin);
     // The signature only proves *a* Razorpay order was paid. Confirm it is this user's membership order (only this Worker creates
     // orders with that receipt, at the fee configured at the time), paid in full. The fee charged is what gets recorded.
     const rp = await fetch(`https://api.razorpay.com/v1/orders/${encodeURIComponent(razorpay_order_id)}`, {
@@ -526,23 +552,11 @@ async function handleMembership(url, request, env, allowedOrigin) {
     if (!rp || !Number.isSafeInteger(rp.amount) || rp.amount < 100 || rp.amount_paid !== rp.amount || rp.receipt !== `tp-${u.user_id.slice(0, 8)}`) {
       return jsonAuth({ error: "Payment does not match a membership order" }, 400, allowedOrigin);
     }
-    const memId = crypto.randomUUID();
-    const now = Math.floor(Date.now() / 1000);
     const days = Math.min(Math.max(parseInt(rp.notes && rp.notes.days, 10) || (await loadMemberSettings(env)).durationDays, 1), 1095);
-    // A renewal starts when the current term ends (no days are lost or doubled); a first purchase or a lapsed member starts now.
-    const cur = await env.DB.prepare("SELECT max(expires_at) e FROM memberships WHERE user_id=? AND status='active' AND expires_at>?").bind(u.user_id, now).first();
-    const start = cur && cur.e > now ? cur.e : now;
     try {
-      await env.DB.prepare(
-        `INSERT INTO memberships (id, user_id, status, purchased_at, expires_at, welcome_credit_paise, price_paid, payment_id, razorpay_order_id)
-         VALUES (?, ?, 'active', ?, ?, 0, ?, ?, ?)`
-      ).bind(memId, u.user_id, start, start + days * 86400, rp.amount, razorpay_payment_id, razorpay_order_id).run();
-    } catch { // lost a race against the unique index: return the winner
-      const w = await env.DB.prepare(`SELECT id FROM memberships WHERE razorpay_order_id=?`).bind(razorpay_order_id).first();
-      if (w) return jsonAuth({ ok: true, membershipId: w.id }, 200, allowedOrigin);
-      return jsonAuth({ error: "Could not record membership" }, 500, allowedOrigin);
-    }
-    return jsonAuth({ ok: true, membershipId: memId, expiresAt: start + days * 86400, renewed: start > now }, 200, allowedOrigin);
+      const r = await activateMembership(env, { userId: u.user_id, orderId: razorpay_order_id, paymentId: razorpay_payment_id, amount: rp.amount, days });
+      return jsonAuth({ ok: true, membershipId: r.id, expiresAt: r.expiresAt, renewed: !!r.renewed }, 200, allowedOrigin);
+    } catch { return jsonAuth({ error: "Could not record membership" }, 500, allowedOrigin); }
   }
 
   return jsonAuth({ error: "Not found" }, 404, allowedOrigin);
@@ -1066,12 +1080,47 @@ async function trackOrder(url, env, origin) {
   } catch { return json({ error: "Tracking unavailable" }, 503, origin); }
 }
 
+// ── Razorpay webhook: POST /api/razorpay/webhook ───────────────────────────────
+// Server-to-server safety net for a customer who paid but whose browser never reached verify-payment (closed tab, lost connection). Trusted only
+// by its HMAC signature over the raw body (secret RAZORPAY_WEBHOOK_SECRET); the browser is not involved. Handles `order.paid` only, and funnels
+// into the same idempotent paths as the browser: activateMembership for membership orders, finalizeOrder for merchandise orders.
+async function razorpayWebhook(request, env) {
+  if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
+  if (!env.RAZORPAY_WEBHOOK_SECRET || !env.DB) return json({ error: "Webhook not configured" }, 503);
+  if (Number(request.headers.get("Content-Length")) > 200000) return json({ error: "Request too large" }, 413);
+  const raw = await request.text();
+  if (raw.length > 200000) return json({ error: "Request too large" }, 413);
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(env.RAZORPAY_WEBHOOK_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const expected = Array.from(new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(raw))), (b) => b.toString(16).padStart(2, "0")).join("");
+  if (!safeEqual(expected, request.headers.get("X-Razorpay-Signature"))) return json({ error: "Invalid signature" }, 400);
+  let ev;
+  try { ev = JSON.parse(raw); } catch { return json({ error: "Invalid body" }, 400); }
+  const o = ev && ev.event === "order.paid" && ev.payload && ev.payload.order && ev.payload.order.entity, pay = ev && ev.payload && ev.payload.payment && ev.payload.payment.entity;
+  // Anything else, or an order not paid in full, is acknowledged and ignored (a 4xx/5xx would only make Razorpay retry it).
+  if (!o || !pay || typeof o.id !== "string" || typeof pay.id !== "string" || !Number.isSafeInteger(o.amount) || o.amount_paid !== o.amount) return json({ ok: true, ignored: true });
+  const notes = o.notes && typeof o.notes === "object" && !Array.isArray(o.notes) ? o.notes : {};
+  try {
+    if (notes.kind === "membership") {
+      const uid = notes.uid;
+      if (typeof uid !== "string" || o.receipt !== `tp-${uid.slice(0, 8)}` || o.amount < 100) return json({ ok: true, ignored: true });
+      if (!(await env.DB.prepare("SELECT 1 x FROM users WHERE id=?").bind(uid).first())) return json({ ok: true, ignored: true });
+      const days = Math.min(Math.max(parseInt(notes.days, 10) || (await loadMemberSettings(env)).durationDays, 1), 1095);
+      await activateMembership(env, { userId: uid, orderId: o.id, paymentId: pay.id, amount: o.amount, days });
+      return json({ ok: true });
+    }
+    const r = await finalizeOrder(env, o.id, pay.id, o.amount_paid, "razorpay");
+    return r === "failed" ? json({ error: "Could not record the order" }, 500) : json({ ok: true });
+  } catch (e) { console.error("razorpay webhook failed:", e && e.message); return json({ error: "Could not process" }, 500); }
+}
+
 async function onRequest({ request, env }) {
   const url = new URL(request.url);
   const origin = request.headers.get("Origin");
   const allowedOrigin = origin === "https://ntagz.com" ? origin : "https://www.ntagz.com";
   const responseHeaders = { ...corsHeaders, "Access-Control-Allow-Origin": allowedOrigin };
   if (request.method === "OPTIONS") return new Response(null, { headers: responseHeaders });
+
+  if (url.pathname.endsWith("/razorpay/webhook")) return razorpayWebhook(request, env);
 
   const crmRes = await CRMPUBLIC.handle(url, request, env, { getSession });
   if (crmRes) return crmRes;
