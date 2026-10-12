@@ -52,6 +52,13 @@ function setSetting(key, value, live) {
   if (same || value === "") delete PR.draft.settings[key]; else PR.draft.settings[key] = value;
   saveDraft(); live ? schedulePreview() : previewDraft();
 }
+// The working-day calendar is a sub-object of the settings draft; keep the draft bar honest by dropping it when it matches live.
+function setDispatch(field, value, live) {
+  const cur = { ...(PR.draft.settings.dispatch || {}), [field]: value };
+  const norm = (x) => JSON.stringify([x.timezone, String(x.days), x.holidays, x.cutoff, String(x.standard_days), String(x.member_days)]);
+  if (norm({ ...live, ...cur }) === norm(live)) delete PR.draft.settings.dispatch; else PR.draft.settings.dispatch = cur;
+  saveDraft(); previewDraft();
+}
 function setPct(p, value) {
   const live = PR.data.products.find((x) => x.id === p.id);
   if (value === "" || Number(value) === Number(live.member_discount_pct)) delete PR.draft.products[p.id]; else PR.draft.products[p.id] = value;
@@ -68,12 +75,15 @@ function render() {
   const blockers = (v.blockers || []).map((b) => el("div", { class: "note bad" }, b));
   // Re-rendering replaces the inputs; keep focus and caret on the field being typed in (matched by data-k).
   const a = document.activeElement, k = a && a.dataset && a.dataset.k, pos = a && typeof a.selectionStart === "number" ? a.selectionStart : null;
-  $("pricing").replaceChildren(errBox, ...blockers, planCard(s, live, v), limitsCard(s, live, v), productsCard(v), previewCard(v), historyCard());
+  $("pricing").replaceChildren(errBox, ...blockers, planCard(s, live, v), limitsCard(s, live, v), dispatchCard(s, live, v), productsCard(v), previewCard(v), historyCard());
   const again = k && document.querySelector(`#pricing [data-k="${CSS.escape(k)}"]`);
   if (again) { again.focus(); if (pos !== null && typeof again.setSelectionRange === "function") try { again.setSelectionRange(pos, pos); } catch { /* not a text input */ } }
 }
 
 const changedMark = (on) => (on ? el("span", { class: "pill pre" }, "Draft") : "");
+const WD_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const wdLabel = (csv) => { const s = new Set(String(csv || "").split(",").map((x) => parseInt(x, 10))); const on = WD_NAMES.filter((_, i) => s.has(i)); return on.length === 7 ? "every day" : on.length ? on.join(" ") : "none"; };
+const fmtDate = (iso) => (iso ? new Date(iso + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" }) : "—");
 function numInput(id, value, opts = {}) {
   const i = el("input", { id, "data-k": id, class: "pin", value: String(value), inputmode: "decimal", autocomplete: "off", "aria-label": opts.label || id });
   i.addEventListener("input", () => opts.onInput(i.value.trim()));
@@ -114,6 +124,35 @@ function limitsCard(s, live, v) {
       el("label", { class: "field" }, el("span", {}, "Max combined discount (%) ", changedMark(d.max_total_discount_pct !== undefined)), cap, el("span", { class: "hint" }, "Bulk + member together never exceed this.")),
       el("label", { class: "field" }, el("span", {}, "Minimum margin (%) ", changedMark(d.min_margin_pct !== undefined)), mar, el("span", { class: "hint" }, "Member price stays at or above cost ÷ (1 − margin). Needs a cost price on the product."))),
     ...(v.warnings || []).map((w) => el("div", { class: "note warn" }, w)));
+}
+
+function dispatchCard(s, live, v) {
+  const d = PR.draft.settings.dispatch || {}, cur = { ...s.dispatch, ...d };
+  const days = new Set(String(cur.days).split(",").map((x) => parseInt(x, 10)));
+  const boxes = WD_NAMES.map((label, i) => {
+    const cb = el("input", { type: "checkbox", "data-k": "bwd:" + i, "aria-label": label }); cb.checked = days.has(i);
+    cb.addEventListener("change", () => setDispatch("days", WD_NAMES.map((_, j) => j).filter((j) => (j === i ? cb.checked : days.has(j))).join(","), live));
+    return el("label", { class: "wd" }, cb, el("span", {}, label));
+  });
+  const tz = el("input", { class: "pin", type: "text", "data-k": "btz", value: cur.timezone, autocomplete: "off", "aria-label": "Business time zone" });
+  tz.addEventListener("input", () => setDispatch("timezone", tz.value.trim(), live));
+  const hol = el("input", { class: "pin", type: "text", "data-k": "bhol", value: cur.holidays, placeholder: "2026-01-26, 2026-08-15", autocomplete: "off", "aria-label": "Holidays, comma-separated YYYY-MM-DD" });
+  hol.addEventListener("input", () => setDispatch("holidays", hol.value.trim(), live));
+  const cut = el("input", { class: "pin", type: "time", "data-k": "bcut", value: cur.cutoff, "aria-label": "Daily cut-off time" });
+  cut.addEventListener("input", () => setDispatch("cutoff", cut.value, live));
+  const std = numInput("bstd", cur.standard_days, { label: "Standard build in working days", onInput: (x) => setDispatch("standard_days", x, live) });
+  const mem = numInput("bmem", cur.member_days, { label: "Member build in working days", onInput: (x) => setDispatch("member_days", x, live) });
+  return el("section", { class: "pcard" },
+    el("div", { class: "pcard-head" }, el("h2", {}, "Dispatch & working days"), changedMark(Object.keys(d).length > 0)),
+    el("p", { class: "sub" }, "Every order is made to order, so every order carries a working-day target and a promised dispatch date. An order placed after the cut-off counts from the next working day; weekends and the holidays below are skipped. A paid member gets the shorter target, granted only once payment is verified."),
+    el("div", { class: "wpick" }, ...boxes),
+    el("div", { class: "pgrid" },
+      el("label", { class: "field" }, el("span", {}, "Time zone ", changedMark(d.timezone !== undefined)), tz),
+      el("label", { class: "field" }, el("span", {}, "Daily cut-off ", changedMark(d.cutoff !== undefined)), cut, el("span", { class: "hint" }, "An order after this local time starts the next working day.")),
+      el("label", { class: "field" }, el("span", {}, "Standard build (working days) ", changedMark(d.standard_days !== undefined)), std),
+      el("label", { class: "field" }, el("span", {}, "Member build (working days) ", changedMark(d.member_days !== undefined)), mem)),
+    el("label", { class: "field" }, el("span", {}, "Holidays (comma-separated YYYY-MM-DD) ", changedMark(d.holidays !== undefined)), hol),
+    el("div", { class: "note" }, el("b", {}, "Promise preview. "), `An order placed now is promised ${fmtDate(s.dispatch.standard_date)} by default, or ${fmtDate(s.dispatch.member_date)} for a member (working days: ${wdLabel(cur.days)}).`));
 }
 
 function productsCard(v) {
@@ -197,7 +236,9 @@ function historyCard() {
   const h = PR.data.history || [];
   const fmtPct = (x) => (x == null ? "—" : pctTxt(x));
   const names = Object.fromEntries(PR.data.products.map((p) => [p.id, p.name]));
-  const SET = { fee_paise: ["Fee", (x) => inr(Number(x))], duration_days: ["Length", (x) => x + " days"], discounts_live: ["Member pricing", (x) => (x === "1" ? "ON" : "OFF")], max_total_discount_pct: ["Max combined", (x) => x + "%"], min_margin_pct: ["Min margin", (x) => x + "%"] };
+  const SET = { fee_paise: ["Fee", (x) => inr(Number(x))], duration_days: ["Length", (x) => x + " days"], discounts_live: ["Member pricing", (x) => (x === "1" ? "ON" : "OFF")], max_total_discount_pct: ["Max combined", (x) => x + "%"], min_margin_pct: ["Min margin", (x) => x + "%"],
+    business_timezone: ["Time zone", (x) => x], business_days: ["Working days", (x) => wdLabel(x)], business_holidays: ["Holidays", (x) => (x ? x : "none")], business_cutoff: ["Cut-off", (x) => x],
+    dispatch_days_standard: ["Standard build", (x) => x + " working days"], dispatch_days_member: ["Member build", (x) => x + " working days"] };
   const describe = (e) => {
     if (e.action === "pricing_publish") return [
       ...Object.entries(e.detail.settings || {}).map(([k, c]) => `${(SET[k] || [k])[0]}: ${c.from == null ? "—" : (SET[k] ? SET[k][1](c.from) : c.from)} → ${SET[k] ? SET[k][1](c.to) : c.to}`),

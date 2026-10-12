@@ -375,7 +375,7 @@
   /* ── MEMBER QUOTE (server-priced; members only) ───────────────
      One status check per page view; quotes are fetched only for active members, debounced, and only re-render when the
      server answers for the cart currently on screen. Any failure leaves the guest estimate (checkout re-prices anyway). */
-  var MQ = { member: false, key: '', data: null, pts: null, timer: null, redeem: 0, items: '', err: '', add: false, offer: null };
+  var MQ = { member: false, key: '', data: null, pts: null, timer: null, redeem: 0, items: '', err: '', add: false, offer: null, dispatch: null };
   /* Rewards points are spent on online payments only (Razorpay / PayU): offline UPI / bank / WhatsApp orders are priced without them. */
   function onlinePay() { var t = document.querySelector('.pay-tab.active'), k = t && t.getAttribute('data-paytab'); return k === 'razorpay' || k === 'payu'; }
   /* Membership bought in this checkout: only on online payments, only when the server says this customer is eligible. The browser just asks;
@@ -389,18 +389,19 @@
     var items = lineItems.map(function (li) { return { id: li.p.id, qty: li.qty }; });
     var ik = JSON.stringify(items);
     if (MQ.items !== ik) { MQ.items = ik; MQ.redeem = 0; MQ.err = ''; } /* the cart changed: any points choice is void */
-    var rd = effRedeem(), add = effAdd(), key = JSON.stringify([items, state, rd, add]);
+    var pin = /^\d{6}$/.test(String($('customerPincode').value || '').trim()) ? String($('customerPincode').value).trim() : '';
+    var rd = effRedeem(), add = effAdd(), key = JSON.stringify([items, state, rd, add, pin]);
     if (MQ.key === key) return MQ.data;
     clearTimeout(MQ.timer);
     MQ.timer = setTimeout(function () {
-      var body = { items: items, state: state, offer: true }; if (rd > 0) body.redeemPoints = rd; if (add) body.membership = 'add';
+      var body = { items: items, state: state, offer: true }; if (rd > 0) body.redeemPoints = rd; if (add) body.membership = 'add'; if (pin) body.pincode = pin;
       fetch('/api/quote', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
         .then(function (r) { return r.json().catch(function () { return null; }).then(function (d) { return { r: r, d: d }; }); })
         .then(function (x) {
           if (x.r.status === 409 && rd > 0 && x.d && x.d.error) { MQ.redeem = 0; MQ.err = String(x.d.error); calculateQuote(); return; } /* server refused: show its words, re-quote without points */
           if (add && !x.r.ok) { MQ.add = false; MQ.err = x.d && x.d.error ? String(x.d.error) : 'Membership could not be added.'; MQ.key = ''; calculateQuote(); return; } /* e.g. signed out, already a member */
           var d = x.r.ok ? x.d : null;
-          MQ.key = key; MQ.data = d && d.you ? d.you : null; MQ.pts = d && d.points ? d.points : null; MQ.offer = d && d.membershipOffer ? d.membershipOffer : null; calculateQuote();
+          MQ.key = key; MQ.data = d && d.you ? d.you : null; MQ.pts = d && d.points ? d.points : null; MQ.offer = d && d.membershipOffer ? d.membershipOffer : null; MQ.dispatch = d && d.dispatch ? d.dispatch : null; calculateQuote();
         })
         .catch(function () { });
     }, 350);
@@ -464,6 +465,24 @@
     box.appendChild(mk('p', 'qgt-mem-net' + (net > 0 ? ' good' : ''), net > 0 ? 'You save ' + fmt(net / 100) + ' today with membership.' : net < 0
       ? 'Membership adds ' + fmt(-net / 100) + ' to this order; it pays back if you keep buying eligible products.' : 'No difference in today’s total.'));
     box.appendChild(mk('p', 'qgt-mem-terms', login ? 'Sign in to add membership.' : !canAdd ? 'Membership can be added with Razorpay or PayU payments.' : 'Member prices on eligible products for ' + (o.durationDays === 365 ? '1 year' : o.durationDays + ' days') + ' after payment is confirmed. Optional.'));
+  }
+  /* Build-time promise, from the server's working-day calendar. Every order is made to order; a member's is priority. No rupee value. */
+  function fmtWD(n) { return n === 1 ? '1 working day' : n + ' working days'; }
+  function fmtShortDate(iso) { try { return iso ? new Date(iso + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''; } catch (e) { return ''; } }
+  function fmtRange(r) { if (!r || !r.from || !r.to) return ''; var f = fmtShortDate(r.from), t = fmtShortDate(r.to); return f === t ? f : f + '–' + t; }
+  function renderBuild() {
+    var box = $('qgtBuild'); if (!box) return;
+    var d = MQ.dispatch;
+    if (!d || !d.standardDays) { box.hidden = true; return; }
+    var added = !!(MQ.data && MQ.data.membershipFeePaise > 0);
+    var days = added && d.memberDays != null ? d.memberDays : d.standardDays;
+    var date = fmtShortDate(added ? d.memberDate : d.standardDate);
+    var del = d.delivery ? (added ? d.delivery.member : d.delivery.standard) : null;
+    var range = fmtRange(del);
+    box.hidden = false;
+    box.className = 'qgt-build' + (added ? ' is-member' : '');
+    box.textContent = 'Dispatches in about ' + fmtWD(days) + (date ? ' (est. ' + date + ')' : '') + ', once payment is confirmed.'
+      + (range ? (added ? ' Priority courier: delivery est. ' + range + '.' : ' Delivery est. ' + range + '.') : '');
   }
   (function () {
     var use = $('ptsUse'), num = $('ptsNum'), max = $('ptsMax'); if (!use) return;
@@ -629,6 +648,7 @@
     if (mq && mq.membershipFeePaise > 0) $('outMembershipFee').textContent = '+ ' + fmt(mq.membershipFeePaise / 100);
     renderPoints(mq);
     renderGrandMem(mq);
+    renderBuild();
 
     $('outSubtotal').textContent = fmt(totalSubtotal);
     $('outDiscountAmt').textContent = totalDiscount > 0 ? '− ' + fmt(totalDiscount) : '₹0';
@@ -859,6 +879,7 @@
 
   $('customerPincode').addEventListener('input', function () {
     checkPincodeLength(this.value);
+    calculateQuote(); /* the delivery estimate follows the pincode (re-quote only fires when the pincode part of the key changes) */
   });
 
   Array.prototype.forEach.call(

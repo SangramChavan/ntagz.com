@@ -3,6 +3,8 @@
 // admin allowlist on each request. All SQL is parameterised. No CORS headers: same-origin only.
 
 import PRICING from "../../functions/lib/pricing.js"; // the same engine the payments Worker charges with
+import DISPATCH from "../../functions/lib/dispatch.js"; // the same working-day engine the payments Worker promises with
+import DELIVERY from "../../functions/lib/delivery.js"; // the same Pune-origin transit table the payments Worker estimates with
 import LOYALTY from "../../functions/lib/loyalty.js"; // spending tiers: same derivation as the storefront
 import POINTS from "../../functions/lib/points.js"; // rewards wallet: reconciled from orders after every payment / status / refund change
 import { notify, STATUS_EVENT } from "./notify.js";
@@ -162,7 +164,8 @@ async function authVerify(body, env) {
 
 // ── Orders ────────────────────────────────────────────────────────────
 const COLS = "id,txn_id,quote_ref,name,phone,email,address,pincode,state,gstin,items_json,subtotal,gst,total," +
-  "payment_method,payment_status,paid_paise,status,tracking_id,courier,is_preorder,expected_dispatch,created_at,updated_at";
+  "payment_method,payment_status,paid_paise,status,tracking_id,courier,is_preorder,expected_dispatch," +
+  "processing_target_days,priority_build,promised_dispatch,created_at,updated_at";
 
 function parseItems(json_) {
   try { const a = JSON.parse(json_); return Array.isArray(a) ? a : []; } catch { return []; }
@@ -230,7 +233,7 @@ async function getOrder(id, env) {
   ].sort((x, y) => x.at - y.at);
   const lines = await env.DB.prepare("SELECT l.product_id,p.name,l.ready_qty,l.pre_qty FROM order_stock_lines l LEFT JOIN products p ON p.id=l.product_id WHERE l.order_id=? ORDER BY l.rowid").bind(id).all();
   const notifications = (await env.DB.prepare("SELECT event,status,detail,subject,created_at FROM notifications WHERE order_id=? ORDER BY created_at, rowid").bind(id).all()).results;
-  return { ...shape(o), notifications, stock_lines: lines.results.map((l) => ({ ...l, name: l.name || l.product_id })), ...(tok ? { track_url: `https://ntagz.com/track.html?o=${id}&t=${tok}` } : {}), is_preorder: !!o.is_preorder, payments: pays.results, shipments, timeline, actions: allowedActions(o.status, !!o.is_preorder), status_label: STATUS_LABEL[o.status] || o.status };
+  return { ...shape(o), transit_days: DELIVERY.transitFor(o.pincode, !!o.priority_build), notifications, stock_lines: lines.results.map((l) => ({ ...l, name: l.name || l.product_id })), ...(tok ? { track_url: `https://ntagz.com/track.html?o=${id}&t=${tok}` } : {}), is_preorder: !!o.is_preorder, payments: pays.results, shipments, timeline, actions: allowedActions(o.status, !!o.is_preorder), status_label: STATUS_LABEL[o.status] || o.status };
 }
 
 const MANUAL_ORDER_METHODS = ["cash", "cod", "upi", "bank", "whatsapp"];
@@ -863,7 +866,20 @@ async function setActive(id, body, actor, env) {
 // One page owns member pricing: plan settings (membership_config), per-product member % (products.member_discount_pct),
 // guardrails, a preview priced by the SAME engine checkout uses, and an explicit publish. Nothing changes live prices until
 // publish, which re-validates everything server-side, refuses stale drafts, and records the change in audit_log.
-const SETTING_KEYS = ["fee_paise", "duration_days", "discounts_live", "max_total_discount_pct", "min_margin_pct"];
+const SETTING_KEYS = ["fee_paise", "duration_days", "discounts_live", "max_total_discount_pct", "min_margin_pct",
+  "business_timezone", "business_days", "business_holidays", "business_cutoff", "dispatch_days_standard", "dispatch_days_member"];
+const DISPATCH_KEYS = ["business_timezone", "business_days", "business_holidays", "business_cutoff", "dispatch_days_standard", "dispatch_days_member"];
+
+// Validates the admin's working-day calendar draft into membership_config values, a field at a time, with precise errors.
+function applyDispatchDraft(cfg, errors, raw) {
+  if (typeof raw !== "object" || raw === null) { errors.dispatch = "Invalid"; return; }
+  if (raw.timezone !== undefined) { const tz = String(raw.timezone).trim(); let ok = !!tz; try { if (ok) new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date(0)); } catch { ok = false; } if (!ok) errors.business_timezone = "Enter a valid time zone, e.g. Asia/Kolkata"; else cfg.business_timezone = tz; }
+  if (raw.days !== undefined) { const list = String(raw.days).split(",").map((x) => parseInt(x, 10)).filter((x) => Number.isInteger(x) && x >= 0 && x <= 6); if (!list.length) errors.business_days = "Pick at least one working day"; else cfg.business_days = [...new Set(list)].sort().join(","); }
+  if (raw.holidays !== undefined) { const list = String(raw.holidays).split(",").map((s) => s.trim()).filter(Boolean); if (list.some((s) => !/^\d{4}-\d{2}-\d{2}$/.test(s))) errors.business_holidays = "Dates must be YYYY-MM-DD, comma-separated"; else cfg.business_holidays = list.join(","); }
+  if (raw.cutoff !== undefined) { const c = String(raw.cutoff).match(/^([01]?\d|2[0-3]):([0-5]\d)$/); if (!c) errors.business_cutoff = "Use HH:MM (24-hour)"; else cfg.business_cutoff = `${c[1].padStart(2, "0")}:${c[2]}`; }
+  if (raw.standard_days !== undefined) { const v = intIn(raw.standard_days, 0, 60); if (v === null) errors.dispatch_days_standard = "0–60 working days"; else cfg.dispatch_days_standard = String(v); }
+  if (raw.member_days !== undefined) { const v = intIn(raw.member_days, 0, 60); if (v === null) errors.dispatch_days_member = "0–60 working days"; else cfg.dispatch_days_member = String(v); }
+}
 
 async function pricingState(env) {
   const cfg = Object.fromEntries((await env.DB.prepare("SELECT key,value FROM membership_config").all()).results.map((r) => [r.key, r.value]));
@@ -882,6 +898,7 @@ function applyDraft(state, draft) {
   if (s.live !== undefined) { if (typeof s.live !== "boolean") errors.live = "Invalid"; else cfg.discounts_live = s.live ? "1" : "0"; }
   if (s.max_total_discount_pct !== undefined) { const v = pct2(s.max_total_discount_pct); if (v === null || v < 0 || v > 90) errors.max_total_discount_pct = "Cap must be 0–90%"; else cfg.max_total_discount_pct = String(v); }
   if (s.min_margin_pct !== undefined) { const v = pct2(s.min_margin_pct); if (v === null || v < 0 || v > 90) errors.min_margin_pct = "Minimum margin must be 0–90%"; else cfg.min_margin_pct = String(v); }
+  if (s.dispatch !== undefined) applyDispatchDraft(cfg, errors, s.dispatch);
   const byId = Object.fromEntries(state.rows.map((r) => [r.id, r]));
   const rows = state.rows.map((r) => ({ ...r }));
   const changedProducts = {};
@@ -900,6 +917,7 @@ function applyDraft(state, draft) {
 // Everything the admin needs to judge a (draft) configuration: per-product member prices at every bulk tier, warnings, economics.
 async function evaluate(env, merged) {
   const settings = PRICING.settingsFrom(merged.cfg);
+  const dcfg = DISPATCH.fromCfg(merged.cfg); // the working-day calendar + targets, same engine the promises use
   const products = merged.rows.map((r) => {
     const structure = PRICING.PRODUCTS[r.id];
     return { ...r, member_discount_pct: Number(r.member_discount_pct), active: !!r.active, sellable: !!structure, fixed: !!(structure && structure.fixed), ...PRICING.memberPriceReport(structure, r, settings) };
@@ -911,6 +929,7 @@ async function evaluate(env, merged) {
   if (settings.durationDays !== 365) warnings.push(`Length is ${settings.durationDays} days, but the membership page says "12 months". Update the page copy before publishing.`);
   const ignored = products.filter((p) => !p.sellable && p.member_discount_pct > 0);
   if (ignored.length) warnings.push(`${ignored.map((p) => p.name).join(", ")}: not in the checkout catalogue, so the member discount has no effect.`);
+  if (dcfg.memberDays > dcfg.standardDays) warnings.push(`The membership build time (${dcfg.memberDays} working days) is not shorter than the standard one (${dcfg.standardDays}), so membership gives no priority.`);
   // Customer economics: eligible spend (incl. GST) a member needs per year before the fee pays for itself, at regular quantities.
   const pcts = eligible.map((p) => p.tiers[0].memberPct).filter((x) => x > 0).sort((a, b) => a - b);
   const fee = settings.feePaise / 100;
@@ -920,7 +939,10 @@ async function evaluate(env, merged) {
       coalesce(sum(CASE WHEN status='active' AND expires_at>?1 AND expires_at<=?1+2592000 THEN 1 ELSE 0 END),0) expiring,
       count(*) total, coalesce(sum(price_paid),0) revenue_paise FROM memberships`).bind(now_).first();
   return {
-    settings: { fee_paise: settings.feePaise, duration_days: settings.durationDays, live: settings.live, max_total_discount_pct: settings.maxTotalPct, min_margin_pct: settings.minMarginPct },
+    settings: { fee_paise: settings.feePaise, duration_days: settings.durationDays, live: settings.live, max_total_discount_pct: settings.maxTotalPct, min_margin_pct: settings.minMarginPct,
+      dispatch: { timezone: dcfg.timezone, days: dcfg.weekdays.join(","), holidays: [...dcfg.holidays].sort().join(","), cutoff: `${String(Math.floor(dcfg.cutoffMin / 60)).padStart(2, "0")}:${String(dcfg.cutoffMin % 60).padStart(2, "0")}`,
+        standard_days: dcfg.standardDays, member_days: dcfg.memberDays,
+        standard_date: DISPATCH.promisedDispatch(Date.now(), dcfg.standardDays, dcfg).date, member_date: DISPATCH.promisedDispatch(Date.now(), dcfg.memberDays, dcfg).date } },
     products, warnings, blockers, bulk_tiers: PRICING.BULK_TIERS.map((t) => ({ min_pieces: t.min, pct: t.pct })).reverse(),
     economics: {
       fee_inr: fee, fee_ex_gst_inr: Math.round(fee / 1.18 * 100) / 100, eligible_products: eligible.length,

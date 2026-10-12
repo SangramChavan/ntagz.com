@@ -1,6 +1,8 @@
 const PRICING = require("../lib/pricing.js");
 const LOYALTY = require("../lib/loyalty.js");
 const POINTS = require("../lib/points.js"); // rewards wallet: points earned/redeemed, milestones
+const DISPATCH = require("../lib/dispatch.js"); // working-day dispatch promise (one source of truth)
+const DELIVERY = require("../lib/delivery.js"); // Pune-origin courier transit (calendar days; priority = express tier)
 const CRMPUBLIC = require("../lib/crm-public.js"); // tracking / unsubscribe / campaign clicks / marketing opt-in
 
 // Product structure (pack size, MOQ, fixed kits, all-inclusive) lives with the pricing engine so the admin preview uses it too.
@@ -46,7 +48,7 @@ async function loadPricing(env) {
     return map;
   } catch (e) { console.error("loadPricing failed:", e && e.message); return null; }
 }
-const resetPricingCache = () => { campaignCache = { db: null, at: 0, rows: [] }; pricingCache = { db: null, at: 0, map: null }; settingsCache = { db: null, at: 0, v: null }; rewardsSchema = { db: null, at: 0, ok: false }; pointsSchema = { db: null, at: 0, ok: false }; LOYALTY.resetTiersCache(); }; // tests flip config in place
+const resetPricingCache = () => { campaignCache = { db: null, at: 0, rows: [] }; pricingCache = { db: null, at: 0, map: null }; settingsCache = { db: null, at: 0, v: null }; rewardsSchema = { db: null, at: 0, ok: false }; pointsSchema = { db: null, at: 0, ok: false }; procSchema = { db: null, at: 0, ok: false }; LOYALTY.resetTiersCache(); }; // tests flip config in place
 
 // A few in-stock products that would close the gap to the next cart milestone: same category as something in the cart first, then the
 // smallest overshoot. Values are ex-GST estimates at each product's minimum order; the server prices the real cart.
@@ -217,9 +219,12 @@ function jsonAuth(data, status, allowedOrigin, cookieHeader) {
 
 let settingsCache = { db: null, at: 0, v: null };
 async function loadMemberSettings(env) {
+  if (!env.DB) return { ...PRICING.settingsFrom({}), dispatch: DISPATCH.fromCfg({}) }; // no database: defaults, never throw (checkout must keep pricing)
   if (settingsCache.db === env.DB && Date.now() - settingsCache.at < 30000 && settingsCache.v) return settingsCache.v;
-  const { results } = await env.DB.prepare("SELECT key, value FROM membership_config").all();
-  const v = PRICING.settingsFrom(Object.fromEntries(results.map((r) => [r.key, r.value])));
+  let raw;
+  try { raw = Object.fromEntries((await env.DB.prepare("SELECT key, value FROM membership_config").all()).results.map((r) => [r.key, r.value])); }
+  catch (e) { console.error("membership settings unavailable:", e && e.message); return { ...PRICING.settingsFrom({}), dispatch: DISPATCH.fromCfg({}) }; } // a broken read falls back to defaults and is not cached
+  const v = { ...PRICING.settingsFrom(raw), dispatch: DISPATCH.fromCfg(raw) }; // dispatch rides the same row read (no extra query)
   settingsCache = { db: env.DB, at: Date.now(), v };
   return v;
 }
@@ -815,6 +820,16 @@ async function hasCheckoutMembershipSchema(env) {
   return ok;
 }
 
+// Does this database have orders.processing_target_days (migration 0018: priority build processing)?
+let procSchema = { db: null, at: 0, ok: false };
+async function hasProcessingSchema(env) {
+  if (procSchema.db === env.DB && (procSchema.ok || Date.now() - procSchema.at < 60000)) return procSchema.ok;
+  let ok = false;
+  try { ok = !!(await env.DB.prepare("SELECT 1 x FROM pragma_table_info('orders') WHERE name='processing_target_days'").first()); } catch { ok = false; }
+  procSchema = { db: env.DB, at: Date.now(), ok };
+  return ok;
+}
+
 // ── Membership inside checkout ───────────────────────────────────────────────
 // The browser may only ASK (`membership: "add"`). The server decides whether that is allowed, adds the configured fee, and prices the
 // merchandise as a paid member would pay. The fee sits outside every discount, GST rule and points basis.
@@ -844,6 +859,12 @@ async function pricedCheckout(env, request, body, pricing) {
   const pc = await pricedCart(env, request, member, body.items, typeof body.state === "string" ? body.state.slice(0, 50) : "", pricing, await campaignsFor(request, env, member), body.redeemPoints);
   if (pc.error) return pc;
   if (add) { pc.total.amount += add.fee.rupees; pc.total.membershipFeePaise = add.fee.paise; pc.total.membershipDays = add.fee.days; }
+  // Every order is made to order: it carries a working-day processing target. A paid member (or buying membership now) gets
+  // the shorter priority target; priority is only ever GRANTED at verified payment (finalizeOrder/offline), never here.
+  const dcfg = (await loadMemberSettings(env)).dispatch || DISPATCH.fromCfg({});
+  const priority = add ? true : !!(base && base.paid);
+  pc.total.processingTargetDays = DISPATCH.targetDays(dcfg, priority);
+  pc.total.priorityBuild = priority ? 1 : 0;
   return { ...pc, member, base, add };
 }
 
@@ -859,8 +880,10 @@ async function membershipOffer(env, request, body, base, pricing) {
   const [without, withM] = [calculateTotal(body.items, state, base, pricing, await campaignsFor(request, env, base)), calculateTotal(body.items, state, withCtx, pricing, await campaignsFor(request, env, withCtx))];
   if (!without || !withM) return { show: false, state: "off" };
   const savingsPaise = (without.amount - withM.amount) * 100, withoutPaise = without.amount * 100, withPaise = withM.amount * 100 + settings.feePaise;
+  const dcfg = settings.dispatch || DISPATCH.fromCfg({});
   // Only worth interrupting checkout when membership actually lowers this cart's price; otherwise a quiet link is enough (show:false keeps the numbers).
-  return { show: savingsPaise > 0, state: uid ? "eligible" : "login_required", feePaise: settings.feePaise, durationDays: settings.durationDays, savingsPaise, withoutPaise, withPaise, netPaise: withoutPaise - withPaise };
+  // The processing targets ride along so the selector can state the honest build-time difference (working days, never a rupee value).
+  return { show: savingsPaise > 0, state: uid ? "eligible" : "login_required", feePaise: settings.feePaise, durationDays: settings.durationDays, savingsPaise, withoutPaise, withPaise, netPaise: withoutPaise - withPaise, standardDays: dcfg.standardDays, memberDays: dcfg.memberDays };
 }
 
 async function pointsIntentStatements(env, txnId, u, total) {
@@ -895,7 +918,10 @@ async function recordIntent(env, request, txnId, gateway, body, total) {
       ...(await pointsIntentStatements(env, txnId, u, total)),
       ...(await hasCheckoutMembershipSchema(env) ? [env.DB.prepare("UPDATE checkout_intents SET membership_fee_paise=?, membership_days=?, rules_json=? WHERE txn_id=?")
         .bind(total.membershipFeePaise || 0, total.membershipDays || 0, JSON.stringify({ v: 1, fee_paise: total.membershipFeePaise || 0, duration_days: total.membershipDays || 0, member_pricing: !!total.member, loyalty_tier: total.loyaltyTier || null,
-          points_rate_x100: Number.isInteger(total.pointsRateX100) ? total.pointsRateX100 : null, points_redeemed: total.pointsRedeemed || 0, campaign: total.campaign ? total.campaign.id : null }), txnId)] : []),
+          points_rate_x100: Number.isInteger(total.pointsRateX100) ? total.pointsRateX100 : null, points_redeemed: total.pointsRedeemed || 0, campaign: total.campaign ? total.campaign.id : null,
+          processing_days: Number.isInteger(total.processingTargetDays) ? total.processingTargetDays : null, priority_build: total.priorityBuild ? 1 : 0 }), txnId)] : []),
+      ...(await hasProcessingSchema(env) ? [env.DB.prepare("UPDATE checkout_intents SET processing_target_days=?, priority_build=? WHERE txn_id=?")
+        .bind(Number.isInteger(total.processingTargetDays) ? total.processingTargetDays : null, total.priorityBuild ? 1 : 0, txnId)] : []),
     ]);
   } catch (e) { console.error("recordIntent failed:", e && e.message); }
 }
@@ -937,6 +963,16 @@ function membershipOrderStatements(env, oid, intent, txnId, ref) {
   return out;
 }
 
+// Same batch as the order: freeze the working-day target and the date the order is promised to dispatch. Priority is
+// a paid-membership benefit decided at pricing; the promise is computed once here from a verified payment (replays write the same values).
+async function processingOrderStatements(env, oid, intent) {
+  if (intent.processing_target_days === undefined || intent.processing_target_days === null) return [];
+  const cfg = (await loadMemberSettings(env)).dispatch || DISPATCH.fromCfg({});
+  const promise = DISPATCH.promisedDispatch(Date.now(), intent.processing_target_days, cfg);
+  return [env.DB.prepare("UPDATE orders SET processing_target_days=?, priority_build=?, promised_dispatch=? WHERE id=?")
+    .bind(intent.processing_target_days, intent.priority_build ? 1 : 0, promise.date, oid)];
+}
+
 // Returns "recorded" | "already" (order exists from an earlier call) | "failed" (payment verified, no order: customer must be told).
 async function finalizeOrder(env, txnId, paymentRef, verifiedPaise, gateway) {
   const ref = String(paymentRef || "").slice(0, 128);
@@ -976,6 +1012,7 @@ async function finalizeOrder(env, txnId, paymentRef, verifiedPaise, gateway) {
       ...stockStatements(env, oid, txnId, JSON.parse(intent.items_json || "[]")),
       ...pointsOrderStatements(env, oid, intent),
       ...membershipOrderStatements(env, oid, intent, txnId, ref),
+      ...(await processingOrderStatements(env, oid, intent)),
     ]);
     if (!await env.DB.prepare("SELECT 1 AS x FROM orders WHERE txn_id=?").bind(txnId).first()) {
       await alertPayment(env, txnId, gateway || intent.gateway, ref, intent.amount_paise, "order row was not created");
@@ -1022,6 +1059,11 @@ async function recordOfflineOrder(request, env, body, origin) {
   const amountPaise = total.amount * 100, gstPaise = total.gst * 100;
   const orderIdOffline = crypto.randomUUID();
   const rw = await hasRewardsSchema(env);
+  // Offline (unpaid) orders carry the standard working-day target: priority is granted only at a verified payment
+  // (online or later in the admin), so nothing here can jump the queue. The promised date is the normal-order promise.
+  const dcfg = (await loadMemberSettings(env)).dispatch || DISPATCH.fromCfg({});
+  const procOk = await hasProcessingSchema(env);
+  const promise = procOk ? DISPATCH.promisedDispatch(Date.now(), dcfg.standardDays, dcfg) : null;
   await env.DB.batch([
     env.DB.prepare("DELETE FROM order_attempts WHERE created_at < unixepoch() - 86400"),
     env.DB.prepare("INSERT INTO order_attempts (ip_hash) VALUES (?)").bind(ipHash),
@@ -1038,6 +1080,7 @@ async function recordOfflineOrder(request, env, body, origin) {
     ...stockStatements(env, orderIdOffline, txnId, items),
     // the order earns when its payment is recorded in the admin (reconciled there); the basis is frozen now
     ...((await hasPointsSchema(env)) ? [env.DB.prepare("UPDATE orders SET points_basis_paise=?, member_saving_paise=? WHERE txn_id=? AND payment_status='unpaid'").bind(total.pointsBasisPaise || 0, total.memberSavingPaise || 0, txnId)] : []),
+    ...(procOk ? [env.DB.prepare("UPDATE orders SET processing_target_days=?, priority_build=0, promised_dispatch=? WHERE txn_id=? AND payment_status='unpaid'").bind(dcfg.standardDays, promise.date, txnId)] : []),
   ]);
   return json({ ok: true, orderRef: txnId, total: total.amount }, 200, origin);
 }
@@ -1051,7 +1094,8 @@ async function trackOrder(url, env, origin) {
   if (!/^[0-9a-fA-F-]{8,64}$/.test(o) || !/^[0-9a-f]{32}$/.test(t)) return notFound();
   if (!env.DB) return json({ error: "Tracking unavailable" }, 503, origin);
   try {
-    const ord = await env.DB.prepare("SELECT id, status, payment_status, total, items_json, state, pincode, created_at, is_preorder, expected_dispatch, track_token FROM orders WHERE id = ?").bind(o).first();
+    const hasProc = await hasProcessingSchema(env);
+    const ord = await env.DB.prepare(`SELECT id, status, payment_status, total, items_json, state, pincode, created_at, is_preorder, expected_dispatch, track_token${hasProc ? ", processing_target_days, priority_build, promised_dispatch" : ""} FROM orders WHERE id = ?`).bind(o).first();
     if (!ord || !safeEqual(String(ord.track_token || ""), t)) return notFound();
     const [pays, evs, ships, prods, lines] = await Promise.all([
       env.DB.prepare("SELECT created_at FROM payments WHERE order_id = ?").bind(ord.id).all(),
@@ -1075,6 +1119,7 @@ async function trackOrder(url, env, origin) {
     return json({
       ref: ord.id.slice(0, 8), placed_at: ord.created_at, status: ord.status, status_label: STATUS_LABELS[ord.status] || ord.status,
       payment_status: ord.payment_status, is_preorder: !!ord.is_preorder, expected_dispatch: ord.expected_dispatch || null, items, total_paise: ord.total,
+      ...(hasProc ? { processing_target_days: ord.processing_target_days ?? null, priority_build: !!ord.priority_build, promised_dispatch: ord.promised_dispatch || null } : {}),
       ship_to: { state: ord.state, pincode: ord.pincode }, shipments: ships.results || [], journey,
     }, 200, origin);
   } catch { return json({ error: "Tracking unavailable" }, 503, origin); }
@@ -1194,6 +1239,20 @@ async function onRequest({ request, env }) {
       if (pc.error) return json({ error: pc.error, code: pc.code, points: null }, pc.status, origin);
       const you = pc.total, member = pc.member;
       const out = { you, signedInMember: !!pc.base, points: pc.points, rewards: await rewardsBlock(env, request, you, qb.items, pricing, member) };
+      // Build-time promise for display only (dates are estimates from "now"; the order's date is frozen at payment). Never a rupee value.
+      const dcfg = (await loadMemberSettings(env)).dispatch || DISPATCH.fromCfg({});
+      const stdD = DISPATCH.promisedDispatch(Date.now(), dcfg.standardDays, dcfg);
+      const memD = DISPATCH.promisedDispatch(Date.now(), dcfg.memberDays, dcfg);
+      out.dispatch = { timezone: dcfg.timezone, standardDays: dcfg.standardDays, memberDays: dcfg.memberDays,
+        standardDate: stdD.date, memberDate: memD.date };
+      // Estimated delivery window from the Pune origin (calendar days; membership = express courier). Pincode only.
+      const pin = String(qb.pincode || "");
+      if (/^\d{6}$/.test(pin)) {
+        out.dispatch.delivery = {
+          standard: DELIVERY.deliveryRange(Date.parse(stdD.date + "T00:00:00Z"), pin, { priority: false }),
+          member: DELIVERY.deliveryRange(Date.parse(memD.date + "T00:00:00Z"), pin, { priority: true }),
+        };
+      }
       if (qb.offer === true) out.membershipOffer = { ...(await membershipOffer(env, request, qb, pc.base, pricing)), added: !!pc.add };
       if (qb.compare === true && env.DB) {
         const settings = await loadMemberSettings(env);

@@ -163,6 +163,10 @@ document.getElementById("carrier").addEventListener("change", (e) => {
       const dt = new Date(d.expected_dispatch + "T00:00:00+05:30");
       if (!isNaN(dt)) sum.append(row("Expected dispatch", day(dt / 1000) + " (expected, not a delivery date)"));
     }
+    if (d.promised_dispatch) {
+      const dt = new Date(d.promised_dispatch + "T00:00:00+05:30");
+      if (!isNaN(dt)) sum.append(row("Dispatch promise", day(dt / 1000) + " (working-day promise)"));
+    }
     const ul = el("ul", "ov-items");
     for (const i of d.items || []) {
       const split = i.ready_qty != null && i.pre_qty != null && i.pre_qty > 0

@@ -30,6 +30,8 @@
 .qgt-mem-net{margin-top:10px;font-size:14px;font-weight:600;color:#fff}
 .qgt-mem-net.good{color:#7BD88F}
 .qgt-mem-terms{margin-top:4px;font-size:12px;color:rgba(255,255,255,.62)}
+.qgt-build{margin:8px 0 0;font-size:12.5px;line-height:1.4;color:rgba(255,255,255,.72)}
+.qgt-build.is-member{color:#7BD88F}
 
 
 /* Checkout: inline payment error (replaces blocking alerts) */

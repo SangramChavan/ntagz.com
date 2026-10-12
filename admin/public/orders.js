@@ -13,6 +13,10 @@ const fulPill = (o) => el("span", { class: "pill st-" + o.status }, STATUS_TXT[o
 const methodTxt = (o) => (o.payment_method || "—").toUpperCase();
 const orderRef = (o) => o.id.slice(0, 8);
 const dispatchLine = (o) => (o.is_preorder && o.expected_dispatch ? el("div", { class: "sub" }, "Dispatch: " + dayText(o.expected_dispatch)) : "");
+const priPill = (o) => (o.priority_build ? el("span", { class: "pill pri" }, "Priority") : "");
+const buildLine = (o) => (o.processing_target_days == null ? "" : el("div", { class: "sub" }, `Built in ~${o.processing_target_days} working day${o.processing_target_days === 1 ? "" : "s"}` + (o.promised_dispatch ? " · promised " + dayText(o.promised_dispatch) : "")));
+const buildSection = (o) => (o.processing_target_days == null ? [] : [el("h3", { class: "sec" }, "Made to order"),
+  el("dl", {}, ...row("Working days", `~${o.processing_target_days}`), ...row("Promised dispatch", dayText(o.promised_dispatch)), ...row("Priority build", o.priority_build ? "Yes (member)" : "No"))]);
 
 function oparams() {
   const p = new URLSearchParams();
@@ -40,12 +44,13 @@ async function load() {
     $("list").replaceChildren(...d.orders.map((o) => el("button", { class: "card ocard", type: "button", onclick: () => openOrder(o.id) },
       el("div", { class: "row" }, el("span", { class: "id" }, o.name || "Guest"), el("b", {}, inr(o.total))),
       el("div", { class: "sub" }, `${orderRef(o)} · ${when(o.created_at)}`),
-      el("div", {}, payPill(o), fulPill(o), o.is_preorder ? el("span", { class: "pill pre" }, "Pre-order") : ""),
+      el("div", {}, payPill(o), fulPill(o), priPill(o), o.is_preorder ? el("span", { class: "pill pre" }, "Pre-order") : ""),
       dispatchLine(o),
+      buildLine(o),
       o.tracking_id ? el("div", { class: "sub" }, `${o.courier || ""} · ${o.tracking_id}`) : "")));
     $("rows").replaceChildren(...d.orders.map((o) => el("tr", { tabindex: "0", onclick: () => openOrder(o.id), onkeydown: (e) => { if (e.key === "Enter") openOrder(o.id); } },
       el("td", { class: "mono" }, orderRef(o)), el("td", {}, when(o.created_at)), el("td", {}, o.name || "Guest", el("div", { class: "sub" }, o.phone || "")),
-      el("td", {}, payPill(o), el("div", { class: "sub" }, methodTxt(o))), el("td", {}, fulPill(o), o.is_preorder ? el("span", { class: "pill pre" }, "Pre-order") : "", dispatchLine(o)),
+      el("td", {}, payPill(o), el("div", { class: "sub" }, methodTxt(o))), el("td", {}, fulPill(o), priPill(o), o.is_preorder ? el("span", { class: "pill pre" }, "Pre-order") : "", dispatchLine(o), buildLine(o)),
       el("td", {}, inr(o.total)), el("td", {}, o.courier || "—"), el("td", { class: "mono" }, o.tracking_id || "—"))));
   } catch (e) {
     $("list").replaceChildren(el("p", { class: "msg" }, "Could not load orders: " + e.message, " ", el("button", { class: "btn small", type: "button", onclick: load }, "Retry")));
@@ -89,26 +94,34 @@ function startAction(o, a) {
 const key = () => crypto.randomUUID();
 
 // ── ship / correct shipment ──────────────────────────────────────────
-function shipFields(s) {
+function dateShift(ymd, days) {
+  const [y, m, d] = (ymd || "").split("-").map(Number);
+  if (!y || !m || !d || !days) return "";
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+function shipFields(s, o) {
   const courier = el("input", { id: "courier", list: "courierlist", value: s ? s.courier : "", maxlength: "60", placeholder: "e.g. Delhivery", autocomplete: "off" });
   const awb = el("input", { id: "awb", value: s ? s.awb : "", maxlength: "40", placeholder: "Paste AWB / tracking number", autocomplete: "off", spellcheck: "false" });
   const url = el("input", { id: "tracking_url", type: "url", value: s && s.tracking_url ? s.tracking_url : "", placeholder: "https:// link from the courier (optional)" });
   const on = el("input", { id: "shipped_on", type: "date", value: s ? s.shipped_on : todayIST() });
-  const est = el("input", { id: "est_delivery", type: "date", value: s && s.est_delivery ? s.est_delivery : "" });
+  const onYmd = on.value ? on.value : todayIST();
+  const suggested = (o && o.transit_days) ? dateShift(onYmd, o.transit_days) : "";
+  const est = el("input", { id: "est_delivery", type: "date", value: (s && s.est_delivery) || suggested });
   const notes = el("textarea", { id: "snotes", rows: "2", maxlength: "500", placeholder: "Internal shipping notes (optional)" }); notes.value = s && s.notes ? s.notes : "";
+  const hint = o && o.transit_days != null ? `From Pune origin · ~${o.transit_days} calendar transit day${o.transit_days === 1 ? "" : "s"}` : "";
   const nodes = [labeled("courier", "Courier / logistics provider *", courier), labeled("awb", "AWB / tracking number *", awb), labeled("tracking_url", "Tracking link", url, "Paste the courier's own link. We never make one up."),
-    el("div", { class: "two" }, labeled("shipped_on", "Shipping date *", on), labeled("est_delivery", "Estimated delivery", est)), labeled("snotes", "Notes", notes), el("datalist", { id: "courierlist" }, COURIERS.map((c) => el("option", { value: c })))];
-  return { nodes, values: () => ({ courier: courier.value, awb: awb.value, tracking_url: url.value, shipped_on: on.value, est_delivery: est.value, notes: notes.value }) };
+    el("div", { class: "two" }, labeled("shipped_on", "Shipping date *", on), labeled("est_delivery", "Estimated delivery", est, hint)), labeled("snotes", "Notes", notes), el("datalist", { id: "courierlist" }, COURIERS.map((c) => el("option", { value: c })))];
+  return { nodes, values: () => ({ courier: courier.value, awb: awb.value, tracking_url: url.value, shipped_on: on.value, est_delivery: est.value || null, notes: notes.value }) };
 }
 function shipDialog(o) {
-  const f = shipFields(null), k = key(), pub = el("textarea", { id: "apub", rows: "2", maxlength: "300", placeholder: "Message the customer will see (optional)" });
+  const f = shipFields(null, o), k = key(), pub = el("textarea", { id: "apub", rows: "2", maxlength: "300", placeholder: "Message the customer will see (optional)" });
   const extra = ["shipped", "out_for_delivery"].includes(o.status);
   actionDialog(extra ? "Add another shipment" : "Ship order", [el("p", { class: "sub" }, `${o.name || "Order"} · ${orderRef(o)}`), ...f.nodes, labeled("apub", "Note for the customer", pub)], extra ? "Save shipment" : "Save & mark as shipped", {
     onSubmit: async () => { const d = await postForm(`/api/orders/${o.id}/ship`, { ...f.values(), public_note: pub.value, idempotency_key: k }); toast("Shipment saved"); $("adlg").close(); await openOrder(o.id, d); load(); },
   });
 }
 function editShipmentDialog(o, s) {
-  const f = shipFields(s);
+  const f = shipFields(s, o);
   actionDialog("Correct shipment", [el("p", { class: "sub" }, "Changes are saved with your name and the time, and the old values are kept."), ...f.nodes], "Save correction", {
     onSubmit: async () => { const v = f.values(); const d = await postForm(`/api/orders/${o.id}/shipments/${s.id}`, v); toast("Shipment updated"); $("adlg").close(); await openOrder(o.id, d); load(); },
   });
@@ -160,12 +173,13 @@ async function openOrder(id, preloaded) {
     t.public_note ? el("div", { class: "tl-note" }, "To customer: " + t.public_note) : "", t.note ? el("div", { class: "sub" }, "Note: " + t.note) : ""));
   const items = o.items.length ? o.items.map((i) => el("tr", {}, el("td", {}, String(i.name || i.id || "Item")), el("td", {}, "× " + (i.qty ?? 1)))) : [el("tr", {}, el("td", {}, "—"))];
   $("opanel").replaceChildren(
-    el("div", { class: "panel-head" }, el("div", {}, el("h2", { id: "optitle", class: "h0" }, "Order " + orderRef(o)), el("div", {}, payPill(o), fulPill(o), o.is_preorder ? el("span", { class: "pill pre" }, "Pre-order") : "")), el("button", { class: "btn small", type: "button", "aria-label": "Close", onclick: () => $("opanel").close() }, "✕")),
+    el("div", { class: "panel-head" }, el("div", {}, el("h2", { id: "optitle", class: "h0" }, "Order " + orderRef(o)), el("div", {}, payPill(o), fulPill(o), priPill(o), o.is_preorder ? el("span", { class: "pill pre" }, "Pre-order") : "")), el("button", { class: "btn small", type: "button", "aria-label": "Close", onclick: () => $("opanel").close() }, "✕")),
     el("div", { class: "opanel-body" },
       o.track_url ? el("button", { class: "btn small", type: "button", onclick: async () => { try { await navigator.clipboard.writeText(o.track_url); toast("Tracking link copied"); } catch { toast("Copy failed", true); } } }, "Copy customer tracking link") : "",
       el("div", { class: "next" }, primary ? actionBtn(primary, true) : el("span", { class: "sub" }, o.actions.length ? "" : `This order is ${o.status_label.toLowerCase()}.`), ...others.map((a) => actionBtn(a, false))),
       manualPay ? el("button", { class: "btn", type: "button", onclick: () => paymentDialog(o) }, ["cash", "cod"].includes(o.payment_method) ? "Mark cash as received" : "Record payment received") : "",
       ...preorderSection(o),
+      ...buildSection(o),
       el("h3", { class: "sec" }, "Shipments"), ...(shipCards.length ? shipCards : [el("p", { class: "sub" }, "Nothing shipped yet.")]),
       el("h3", { class: "sec" }, "Order journey"), el("ol", { class: "timeline" }, tl),
       el("h3", { class: "sec" }, "Customer emails"),
