@@ -155,6 +155,13 @@
               <input type="text" id="pGstin" placeholder="27AAPCA8177N1ZQ" maxlength="15" />
             </div>
           </div>
+          <div class="field-group" style="grid-column:1/-1;margin:18px 0 4px;">
+            <label style="display:flex;gap:10px;align-items:flex-start;font-weight:500;cursor:pointer;">
+              <input type="checkbox" id="mkOptIn" style="width:20px;height:20px;margin-top:2px;flex:none;" />
+              <span>Email me offers and product news from ntagz.<br /><small style="color:var(--ink-3);">Optional. Off unless you tick it; change it any time. Order and account emails are always sent.</small></span>
+            </label>
+            <span id="mkMsg" role="status" style="font-size:13px;color:var(--ink-3);"></span>
+          </div>
           <div class="save-bar">
             <button class="btn btn-tagz" id="saveProfileBtn">Save changes</button>
             <span class="save-msg" id="saveMsg">Saved ✓</span>
@@ -227,6 +234,7 @@
 
       loadOrders();
       loadMembership();
+      loadMarketing();
       loadAddresses();
 
       if (new URLSearchParams(location.search).get('membership') === 'activated') {
@@ -271,6 +279,20 @@
       msg.style.display = r.ok ? 'inline' : 'none';
       if (r.ok) setTimeout(function() { msg.style.display = 'none'; }, 3000);
     });
+
+    // ── Marketing email opt-in (explicit, off by default; the server records when, where and under which policy version) ──
+    async function loadMarketing() {
+      var box = document.getElementById('mkOptIn'), msg = document.getElementById('mkMsg');
+      var r = await fetch('/api/marketing/consent', { credentials: 'include' }).catch(function() { return { ok: false }; });
+      if (r.ok) box.checked = !!(await r.json()).subscribed;
+      box.addEventListener('change', async function() {
+        var want = box.checked; box.disabled = true; msg.textContent = '';
+        var w = await fetch('/api/marketing/consent', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscribe: want }) }).catch(function() { return { ok: false }; });
+        box.disabled = false;
+        if (w.ok) { msg.textContent = want ? 'You will get offers by email. Thank you.' : 'You are unsubscribed from offers.'; }
+        else { box.checked = !want; msg.textContent = 'Could not save that. Please try again later.'; }
+      });
+    }
 
     // ── Membership ──────────────────────────────────────────────────────────
     async function loadMembership() {

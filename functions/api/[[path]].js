@@ -1,5 +1,6 @@
 const PRICING = require("../lib/pricing.js");
 const LOYALTY = require("../lib/loyalty.js");
+const CRMPUBLIC = require("../lib/crm-public.js"); // tracking / unsubscribe / campaign clicks / marketing opt-in
 
 // Product structure (pack size, MOQ, fixed kits, all-inclusive) lives with the pricing engine so the admin preview uses it too.
 const PRODUCTS = PRICING.PRODUCTS;
@@ -858,6 +859,9 @@ async function onRequest({ request, env }) {
   const responseHeaders = { ...corsHeaders, "Access-Control-Allow-Origin": allowedOrigin };
   if (request.method === "OPTIONS") return new Response(null, { headers: responseHeaders });
 
+  const crmRes = await CRMPUBLIC.handle(url, request, env, { getSession });
+  if (crmRes) return crmRes;
+
   // ── Public live catalogue: GET /api/catalog (price + availability only; no exact stock counts) ──
   if (url.pathname.endsWith("/catalog") && !url.pathname.includes("/accounts/")) {
     if (request.method !== "GET") return json({ error: "Method not allowed" }, 405, origin);
@@ -1110,4 +1114,4 @@ async function onRequest({ request, env }) {
   }
 }
 
-if (typeof module !== "undefined") module.exports = { onRequest, resetPricingCache, calculateTotal, PRODUCTS, verifySignature, payuHash, verifyPayuResponse };
+if (typeof module !== "undefined") module.exports = { onRequest, resetPricingCache, resetCrmCache: CRMPUBLIC.resetCrmCache, calculateTotal, PRODUCTS, verifySignature, payuHash, verifyPayuResponse };

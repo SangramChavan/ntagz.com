@@ -332,12 +332,14 @@ $("pclear").onclick = clearFilters;
 $("padd").onclick = () => openPanel(null);
 $("pprev").onclick = () => { P.page--; loadProducts(); }; $("pnext").onclick = () => { P.page++; loadProducts(); };
 function route() {
-  const view = location.hash === "#/products" ? "products" : location.hash === "#/pricing" ? "pricing" : location.hash === "#/rewards" ? "rewards" : "orders";
-  for (const v of ["orders", "products", "pricing", "rewards"]) { $("view-" + v).hidden = v !== view; $("nav-" + v).setAttribute("aria-current", v === view ? "page" : "false"); }
+  const [h, hq] = location.hash.split("?"); // "#/orders?q=abc12345" deep-links from the customer profile
+  const view = h === "#/products" ? "products" : h === "#/pricing" ? "pricing" : h === "#/rewards" ? "rewards" : h.startsWith("#/customers") ? "customers" : "orders";
+  for (const v of ["orders", "products", "pricing", "rewards", "customers"]) { $("view-" + v).hidden = v !== view; $("nav-" + v).setAttribute("aria-current", v === view ? "page" : "false"); }
   if (window.pricingVisible) window.pricingVisible(view === "pricing");
   if (window.rewardsVisible) window.rewardsVisible(view === "rewards");
+  if (window.customersVisible) window.customersVisible(view === "customers");
   if (view === "products") { if (!P.loaded) { P.loaded = true; restoreFilters(); refresh(); } }
-  else if (view === "orders") load().catch(() => {});
+  else if (view === "orders") { const q = new URLSearchParams(hq || "").get("q"); if (q !== null) { $("q").value = q.slice(0, 80); history.replaceState(null, "", "#/orders"); } load().catch(() => {}); }
 }
 document.querySelectorAll("nav a").forEach((a) => a.addEventListener("click", () => setTimeout(route, 0)));
 window.addEventListener("hashchange", route); window.addEventListener("DOMContentLoaded", route);

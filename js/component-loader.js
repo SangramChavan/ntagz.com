@@ -104,6 +104,13 @@
     }
   }
 
+  // First-party analytics: inert unless the owner enabled it and the visitor agreed (see js/nz-analytics.js).
+  (function () {
+    var s = document.createElement('script');
+    s.src = getBasePath() + 'js/nz-analytics.js'; s.defer = true;
+    document.head.appendChild(s);
+  })();
+
   // Load components when DOM is ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', loadComponents);

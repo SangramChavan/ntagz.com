@@ -5,6 +5,7 @@
 import PRICING from "../../functions/lib/pricing.js"; // the same engine the payments Worker charges with
 import LOYALTY from "../../functions/lib/loyalty.js"; // spending tiers: same derivation as the storefront
 import { notify, STATUS_EVENT } from "./notify.js";
+import { crmRoute, crmScheduled, crmWebhook } from "./crm/index.js"; // Customers / CRM (all under /api/crm/)
 
 const SESSION_TTL = 12 * 3600;
 const OTP_TTL = 600;
@@ -1181,12 +1182,16 @@ async function saveCampaign(body, actor, env) {
 
 // ── Router ────────────────────────────────────────────────────────────
 const PUBLIC_ASSETS = { "/style.css": "/style.css", "/login.js": "/login.js" };
+const CRM_ASSETS = new Set(["/customers.js", "/crm-analytics.js", "/crm-campaigns.js", "/crm.css"]); // served only to signed-in admins
 
 export default {
+  async scheduled(_event, env, ctx) { ctx.waitUntil(crmScheduled(env)); },
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
     const method = request.method;
+
+    if (path === "/webhooks/resend" && method === "POST") return await crmWebhook(request, env); // signature-verified inside
 
     if (!path.startsWith("/api/")) {
       if (method !== "GET" && method !== "HEAD") return fail(405, "Method not allowed");
@@ -1194,7 +1199,7 @@ export default {
       if (!asset) {
         const user = await session(request, env);
         if (path === "/") asset = user ? "/app.html" : "/login.html";
-        else if ((path === "/app.js" || path === "/orders.js" || path === "/products.js" || path === "/pricing.js" || path === "/rewards.js") && user) asset = path;
+        else if ((path === "/app.js" || path === "/orders.js" || path === "/products.js" || path === "/pricing.js" || path === "/rewards.js" || CRM_ASSETS.has(path)) && user) asset = path;
         else return new Response("Not found", { status: 404, headers: SEC_HEADERS });
       }
       const res = await env.ASSETS.fetch(new Request(new URL(asset, url), { method: "GET" }));
@@ -1276,6 +1281,8 @@ export default {
       if (method === "POST" && path === "/api/pricing/preview") return await previewPricing(body, env);
       if (method === "POST" && path === "/api/pricing/publish") return await publishPricing(body, actor, env);
       if (method === "GET" && path === "/api/memberships") return await listMemberships(url.searchParams, env);
+      const crm = await crmRoute({ env, actor, request, url, method, body, json, fail, sec: SEC_HEADERS });
+      if (crm) return crm;
       return fail(404, "Not found");
     } catch (e) {
       console.error("admin error", e && e.message);

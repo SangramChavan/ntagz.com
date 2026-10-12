@@ -19,6 +19,7 @@
     }
   ],
   "vars": { "ENVIRONMENT": "production" },
+  "triggers": { "crons": ["*/15 * * * *"] }, // CRM: due campaigns, automated journeys, data-retention purge
   "routes": [{ "pattern": "admin.ntagz.com", "custom_domain": true }]
   // Secrets (never committed):  wrangler secret put ADMIN_EMAILS | RESEND_API_KEY
 }
