@@ -58,3 +58,17 @@
 .md-a strong{font-variant-numeric:tabular-nums;white-space:nowrap}
 .md-a .pos{color:var(--md-ok)}
 @media (min-width:640px){.md-grid{grid-template-columns:repeat(3,1fr)}}
+
+/* Dark appearance — mirrors the membership page (see membership.css). */
+@media (prefers-color-scheme: dark){
+  .md{--md-ink:#F0EDE8;--md-ink2:#B8B2A8;--md-line:#3A342E;--md-soft:#1A1714;--md-tint:#3A2416;--md-orange-text:#FF9A66;--md-ok:#4ADE80;--md-bad:#FF8A80}
+  .md-card,.md-tip,.md-ms{background:#24201A}
+  .md-btn{color:#1F1C20}
+  .md-btn.md-ghost{background:#24201A}
+  .md-pill.on{background:rgba(74,222,128,.16);color:#4ADE80}
+  .md-warn{background:#3A1E1C;color:#FFB4A8}
+  .md-bar{background:#3A342E}
+  .md-ms.done{background:#12271A;border-color:#2E5A3C}
+  .md-ms.done .md-ms-dot{color:#100F0C}
+  .md-ms.next .md-ms-dot{color:#1F1C20}
+}

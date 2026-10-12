@@ -152,3 +152,21 @@
 .m-done ul{margin:0;padding-left:20px}
 .m-done li{margin:4px 0}
 .m-done a{color:inherit;font-weight:600}
+
+/* ── Dark appearance ─────────────────────────────────────────────
+   The shared header/footer/body follow the system setting, so this
+   page must too or it seams dark→white→dark. Tokens flip here; the
+   few hard-coded surfaces below are overridden to match. Orange fills
+   keep dark text (same as the light design) so contrast holds. */
+@media (prefers-color-scheme: dark){
+  .m{--m-orange-text:#FF9A66;--m-orange-tint:#3A2416;--m-ink:#F0EDE8;--m-ink-2:#B8B2A8;--m-line:#3A342E;--m-soft:#1A1714;background:#100F0C}
+  .m-btn-primary{color:#1F1C20}
+  .m-btn-ghost,.m-box,.m-steps li,.m-calc,.m-field input,.m-tier,.m-my .card,.m-join{background:#24201A}
+  .m-field input{color:var(--m-ink)}
+  .m-steps li::before{color:#1F1C20}
+  .m-tier .t-you{color:#100F0C}
+  .m-bar{background:#3A342E}
+  .m-banner{background:#3A2416;border-color:#5A3A22;color:#FFD9C4}
+  .m-status.err{color:#FF9A8A}
+  .m-done{background:#12271A;border-color:#2E5A3C;color:#C9EBD3}
+}

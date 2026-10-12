@@ -220,12 +220,13 @@ nav {
 
 .btn-tagz {
   background: var(--tagz);
-  color: #fff;
+  color: #1F1C20;
   box-shadow: 0 4px 12px rgba(255, 69, 0, 0.2);
 }
 
 .btn-tagz:hover {
-  background: var(--tagz-dk);
+  /* lighten, don't darken: dark text keeps AA on a lighter orange */
+  filter: brightness(1.08);
   transform: translateY(-2px);
   box-shadow: 0 8px 24px rgba(255, 69, 0, 0.35);
 }
