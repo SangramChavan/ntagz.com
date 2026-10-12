@@ -1,0 +1,15 @@
+/* Checkout: rewards points control (members only). Display only; the server prices and decides. */
+.pts{margin:12px 0 4px;padding:14px 16px;border:1px solid var(--paper,#e5e5ea);border-radius:14px;background:var(--cream,#fff)}
+.pts-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 12px;font-size:14px}
+.pts-head span{color:var(--ink-3,#6b6b70)}
+.pts-check{display:flex;align-items:center;gap:10px;margin-top:10px;min-height:44px;font-size:15px;font-weight:600;cursor:pointer}
+.pts-check input{width:22px;height:22px;flex:none}
+.pts-amt{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:4px}
+.pts-amt label{flex:1 0 100%;font-size:13px;color:var(--ink-3,#6b6b70)}
+.pts-amt input{width:110px;min-height:44px;padding:0 12px;border:1.5px solid var(--paper,#e5e5ea);border-radius:10px;font:600 16px var(--ff-body,system-ui,sans-serif);background:var(--cream,#fff);color:var(--ink,#1d1d1f)}
+.pts-amt .btn{min-height:44px}
+.pts-note{margin-top:8px;font-size:13px;color:var(--ink-3,#6b6b70)}
+.pts-note.err{color:#b3261e;font-weight:600}
+.pts-note:empty{display:none}
+.pts-earn{margin-top:8px;font-size:13px;font-weight:600;color:var(--green,#1a7f37)}
+.pts [hidden]{display:none!important}

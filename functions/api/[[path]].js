@@ -1,5 +1,7 @@
 const PRICING = require("../lib/pricing.js");
 const LOYALTY = require("../lib/loyalty.js");
+const POINTS = require("../lib/points.js"); // rewards wallet: points earned/redeemed, milestones
+const CRMPUBLIC = require("../lib/crm-public.js"); // tracking / unsubscribe / campaign clicks / marketing opt-in
 
 // Product structure (pack size, MOQ, fixed kits, all-inclusive) lives with the pricing engine so the admin preview uses it too.
 const PRODUCTS = PRICING.PRODUCTS;
@@ -29,10 +31,14 @@ async function loadPricing(env) {
     // member_discount_pct/cost_paise arrive with migration 0010; before it, read without them (= no member discount).
     let results;
     // loyalty_eligible/loyalty_max_pct arrive with migration 0012 (before it: every product eligible, no ceiling).
-    try { ({ results } = await env.DB.prepare(`SELECT ${cols},member_discount_pct,cost_paise,loyalty_eligible,loyalty_max_pct FROM products`).all()); }
+    // points_eligible arrives with migration 0014 (before it: every product earns).
+    try { ({ results } = await env.DB.prepare(`SELECT ${cols},member_discount_pct,cost_paise,loyalty_eligible,loyalty_max_pct,points_eligible FROM products`).all()); }
     catch {
+     try { ({ results } = await env.DB.prepare(`SELECT ${cols},member_discount_pct,cost_paise,loyalty_eligible,loyalty_max_pct FROM products`).all()); }
+     catch {
       try { ({ results } = await env.DB.prepare(`SELECT ${cols},member_discount_pct,cost_paise,1 AS loyalty_eligible,NULL AS loyalty_max_pct FROM products`).all()); }
       catch { ({ results } = await env.DB.prepare(`SELECT ${cols},0 AS member_discount_pct,NULL AS cost_paise,1 AS loyalty_eligible,NULL AS loyalty_max_pct FROM products`).all()); }
+     }
     }
     const map = {};
     for (const r of results) map[r.id] = r;
@@ -40,7 +46,7 @@ async function loadPricing(env) {
     return map;
   } catch (e) { console.error("loadPricing failed:", e && e.message); return null; }
 }
-const resetPricingCache = () => { campaignCache = { db: null, at: 0, rows: [] }; pricingCache = { db: null, at: 0, map: null }; settingsCache = { db: null, at: 0, v: null }; rewardsSchema = { db: null, at: 0, ok: false }; LOYALTY.resetTiersCache(); }; // tests flip config in place
+const resetPricingCache = () => { campaignCache = { db: null, at: 0, rows: [] }; pricingCache = { db: null, at: 0, map: null }; settingsCache = { db: null, at: 0, v: null }; rewardsSchema = { db: null, at: 0, ok: false }; pointsSchema = { db: null, at: 0, ok: false }; LOYALTY.resetTiersCache(); }; // tests flip config in place
 
 // A few in-stock products that would close the gap to the next cart milestone: same category as something in the cart first, then the
 // smallest overshoot. Values are ex-GST estimates at each product's minimum order; the server prices the real cart.
@@ -98,10 +104,10 @@ function unavailableReason(items, pricing) {
 
 // Server-side price of a cart. `member` is the result of getMemberContext (null = regular prices). See functions/lib/pricing.js.
 // `member` = getMemberContext's {settings, paid, loyalty} (null = regular prices). A bare {settings} means a paid member (the quote's what-if).
-function calculateTotal(items, state, member, pricing, campaigns) {
+function calculateTotal(items, state, member, pricing, campaigns, redeemPaise) {
   const paid = !!member && member.paid !== false;
   const loyalty = member && member.loyalty && member.loyalty.pct > 0 ? { pct: member.loyalty.pct, tier: member.loyalty.tier } : null;
-  const t = PRICING.priceCart(items, { products: PRODUCTS, live: pricing, state, member: paid, settings: member ? member.settings : null, loyalty, campaigns });
+  const t = PRICING.priceCart(items, { products: PRODUCTS, live: pricing, state, member: paid, settings: member ? member.settings : null, loyalty, campaigns, redeemPaise });
   if (t) t.loyaltyTier = loyalty ? loyalty.tier.id : null;
   return t;
 }
@@ -257,6 +263,44 @@ async function campaignsFor(request, env, member) {
   return out;
 }
 
+// Does this database have the points columns yet (migration 0014)? Without them checkout keeps working exactly as before.
+let pointsSchema = { db: null, at: 0, ok: false };
+async function hasPointsSchema(env) {
+  if (pointsSchema.db === env.DB && (pointsSchema.ok || Date.now() - pointsSchema.at < 60000)) return pointsSchema.ok;
+  let ok = false;
+  try { ok = !!(await env.DB.prepare("SELECT 1 x FROM pragma_table_info('orders') WHERE name='points_basis_paise'").first()); } catch { ok = false; }
+  pointsSchema = { db: env.DB, at: Date.now(), ok };
+  return ok;
+}
+
+// The single authoritative price for a cart, including the Rewards Membership wallet. Points are earned and spent only by a signed-in,
+// unexpired PAID member while rewards are live; the browser may only ASK to redeem (`redeemPoints`), the server decides how many points
+// are allowed (balance, per-order cap, minimum) and re-prices. Returns { total, points } or { error, status }.
+async function pricedCart(env, request, member, items, state, pricing, campaigns, redeemRequested) {
+  const t0 = calculateTotal(items, state, member, pricing, campaigns);
+  if (!t0) return { error: "Invalid order", status: 400 };
+  const userId = member && member.paid !== false ? member.userId : null;
+  let st = null;
+  if (userId) { try { if (await hasPointsSchema(env)) st = await POINTS.loadSettings(env.DB); } catch (e) { console.error("points settings unavailable:", e && e.message); } }
+  const none = () => { t0.pointsBasisPaise = 0; t0.pointsRedeemed = 0; t0.pointsDiscountPaise = 0; t0.memberSavingPaise = member && member.paid !== false ? t0.memberSavingPaise : 0; return { total: t0, points: null }; };
+  if (!st || !st.live) { if (Number(redeemRequested) > 0) return { error: "Rewards points are not available right now", status: 409 }; return none(); }
+  const eligible = t0.pointsBasisPaise >= st.minOrderPaise ? t0.pointsBasisPaise : 0;
+  const bal = await POINTS.balance(env.DB, userId);
+  let total = t0, used = { points: 0, discountPaise: 0, reason: null };
+  if (Number(redeemRequested) > 0) {
+    used = POINTS.planRedemption(st, bal.available, redeemRequested, eligible);
+    if (!used.points) return { error: used.reason || "Points cannot be used on this order", status: 409 };
+    total = calculateTotal(items, state, member, pricing, campaigns, used.discountPaise);
+    if (!total) return { error: "Invalid order", status: 400 };
+  }
+  total.pointsRedeemed = used.points;
+  total.pointsBasisPaise = total.pointsBasisPaise >= st.minOrderPaise ? total.pointsBasisPaise : 0;
+  const cap = Math.floor((eligible * st.maxRedeemPct) / 100 / st.valuePaise);
+  return { total, points: { available: bal.available, valuePaise: st.valuePaise, minRedeem: st.minRedeem, maxRedeemPct: st.maxRedeemPct,
+    maxUsable: Math.max(0, Math.min(bal.available, cap)), redeemed: used.points, discountPaise: total.pointsDiscountPaise, note: used.reason,
+    willEarn: Math.floor((total.pointsBasisPaise * st.earnPer100) / 10000), earnOn: st.earnOn } };
+}
+
 // {settings, paid, loyalty} for a signed-in customer who earns a price benefit: an unexpired active paid membership (while member
 // pricing is live) and/or a spending tier with a discount (while rewards are live). null = regular prices. Loyalty is only looked up
 // when switched on, so while it is off this costs nothing extra.
@@ -331,6 +375,20 @@ async function handleRewards(url, request, env, allowedOrigin) {
 
 // ── Membership handler ────────────────────────────────────────────────────────
 
+// Public, cacheable description of the points programme and milestone ladder (only when switched on and migrated). Nothing personal.
+async function publicRewards(env) {
+  const off = { renewWindowDays: 30, points: null, milestones: [] };
+  try {
+    if (!(await hasPointsSchema(env))) return off;
+    const st = await POINTS.loadSettings(env.DB);
+    const out = { renewWindowDays: st.renewWindowDays, points: null, milestones: [] };
+    if (!st.live) return out;
+    out.points = { earnPer100: st.earnPer100, valuePaise: st.valuePaise, minRedeem: st.minRedeem, maxRedeemPct: st.maxRedeemPct, validDays: st.validDays, earnOn: st.earnOn, minOrderPaise: st.minOrderPaise, restoreOnCancel: st.restoreOnCancel, clawback: st.clawback };
+    out.milestones = (await env.DB.prepare("SELECT id,label,threshold_paise AS thresholdPaise,bonus_points AS bonusPoints FROM reward_milestones WHERE active=1 ORDER BY threshold_paise").all()).results;
+    return out;
+  } catch (e) { console.error("rewards info unavailable:", e && e.message); return off; }
+}
+
 async function handleMembership(url, request, env, allowedOrigin) {
   if (!env.DB) return new Response(JSON.stringify({ error: "Database not configured" }), { status: 503, headers: { "Content-Type": "application/json" } });
   const path = url.pathname;
@@ -352,7 +410,8 @@ async function handleMembership(url, request, env, allowedOrigin) {
       const top = Math.max(0, ...(await LOYALTY.loadTiers(env.DB)).map((t) => Number(t.discount_pct) || 0));
       if (top > 0) tierEligible = Object.entries(PRODUCTS).filter(([id, p]) => { const r = pricing[id]; return !p.fixed && r && r.active && r.loyalty_eligible !== 0 && !(r.loyalty_max_pct != null && Number(r.loyalty_max_pct) <= 0); }).map(([id]) => id);
     }
-    const res = jsonAuth({ live: settings.live, loyaltyLive: settings.loyaltyLive, tierEligible, feePaise: settings.feePaise, durationDays: settings.durationDays, maxTotalDiscountPct: settings.maxTotalPct, products }, 200, allowedOrigin);
+    const rewards = await publicRewards(env);
+    const res = jsonAuth({ live: settings.live, loyaltyLive: settings.loyaltyLive, tierEligible, feePaise: settings.feePaise, durationDays: settings.durationDays, maxTotalDiscountPct: settings.maxTotalPct, products, renewWindowDays: rewards.renewWindowDays, points: rewards.points, milestones: rewards.milestones }, 200, allowedOrigin);
     res.headers.set("Cache-Control", "public, max-age=300");
     return res;
   }
@@ -362,7 +421,8 @@ async function handleMembership(url, request, env, allowedOrigin) {
     const u = await getSession(request, env);
     if (!u) return jsonAuth({ error: "Not authenticated" }, 401, allowedOrigin);
     const mem = await env.DB.prepare(
-      `SELECT * FROM memberships WHERE user_id=? AND status='active' AND expires_at > unixepoch() ORDER BY expires_at DESC LIMIT 1`
+      `SELECT *, (SELECT max(expires_at) FROM memberships m2 WHERE m2.user_id=memberships.user_id AND m2.status='active') AS term_end
+         FROM memberships WHERE user_id=? AND status='active' AND expires_at > unixepoch() ORDER BY expires_at ASC LIMIT 1`
     ).bind(u.user_id).first();
     // The spending tier rides along (only looked up while rewards are live), so one call tells the storefront everything it needs.
     let tier = null;
@@ -375,10 +435,38 @@ async function handleMembership(url, request, env, allowedOrigin) {
     } catch (e) { console.error("tier lookup failed:", e && e.message); }
     return jsonAuth({ membership: mem ? {
       active: true,
-      expiresAt: mem.expires_at,
+      expiresAt: mem.term_end || mem.expires_at,
       pricePaid: mem.price_paid,
       purchasedAt: mem.purchased_at,
     } : { active: false }, tier }, 200, allowedOrigin);
+  }
+
+  // GET /api/membership/me — the signed-in customer's own membership + wallet + milestones + realised value (dashboard). Never another user's.
+  if (method === "GET" && path.endsWith("/membership/me")) {
+    const u = await getSession(request, env);
+    if (!u) return jsonAuth({ error: "Not authenticated" }, 401, allowedOrigin);
+    try {
+      if (!(await hasPointsSchema(env))) return jsonAuth({ live: false, available: false }, 200, allowedOrigin);
+      const [sum, settings, st] = await Promise.all([POINTS.summary(env.DB, u.user_id), loadMemberSettings(env), POINTS.loadSettings(env.DB)]);
+      const now = Math.floor(Date.now() / 1000), exp = sum.membership.active ? sum.membership.expiresAt : 0;
+      const renew = settings.live && settings.feePaise >= 100 && (!sum.membership.active || exp - now <= st.renewWindowDays * 86400);
+      const res = jsonAuth({ ...sum, renewal: { canRenew: renew, windowDays: st.renewWindowDays, feePaise: settings.feePaise, expired: !sum.membership.active && !!sum.membership.lastExpiry,
+        startsAt: renew && sum.membership.active ? exp : null } }, 200, allowedOrigin);
+      res.headers.set("Cache-Control", "no-store");
+      return res;
+    } catch (e) { console.error("membership/me failed:", e && e.message); return jsonAuth({ error: "Rewards unavailable" }, 503, allowedOrigin); }
+  }
+  // GET /api/membership/activity?before=<unix>&limit=<n> — the customer's own points ledger, newest first.
+  if (method === "GET" && path.endsWith("/membership/activity")) {
+    const u = await getSession(request, env);
+    if (!u) return jsonAuth({ error: "Not authenticated" }, 401, allowedOrigin);
+    try {
+      if (!(await hasPointsSchema(env))) return jsonAuth({ entries: [], more: false }, 200, allowedOrigin);
+      const before = parseInt(url.searchParams.get("before"), 10) || 0, limit = Math.min(Math.max(parseInt(url.searchParams.get("limit"), 10) || 30, 1), 100);
+      const res = jsonAuth(await POINTS.activity(env.DB, u.user_id, before, limit), 200, allowedOrigin);
+      res.headers.set("Cache-Control", "no-store");
+      return res;
+    } catch (e) { console.error("membership/activity failed:", e && e.message); return jsonAuth({ error: "Rewards unavailable" }, 503, allowedOrigin); }
   }
 
   // POST /api/membership/create-order
@@ -386,10 +474,15 @@ async function handleMembership(url, request, env, allowedOrigin) {
     const u = await getSession(request, env);
     if (!u) return jsonAuth({ error: "Not authenticated" }, 401, allowedOrigin);
     if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) return jsonAuth({ error: "Payment not configured" }, 503, allowedOrigin);
+    // Renewal: allowed once the current term is within the renewal window, and only one renewal can be queued behind it.
     const existing = await env.DB.prepare(
-      `SELECT id FROM memberships WHERE user_id=? AND status='active' AND expires_at > unixepoch() LIMIT 1`
+      `SELECT count(*) n, max(expires_at) e FROM memberships WHERE user_id=? AND status='active' AND expires_at > unixepoch()`
     ).bind(u.user_id).first();
-    if (existing) return jsonAuth({ error: "You already have an active membership" }, 409, allowedOrigin);
+    if (existing.n > 0) {
+      const win = (await hasPointsSchema(env)) ? (await POINTS.loadSettings(env.DB)).renewWindowDays : 0;
+      if (existing.n > 1) return jsonAuth({ error: "Your membership is already renewed" }, 409, allowedOrigin);
+      if (existing.e - Math.floor(Date.now() / 1000) > win * 86400) return jsonAuth({ error: win ? `You can renew within ${win} days of expiry` : "You already have an active membership" }, 409, allowedOrigin);
+    }
     const settings = await loadMemberSettings(env);
     // Never sell a membership that currently gives nothing.
     if (!settings.live) return jsonAuth({ error: "Membership is not available right now" }, 409, allowedOrigin);
@@ -432,17 +525,20 @@ async function handleMembership(url, request, env, allowedOrigin) {
     const memId = crypto.randomUUID();
     const now = Math.floor(Date.now() / 1000);
     const days = Math.min(Math.max(parseInt(rp.notes && rp.notes.days, 10) || (await loadMemberSettings(env)).durationDays, 1), 1095);
+    // A renewal starts when the current term ends (no days are lost or doubled); a first purchase or a lapsed member starts now.
+    const cur = await env.DB.prepare("SELECT max(expires_at) e FROM memberships WHERE user_id=? AND status='active' AND expires_at>?").bind(u.user_id, now).first();
+    const start = cur && cur.e > now ? cur.e : now;
     try {
       await env.DB.prepare(
         `INSERT INTO memberships (id, user_id, status, purchased_at, expires_at, welcome_credit_paise, price_paid, payment_id, razorpay_order_id)
          VALUES (?, ?, 'active', ?, ?, 0, ?, ?, ?)`
-      ).bind(memId, u.user_id, now, now + days * 86400, rp.amount, razorpay_payment_id, razorpay_order_id).run();
+      ).bind(memId, u.user_id, start, start + days * 86400, rp.amount, razorpay_payment_id, razorpay_order_id).run();
     } catch { // lost a race against the unique index: return the winner
       const w = await env.DB.prepare(`SELECT id FROM memberships WHERE razorpay_order_id=?`).bind(razorpay_order_id).first();
       if (w) return jsonAuth({ ok: true, membershipId: w.id }, 200, allowedOrigin);
       return jsonAuth({ error: "Could not record membership" }, 500, allowedOrigin);
     }
-    return jsonAuth({ ok: true, membershipId: memId, expiresAt: now + days * 86400 }, 200, allowedOrigin);
+    return jsonAuth({ ok: true, membershipId: memId, expiresAt: start + days * 86400, renewed: start > now }, 200, allowedOrigin);
   }
 
   return jsonAuth({ error: "Not found" }, 404, allowedOrigin);
@@ -679,6 +775,16 @@ function cleanDetails(b) {
   };
 }
 
+// Rewards Membership fields of a checkout intent (frozen so the order gets exactly what the customer was shown), plus the hold on the
+// points being spent. Empty until migration 0014 is applied.
+async function pointsIntentStatements(env, txnId, u, total) {
+  if (!(await hasPointsSchema(env))) return [];
+  const out = [env.DB.prepare("UPDATE checkout_intents SET points_basis_paise=?, points_redeemed=?, points_discount_paise=?, member_saving_paise=? WHERE txn_id=?")
+    .bind(total.pointsBasisPaise || 0, total.pointsRedeemed || 0, total.pointsDiscountPaise || 0, total.memberSavingPaise || 0, txnId)];
+  if (u && total.pointsRedeemed > 0) out.push(...POINTS.reserve(env.DB, u.user_id, txnId, total.pointsRedeemed));
+  return out;
+}
+
 async function recordIntent(env, request, txnId, gateway, body, total) {
   if (!env.DB || !txnId) return;
   try {
@@ -699,6 +805,7 @@ async function recordIntent(env, request, txnId, gateway, body, total) {
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
       ).bind(txnId, gateway, u ? u.user_id : null, JSON.stringify(items), d.name, d.phone, d.email, d.address, d.pincode, d.state, d.gstin, d.quoteRef,
              amountPaise - gstPaise, gstPaise, amountPaise),
+      ...(await pointsIntentStatements(env, txnId, u, total)),
     ]);
   } catch (e) { console.error("recordIntent failed:", e && e.message); }
 }
@@ -711,6 +818,19 @@ async function alertPayment(env, txnId, gateway, ref, paise, reason) {
     await env.DB.prepare("INSERT OR IGNORE INTO payment_alerts (id,txn_id,gateway,payment_ref,amount_paise,reason) VALUES (?,?,?,?,?,?)")
       .bind(crypto.randomUUID(), txnId, gateway, ref || null, Number.isFinite(paise) ? paise : null, reason).run();
   } catch (e) { console.error("payment alert not stored:", e && e.message); }
+}
+
+// Same batch as the order insert, so points spent and the order they were spent on are recorded together or not at all.
+// Replays are harmless: the UPDATE sets the same values and the ledger key is unique.
+function pointsOrderStatements(env, oid, intent) {
+  if (intent.points_basis_paise === undefined) return [];
+  const out = [env.DB.prepare("UPDATE orders SET points_basis_paise=?, points_redeemed=?, points_discount_paise=?, member_saving_paise=? WHERE id=?")
+    .bind(intent.points_basis_paise || 0, intent.points_redeemed || 0, intent.points_discount_paise || 0, intent.member_saving_paise || 0, oid)];
+  if (intent.user_id && intent.points_redeemed > 0) {
+    out.push(env.DB.prepare("INSERT OR IGNORE INTO points_ledger (id,user_id,kind,points,order_id,idem_key,reason) SELECT ?,user_id,'redeem',?,id,?,? FROM orders WHERE id=? AND user_id IS NOT NULL")
+      .bind(crypto.randomUUID(), -intent.points_redeemed, `redeem:${oid}`, "redeemed at checkout", oid));
+  }
+  return out;
 }
 
 // Returns "recorded" | "already" (order exists from an earlier call) | "failed" (payment verified, no order: customer must be told).
@@ -753,10 +873,14 @@ async function finalizeOrder(env, txnId, paymentRef, verifiedPaise, gateway) {
       // keep the intent unless the order really exists (INSERT OR IGNORE swallows constraint errors), so a retry can finish the job
       env.DB.prepare("DELETE FROM checkout_intents WHERE txn_id=?1 AND EXISTS (SELECT 1 FROM orders WHERE txn_id=?1)").bind(txnId),
       ...stockStatements(env, oid, txnId, JSON.parse(intent.items_json || "[]")),
+      ...pointsOrderStatements(env, oid, intent),
     ]);
     if (!await env.DB.prepare("SELECT 1 AS x FROM orders WHERE txn_id=?").bind(txnId).first()) {
       await alertPayment(env, txnId, gateway || intent.gateway, ref, intent.amount_paise, "order row was not created");
       return "failed";
+    }
+    if (intent.user_id && intent.points_basis_paise !== undefined) {   // points: spend recorded already (same batch); earning is reconciled from the order
+      try { await POINTS.reconcileOrder(env.DB, oid); } catch (e) { console.error("points reconcile failed:", e && e.message); }
     }
     if (intent.user_id && intent.qualifying_paise !== undefined) {   // record any tier change this payment caused (history only; prices re-derive the tier)
       try { await LOYALTY.syncTier(env.DB, intent.user_id, "order paid"); } catch (e) { console.error("tier sync failed:", e && e.message); }
@@ -784,8 +908,9 @@ async function recordOfflineOrder(request, env, body, origin) {
   const pricing = await loadPricing(env);
   const blocked = unavailableReason(body.items, pricing);
   if (blocked) return json({ error: blocked }, 409, origin);
-  const total = calculateTotal(body.items, d.state, member, pricing, await campaignsFor(request, env, member));
-  if (!total) return json({ error: "Invalid order" }, 400, origin);
+  const pc = await pricedCart(env, request, member, body.items, d.state, pricing, await campaignsFor(request, env, member), 0); // points are spent on online payments only
+  if (pc.error) return json({ error: pc.error }, pc.status, origin);
+  const total = pc.total;
   const ipHash = await sha256Hex(`ntagz:${request.headers.get("CF-Connecting-IP") || "unknown"}`);
   const recent = await env.DB.prepare("SELECT count(*) c FROM order_attempts WHERE ip_hash=? AND created_at>unixepoch()-600").bind(ipHash).first();
   if (recent.c >= 5) return json({ error: "Too many orders from this connection. Please try again later or contact us on WhatsApp." }, 429, origin);
@@ -809,6 +934,8 @@ async function recordOfflineOrder(request, env, body, origin) {
     ).bind(orderIdOffline, u ? u.user_id : null, txnId, method, d.quoteRef, JSON.stringify(items), d.name, d.phone, d.email, d.address, d.pincode,
            d.state, d.gstin, amountPaise - gstPaise, gstPaise, amountPaise, method),
     ...stockStatements(env, orderIdOffline, txnId, items),
+    // the order earns when its payment is recorded in the admin (reconciled there); the basis is frozen now
+    ...((await hasPointsSchema(env)) ? [env.DB.prepare("UPDATE orders SET points_basis_paise=?, member_saving_paise=? WHERE txn_id=? AND payment_status='unpaid'").bind(total.pointsBasisPaise || 0, total.memberSavingPaise || 0, txnId)] : []),
   ]);
   return json({ ok: true, orderRef: txnId, total: total.amount }, 200, origin);
 }
@@ -857,6 +984,9 @@ async function onRequest({ request, env }) {
   const allowedOrigin = origin === "https://ntagz.com" ? origin : "https://www.ntagz.com";
   const responseHeaders = { ...corsHeaders, "Access-Control-Allow-Origin": allowedOrigin };
   if (request.method === "OPTIONS") return new Response(null, { headers: responseHeaders });
+
+  const crmRes = await CRMPUBLIC.handle(url, request, env, { getSession });
+  if (crmRes) return crmRes;
 
   // ── Public live catalogue: GET /api/catalog (price + availability only; no exact stock counts) ──
   if (url.pathname.endsWith("/catalog") && !url.pathname.includes("/accounts/")) {
@@ -924,9 +1054,10 @@ async function onRequest({ request, env }) {
       if (blocked) return json({ error: blocked }, 409, origin);
       const state = typeof qb.state === "string" ? qb.state.slice(0, 50) : "";
       const member = await getMemberContext(request, env);
-      const you = calculateTotal(qb.items, state, member, pricing, await campaignsFor(request, env, member));
-      if (!you) return json({ error: "Invalid order" }, 400, origin);
-      const out = { you, signedInMember: !!member, rewards: await rewardsBlock(env, request, you, qb.items, pricing, member) };
+      const pc = await pricedCart(env, request, member, qb.items, state, pricing, await campaignsFor(request, env, member), qb.redeemPoints);
+      if (pc.error) return json({ error: pc.error, points: null }, pc.status, origin);
+      const you = pc.total;
+      const out = { you, signedInMember: !!member, points: pc.points, rewards: await rewardsBlock(env, request, you, qb.items, pricing, member) };
       if (qb.compare === true && env.DB) {
         const settings = await loadMemberSettings(env);
         out.guest = calculateTotal(qb.items, state, null, pricing, await campaignsFor(request, env, null));
@@ -1023,8 +1154,9 @@ async function onRequest({ request, env }) {
       const pricing = await loadPricing(env);
       const blocked = unavailableReason(body.items, pricing);
       if (blocked) return json({ error: blocked }, 409, origin);
-      const total = calculateTotal(body.items, body.state, member, pricing, await campaignsFor(request, env, member));
-      if (!total) return json({ error: "Invalid order" }, 400, origin);
+      const pc = await pricedCart(env, request, member, body.items, body.state, pricing, await campaignsFor(request, env, member), body.redeemPoints);
+      if (pc.error) return json({ error: pc.error }, pc.status, origin);
+      const total = pc.total;
       const order = await razorpayRequest("/orders", env, {
         amount: total.amount * 100,
         currency: "INR",
@@ -1056,8 +1188,9 @@ async function onRequest({ request, env }) {
       const pricing = await loadPricing(env);
       const blocked = unavailableReason(body.items, pricing);
       if (blocked) return json({ error: blocked }, 409, origin);
-      const total = calculateTotal(body.items, body.state, member, pricing, await campaignsFor(request, env, member));
-      if (!total) return json({ error: "Invalid order" }, 400, origin);
+      const pc = await pricedCart(env, request, member, body.items, body.state, pricing, await campaignsFor(request, env, member), body.redeemPoints);
+      if (pc.error) return json({ error: pc.error }, pc.status, origin);
+      const total = pc.total;
       const firstName = typeof body.name === "string" ? body.name.trim().split(/\s+/)[0].slice(0, 60) : "";
       const email = typeof body.email === "string" ? body.email.trim().slice(0, 254) : "";
       const phone = typeof body.phone === "string" ? body.phone.replace(/\D/g, "").slice(-10) : "";
@@ -1110,4 +1243,4 @@ async function onRequest({ request, env }) {
   }
 }
 
-if (typeof module !== "undefined") module.exports = { onRequest, resetPricingCache, calculateTotal, PRODUCTS, verifySignature, payuHash, verifyPayuResponse };
+if (typeof module !== "undefined") module.exports = { onRequest, resetPricingCache, resetCrmCache: CRMPUBLIC.resetCrmCache, calculateTotal, PRODUCTS, verifySignature, payuHash, verifyPayuResponse };
