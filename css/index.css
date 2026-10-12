@@ -2656,6 +2656,8 @@
     @media (max-width: 767px) {
       .wa-float { width: 48px; height: 48px; bottom: 16px; right: 16px; }
       .wa-float svg { width: 24px; height: 24px; }
+      .ftab { min-height: 44px; } /* 10px padding left these filter tabs at ~43px */
+      .price-opt-label { font-size: 11px; } /* 10px uppercase was hard to read on a phone */
     }
 
     /* Live catalogue overlay */
