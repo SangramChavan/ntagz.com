@@ -76,14 +76,14 @@ const hmac = async (secret, msg) => Array.from(new Uint8Array(await crypto.subtl
   // ── public programme info exposes the tier rates ──
   setCfg("pts_live", "1");
   const info = await (await P("/api/membership/pricing")).json();
-  assert.deepEqual(info.points.tiers.map((t) => [t.name, t.minSpendPaise, t.pointsPer100]), [["Silver", 500000, 3], ["Gold", 2500000, 5], ["Diamond", 5000000, 10]]); assert.equal(info.points.earnPer100, 5); assert.equal(info.feePaise, 99900); ok("public info lists the flat rate and every tier rate, and the ₹999 fee, from the same configuration checkout uses");
+  assert.deepEqual(info.points.tiers.map((t) => [t.name, t.minSpendPaise, t.pointsPer100]), [["Silver", 500000, 3], ["Gold", 2500000, 5], ["Diamond", 5000000, 10]]); assert.equal(info.points.earnPer100, 3); assert.equal(info.feePaise, 99900); ok("public info lists the flat rate and every tier rate, and the ₹999 fee, from the same configuration checkout uses");
 
   // ── calculator vs the real engine ──
   const settings = PRICING.settingsFrom({ discounts_live: "1", max_total_discount_pct: "30", min_margin_pct: "20" });
   const live = { "black-nfc-card": { price_paise: 10000, member_discount_pct: 10, cost_paise: null, points_eligible: 1 } };
   const eng = PRICING.priceCart(items, { products: PRICING.PRODUCTS, live, state: "Maharashtra", member: true, settings });
-  const st = POINTS.settingsFrom({ pts_live: "1", pts_earn_per_100: "5", pts_value_paise: "100", pts_max_redeem_pct: "10", pts_min_redeem: "50" });
-  const cfg = (tiers) => ({ pct: 10, fee: 999, pts: { earnPer100: 5, value: 1, maxRedeemPct: 10, minOrder: 0, tiers } });
+  const st = POINTS.settingsFrom({ pts_live: "1", pts_earn_per_100: "3", pts_value_paise: "100", pts_max_redeem_pct: "10", pts_min_redeem: "50" });
+  const cfg = (tiers) => ({ pct: 10, fee: 999, pts: { earnPer100: 3, value: 1, maxRedeemPct: 10, minOrder: 0, tiers } });
   const est = calc({ order: 3000, count: 4, share: 100, use: 100 }, cfg([]));
   assert.equal(est.savings, 4 * eng.memberDiscount); assert.equal(est.earned, 4 * POINTS.earnedPoints(st, eng.pointsBasisPaise, 1, 0, null)); ok("calculator savings and points equal the engine's, order for order (flat rate)");
   assert.equal(est.net, est.savings + est.usedValue - 999); assert.ok(est.used <= est.earned); assert.equal(est.unused, est.earned - est.used); ok("net value = savings + redeemable rewards − fee; unused points are not counted");
@@ -99,7 +99,7 @@ const hmac = async (secret, msg) => Array.from(new Uint8Array(await crypto.subtl
     await P("/api/verify-payment", { razorpay_order_id: c1.id, razorpay_payment_id: pid, razorpay_signature: sg }, mu.cookie);
     actual += q("SELECT coalesce(sum(points),0) s FROM points_ledger WHERE user_id=? AND kind='earn' AND order_id=(SELECT id FROM orders WHERE txn_id=?)", mu.id, c1.id)[0].s;
   }
-  const oneOrderSwing = Math.ceil(eng.pointsBasisPaise / 100 * (5 - 3) / 100);   // a tier boundary falling inside an order moves the answer by at most this
+  const oneOrderSwing = Math.ceil(eng.pointsBasisPaise / 100 * (10 - 5) / 100);   // a tier boundary falling inside an order moves the answer by at most one rate step (the largest is Gold→Diamond)
   assert.ok(actual > 0 && Math.abs(t4.earned - actual) <= oneOrderSwing, `estimate ${t4.earned} vs real ${actual}`); ok(`tier-aware estimate (${t4.earned} points) matches what four real orders earned (${actual}), within one order's tier-boundary rounding (${oneOrderSwing})`);
   assert.equal(t4.rate, 3); ok("the estimate reports the tier rate reached");
 

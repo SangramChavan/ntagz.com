@@ -28,8 +28,9 @@
       if (!reached && !next) next = { m: m, prev: prev };
       var li = el('li', 'md-ms' + (reached ? ' done' : next && next.m === m ? ' next' : ''));
       var dot = el('span', 'md-ms-dot', reached ? '✓' : String(i + 1)); dot.setAttribute('aria-hidden', 'true');
+      var lbl = m.label || ('Milestone ' + (i + 1));   // admin milestones may have no name yet; never show a blank heading
       var body = el('div', 'md-ms-body');
-      body.appendChild(el('b', null, m.label));
+      body.appendChild(el('b', null, lbl));
       body.appendChild(el('span', null, rupee(m.thresholdPaise) + ' eligible spend · +' + pts(m.bonusPoints) + ' bonus points'));
       var st = reached ? (m.awarded ? 'Bonus added' : 'Reached') : (next && next.m === m ? 'Next' : 'Locked');
       var tag = el('em', 'md-ms-tag', st);
@@ -37,9 +38,9 @@
       if (next && next.m === m && spend != null) {
         var span = m.thresholdPaise - prev, w = span > 0 ? Math.max(0, Math.min(100, Math.round((spend - prev) / span * 100))) : 0;
         var bar = el('div', 'md-bar'); bar.setAttribute('role', 'progressbar'); bar.setAttribute('aria-valuemin', '0'); bar.setAttribute('aria-valuemax', '100');
-        bar.setAttribute('aria-valuenow', String(w)); bar.setAttribute('aria-label', 'Progress to ' + m.label);
+        bar.setAttribute('aria-valuenow', String(w)); bar.setAttribute('aria-label', 'Progress to ' + lbl);
         var f = el('i'); f.style.width = w + '%'; bar.appendChild(f); li.appendChild(bar);
-        li.appendChild(el('p', 'md-ms-more', rupee(m.thresholdPaise - spend) + ' more to reach ' + m.label + ' (+' + pts(m.bonusPoints) + ' points).'));
+        li.appendChild(el('p', 'md-ms-more', rupee(m.thresholdPaise - spend) + ' more to reach ' + lbl + ' (+' + pts(m.bonusPoints) + ' points).'));
       }
       prev = m.thresholdPaise; ol.appendChild(li);
     });

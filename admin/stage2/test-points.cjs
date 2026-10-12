@@ -69,7 +69,8 @@ const hmac = async (secret, msg) => Array.from(new Uint8Array(await crypto.subtl
   assert.equal((await A(OW, "/api/points/settings", { version: "stale", settings: { pts_live: true } })).status, 409); ok("stale settings version rejected");
   for (const bad of [{ pts_earn_per_100: -1 }, { pts_value_paise: 0 }, { pts_max_redeem_pct: 80 }, { pts_earn_on: "never" }, { renew_notice_days: "30,abc" }, { pts_live: "yes" }]) assert.equal((await A(OW, "/api/points/settings", { version: st.d.version, settings: bad })).status, 400, JSON.stringify(bad));
   ok("invalid or contradictory settings are rejected on the server");
-  st = await A(OW, "/api/points/settings", { version: st.d.version, settings: { pts_live: true } }); assert.equal(st.status, 200); assert.equal(st.d.settings.live, true);
+  // Pin the flat rate to 5 explicitly: this test exercises the earn maths at 5 per ₹100 (the shipped default is 3 since migration 0017).
+  st = await A(OW, "/api/points/settings", { version: st.d.version, settings: { pts_live: true, pts_earn_per_100: 5 } }); assert.equal(st.status, 200); assert.equal(st.d.settings.live, true); assert.equal(st.d.settings.earnPer100, 5);
   assert.ok(one("SELECT 1 x FROM audit_log WHERE action='points_settings'")); payments.resetPricingCache(); ok("admin enables rewards; change is audited");
   const info = await (await P("/api/membership/pricing")).json(); assert.equal(info.points.earnPer100, 5); assert.equal(info.milestones.length, 4); assert.equal(info.milestones[0].thresholdPaise, 250000); ok("public info shows the configured earn rate and milestone ladder");
 

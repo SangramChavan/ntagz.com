@@ -96,7 +96,9 @@
   function start() {
     fetch('/api/rewards/tiers', { credentials: 'omit' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
       if (d) {
-        tiers = d.tiers || []; live = !!d.live; $('rwOff').hidden = live;
+        tiers = d.tiers || []; live = !!d.live;
+        // The notice is about tier PRICE discounts, so tie it to whether any tier actually offers one — not to the programme switch.
+        $('rwOff').hidden = tiers.some(function (t) { return Number(t.discountPct) > 0; });
         var c = $('rwCombine'); if (c && d.combine === 'stack') c.textContent = 'If you have both, the two discounts can combine on a product, up to a combined limit.';
       }
       renderTiers();

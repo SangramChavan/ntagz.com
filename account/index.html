@@ -311,7 +311,7 @@
       var body = document.getElementById('membershipBody');
       var go = function() { window.NTAGZ_MEMDASH.mount(body, { renewHref: '/membership/#join' }); };
       if (window.NTAGZ_MEMDASH) return go();
-      var sc = document.createElement('script'); sc.src = '../js/membership-dashboard.js?v=20261013'; sc.onload = go;
+      var sc = document.createElement('script'); sc.src = '../js/membership-dashboard.js?v=20261015'; sc.onload = go;
       sc.onerror = function() { memLoaded = false; body.textContent = 'Could not load membership. Please try again.'; };
       document.head.appendChild(sc);
     }
