@@ -455,6 +455,7 @@
     // Same origin (ntagz.com/api/* is routed to the payments Worker) so the customer's sign-in cookie reaches checkout:
     // that is how the server knows to apply member prices. A cross-origin call never carries it.
     var paymentApi = "/api";
+    var accountUser = null; // signed-in customer, if any (filled from /api/accounts/me below)
     var orderItems = function() {
       var cart = window.NTAGZ_CART.read();
       return Object.keys(cart).map(function(id) { return { id: id, qty: cart[id] }; });
@@ -550,9 +551,9 @@
           },
           modal: { ondismiss: function() { button.removeAttribute("aria-disabled"); } },
           prefill: {
-            name: "",
-            email: "",
-            contact: ""
+            name: accountUser ? (accountUser.name || "") : "",
+            email: accountUser ? (accountUser.email || "") : "",
+            contact: accountUser ? (accountUser.phone || "") : ""
           },
           notes: {
             address: ""
@@ -614,6 +615,22 @@
         gstInput.setCustomValidity(ok || val.length < 15 ? "" : "Invalid GSTIN");
       });
     })();
+
+    // Signed-in customers already have an email on their account: reuse it for PayU and Razorpay instead of asking again.
+    fetch(paymentApi + "/accounts/me", { credentials: "same-origin" })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(a) {
+        var u = a && a.user;
+        if (!u) return;
+        accountUser = u;
+        var email = document.getElementById("payuEmail");
+        if (!u.email || !email || email.value) return;
+        email.value = u.email;
+        email.required = false;
+        var star = document.querySelector('label[for="payuEmail"] .req-star');
+        if (star) star.remove();
+      })
+      .catch(function() {});
 
   </script>
 </body>
