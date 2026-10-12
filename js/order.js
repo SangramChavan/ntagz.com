@@ -458,13 +458,17 @@
     no.onclick = function () { if (added) track('membership_offer_declined'); MQ.err = ''; MQ.add = false; calculateQuote(); };
     if (login) yes.onclick = function () { location.href = '/account/login.html?next=' + encodeURIComponent('/order.html'); };
     else if (canAdd) yes.onclick = function () { track('membership_offer_added'); MQ.err = ''; MQ.add = true; MQ.redeem = 0; calculateQuote(); };
-    else yes.classList.add('locked');
+    else yes.onclick = function () {
+      track('membership_offer_added'); MQ.err = ''; MQ.add = true; MQ.redeem = 0;
+      if (!onlinePay()) switchPayTab('razorpay'); /* membership is charged through the online gateway: switch so the selection takes effect */
+      calculateQuote();
+    };
     var opts = mk('div', 'qgt-opts'); opts.setAttribute('role', 'radiogroup'); opts.setAttribute('aria-label', 'Grand total with or without membership');
     opts.appendChild(no); opts.appendChild(yes); box.appendChild(opts);
     var net = o.netPaise;
     box.appendChild(mk('p', 'qgt-mem-net' + (net > 0 ? ' good' : ''), net > 0 ? 'You save ' + fmt(net / 100) + ' today with membership.' : net < 0
       ? 'Membership adds ' + fmt(-net / 100) + ' to this order; it pays back if you keep buying eligible products.' : 'No difference in today’s total.'));
-    box.appendChild(mk('p', 'qgt-mem-terms', login ? 'Sign in to add membership.' : !canAdd ? 'Membership can be added with Razorpay or PayU payments.' : 'Member prices on eligible products for ' + (o.durationDays === 365 ? '1 year' : o.durationDays + ' days') + ' after payment is confirmed. Optional.'));
+    box.appendChild(mk('p', 'qgt-mem-terms', login ? 'Sign in to add membership.' : !canAdd ? 'Picking "With membership" switches to Razorpay, where the fee is charged; member prices then apply for ' + (o.durationDays === 365 ? '1 year' : o.durationDays + ' days') + ' after payment is confirmed.' : 'Member prices on eligible products for ' + (o.durationDays === 365 ? '1 year' : o.durationDays + ' days') + ' after payment is confirmed. Optional.'));
   }
   /* Build-time promise, from the server's working-day calendar. Every order is made to order; a member's is priority. No rupee value. */
   function fmtWD(n) { return n === 1 ? '1 working day' : n + ' working days'; }
