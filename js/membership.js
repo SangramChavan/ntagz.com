@@ -35,7 +35,14 @@
   function rateDetail() {
     var p = P.points, t = p.tiers || [];
     if (!t.length) return pts(p.earnPer100) + ' points per ₹100.';
-    return pts(p.earnPer100) + ' points per ₹100 to begin with, then ' + t.map(function (x) { return pts(x.pointsPer100) + ' from ' + paise(x.minSpendPaise) + ' of qualifying spend (' + x.name + ')'; }).join(', ') + '.';
+    // Only name the tiers that actually change the rate, so the sentence reads in order and never contradicts itself.
+    var rate = p.earnPer100, parts = [pts(rate) + ' points per ₹100 to start'];
+    t.forEach(function (x) {
+      if (x.pointsPer100 === rate) return;
+      rate = x.pointsPer100;
+      parts.push(pts(rate) + ' from ' + paise(x.minSpendPaise) + ' of qualifying spend (' + x.name + ')');
+    });
+    return parts.join(', ') + '.';
   }
   function hasPts() { return !!(P && P.points); }
   function msList() { return hasPts() && P.milestones ? P.milestones : []; }
@@ -83,8 +90,8 @@
     var host = $('mSteps'); host.textContent = '';
     var p = P.points, step = function (h, t) { var li = el('li'); li.appendChild(el('h3', null, h)); li.appendChild(el('p', null, t)); host.appendChild(li); };
     step('Join', canBuy() ? 'Pay ' + paise(P.feePaise) + ' once for ' + duration(P.durationDays) + ', counted from the day your payment is confirmed. Sign in with your email so the membership is linked to your account.' : 'Membership is not on sale right now.');
-    step('Shop as usual', (P.live ? 'Member prices appear on eligible products in your cart and at checkout while you are signed in. ' : '') +
-      (p ? 'Earn ' + rateText() + ' of eligible value (without GST or shipping). They are added ' + (p.earnOn === 'paid' ? 'once your payment is confirmed.' : 'once the order is delivered; until then they show as pending.') : ''));
+    step('Shop as usual', (P.live ? 'Member prices apply automatically at checkout while you are signed in. ' : '') +
+      (p ? 'Points are added ' + (p.earnOn === 'paid' ? 'once your payment is confirmed.' : 'once your order is delivered; until then they show as pending.') : ''));
     step(p ? 'Use your points' : 'Save at checkout', p ? 'Each point is worth ' + paise(p.valuePaise) + '. Use at least ' + pts(p.minRedeem) + ' points, up to ' + p.maxRedeemPct + '% of an order’s eligible value, when you pay online. Points expire ' + duration(p.validDays) + ' after you earn them.' : 'You pay the member price, calculated by our server at checkout.');
   }
 

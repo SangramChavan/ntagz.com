@@ -9,9 +9,19 @@
   var el = function (tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   var when = function (s) { return new Date(s * 1000).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); };
 
-  var tiers = [], me = null, live = false;
+  var tiers = [], me = null, live = false, baseRate = 0, ptsLive = false;
+
+  function renderLede() {
+    var lede = $('tiersLede'); if (!lede) return;
+    if (!ptsLive || !tiers.length) { lede.textContent = 'Your qualifying spend sets your spending tier. Tier discounts, when we run them, apply to eligible products only.'; return; }
+    var rates = tiers.map(function (t) { return t.pointsPer100; }).filter(function (n) { return n != null; }).concat(baseRate);
+    var lo = Math.min.apply(null, rates), hi = Math.max.apply(null, rates);
+    lede.textContent = 'Your qualifying spend sets your spending tier, and your tier sets how fast your rewards build — ' +
+      (lo === hi ? nf.format(lo) : nf.format(lo) + ' to ' + nf.format(hi)) + ' points per ₹100. It is free and automatic: a paid membership turns your tier into points you can spend.';
+  }
 
   function renderTiers() {
+    renderLede();
     var host = $('rwTiers'); host.textContent = '';
     if (!tiers.length) { host.appendChild(el('p', 'm-fine', 'Tiers are not available right now. Please check back shortly.')); return; }
     tiers.forEach(function (t) {
@@ -20,11 +30,14 @@
       card.appendChild(el('h3', null, t.name));
       card.appendChild(el('div', 't-spend', t.minSpendPaise === 0 ? 'Everyone starts here' : 'From ' + rupee(t.minSpendPaise) + ' qualifying spend'));
       var hasPts = t.pointsPer100 != null && t.pointsPer100 > 0;
-      var off = el('div', 't-off', t.discountPct > 0 ? pct(t.discountPct) + ' ' : hasPts ? nf.format(t.pointsPer100) + ' ' : 'Standard pricing');
-      if (t.discountPct > 0) off.appendChild(el('small', null, 'off eligible products'));
-      else if (hasPts) off.appendChild(el('small', null, 'points per ₹100'));
+      var shown = hasPts ? t.pointsPer100 : (ptsLive && baseRate > 0 && !(t.discountPct > 0) ? baseRate : null);   // a no-rate tier still earns the flat rate
+      var off;
+      if (t.discountPct > 0) { off = el('div', 't-off', pct(t.discountPct) + ' '); off.appendChild(el('small', null, 'off eligible products')); }
+      else if (shown > 0) { off = el('div', 't-off', nf.format(shown) + ' '); off.appendChild(el('small', null, 'points per ₹100')); }
+      else off = el('div', 't-off', 'Standard pricing');
       card.appendChild(off);
-      var dup = t.perks === 'Standard pricing' || t.perks === nf.format(t.discountPct) + '% off eligible products' || (hasPts && t.perks === nf.format(t.pointsPer100) + ' points per ₹100');  // don't repeat what the headline already says
+      var head = t.discountPct > 0 ? pct(t.discountPct) + '% off eligible products' : shown > 0 ? nf.format(shown) + ' points per ₹100' : 'Standard pricing';
+      var dup = t.perks === 'Standard pricing' || t.perks === head || (shown != null && t.perks === nf.format(shown) + ' points per ₹100');  // don't repeat what the headline already says
       if (t.perks && !dup) card.appendChild(el('p', 't-perk', t.perks));
       if (me && me.next && me.tier && t.id === me.next.id) card.appendChild(el('p', 't-perk', rupee(me.next.remainingPaise) + ' to go'));
       host.appendChild(card);
@@ -94,7 +107,7 @@
     }).catch(function () { });
   }
   var started = false;
-  function maybe(P) { if (started || !P || !P.loyaltyLive) return; started = true; start(); }
+  function maybe(P) { if (started || !P || !P.loyaltyLive) return; started = true; if (P.points) { ptsLive = true; baseRate = Number(P.points.earnPer100) || 0; } start(); }
   document.addEventListener('ntagz:pricing', function (e) { maybe(e.detail); });
   maybe(window.NTAGZ_PRICING);
 })();
