@@ -4,7 +4,9 @@
 
 import PRICING from "../../functions/lib/pricing.js"; // the same engine the payments Worker charges with
 import LOYALTY from "../../functions/lib/loyalty.js"; // spending tiers: same derivation as the storefront
+import POINTS from "../../functions/lib/points.js"; // rewards wallet: reconciled from orders after every payment / status / refund change
 import { notify, STATUS_EVENT } from "./notify.js";
+import { membershipRoute, tick as membershipTick } from "./membership.js"; // Rewards Membership admin (/api/points, /api/members)
 import { crmRoute, crmScheduled, crmWebhook } from "./crm/index.js"; // Customers / CRM (all under /api/crm/)
 
 const SESSION_TTL = 12 * 3600;
@@ -276,6 +278,7 @@ async function paymentReceived(id, body, actor, env) {
   if (!res || res[0].meta.changes !== 1) return fail(409, "Payment was not recorded. It may already have been confirmed.");
   await notify(env, id, "payment_confirmed", pid);
   await tierSyncFor(env, id, "order paid");
+  await pointsSyncFor(env, id);
   return json(await getOrder(id, env));
 }
 
@@ -346,6 +349,7 @@ async function changeStatus(id, body, actor, env) {
   if (res[0].meta.changes !== 1) return fail(409, "The order changed while you were working. Refresh and try again.");
   if (STATUS_EVENT[to]) await notify(env, id, STATUS_EVENT[to], eid, { note: pub });
   if (to === "cancelled" || to === "returned") await tierSyncFor(env, id, `order ${to}`);
+  await pointsSyncFor(env, id);
   return json(await getOrder(id, env));
 }
 
@@ -517,6 +521,11 @@ function validateProduct(b, partial) {
     if (b.loyalty_eligible === true || b.loyalty_eligible === 1) f.loyalty_eligible = 1;
     else if (b.loyalty_eligible === false || b.loyalty_eligible === 0) f.loyalty_eligible = 0;
     else errors.loyalty_eligible = "Invalid";
+  }
+  if (b.points_eligible !== undefined) { // does buying this product earn Rewards Membership points?
+    if (b.points_eligible === true || b.points_eligible === 1) f.points_eligible = 1;
+    else if (b.points_eligible === false || b.points_eligible === 0) f.points_eligible = 0;
+    else errors.points_eligible = "Invalid";
   }
   if (b.loyalty_max_pct !== undefined) { // ceiling for spending-tier discounts on this product (0 = none); blank = no ceiling
     if (b.loyalty_max_pct === null || b.loyalty_max_pct === "") f.loyalty_max_pct = null;
@@ -693,6 +702,7 @@ async function updateProduct(id, body, actor, env) {
   const { f, errors } = validateProduct(body, true);
   const cur = await env.DB.prepare(`SELECT ${PCOLS} FROM products WHERE id=?`).bind(id).first();
   if (cur && ("loyalty_eligible" in f || "loyalty_max_pct" in f)) Object.assign(cur, await env.DB.prepare("SELECT loyalty_eligible,loyalty_max_pct FROM products WHERE id=?").bind(id).first());
+  if (cur && "points_eligible" in f) Object.assign(cur, await env.DB.prepare("SELECT points_eligible FROM products WHERE id=?").bind(id).first());
   if (cur) preorderRule(f, cur, errors);
   if (Object.keys(errors).length) return json({ error: "Please fix the highlighted fields", fields: errors }, 400);
   if (!cur) return fail(404, "Product not found");
@@ -986,6 +996,11 @@ async function listMemberships(sp, env) {
 // Spend is derived from orders (see functions/lib/loyalty.js). Cancelling/returning an order drops it from spend automatically; a refund
 // reduces it in proportion; a manual correction is a signed, reasoned, audited delta, never an overwrite. Prices use the freshly
 // derived tier, so tier history (loyalty_tier_log) is a record, not an input.
+// Points follow the order: earned when it is delivered (or paid, per setting), reversed with refunds, cancellations and returns.
+// Reconciliation is idempotent, so calling it after any change is always safe; a failure never blocks the admin action.
+async function pointsSyncFor(env, orderId) {
+  try { await POINTS.reconcileOrder(env.DB, orderId); } catch (e) { console.error("points sync failed:", e && e.message); }
+}
 async function tierSyncFor(env, orderId, reason) {
   try {
     const o = await env.DB.prepare("SELECT user_id FROM orders WHERE id=?").bind(orderId).first();
@@ -1114,6 +1129,7 @@ async function refundOrder(id, body, actor, env) {
     if (res[0].meta.changes !== 1) return fail(409, "The order changed while you were working. Refresh and try again.");
   } catch { return fail(409, "This refund was already recorded"); }
   if (o.user_id) await LOYALTY.syncTier(env.DB, o.user_id, "refund recorded").catch(() => {});
+  await pointsSyncFor(env, id);
   return json({ ok: true, refunded_paise: o.refunded_paise + amount });
 }
 
@@ -1185,7 +1201,7 @@ const PUBLIC_ASSETS = { "/style.css": "/style.css", "/login.js": "/login.js" };
 const CRM_ASSETS = new Set(["/customers.js", "/crm-analytics.js", "/crm-campaigns.js", "/crm.css"]); // served only to signed-in admins
 
 export default {
-  async scheduled(_event, env, ctx) { ctx.waitUntil(crmScheduled(env)); },
+  async scheduled(_event, env, ctx) { ctx.waitUntil(Promise.all([crmScheduled(env), membershipTick(env).catch((e) => console.error('membership tick failed:', e && e.message))])); },
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
@@ -1283,6 +1299,8 @@ export default {
       if (method === "GET" && path === "/api/memberships") return await listMemberships(url.searchParams, env);
       const crm = await crmRoute({ env, actor, request, url, method, body, json, fail, sec: SEC_HEADERS });
       if (crm) return crm;
+      const mr = await membershipRoute({ env, actor, url, method, body, json, fail });
+      if (mr) return mr;
       return fail(404, "Not found");
     } catch (e) {
       console.error("admin error", e && e.message);

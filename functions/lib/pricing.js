@@ -91,10 +91,10 @@ function combinePct(paid, tier, mode) {
 
 // loyalty: null, or {pct, tier} for a customer whose spending tier currently earns a discount. Per product: only if
 // products.loyalty_eligible, and never above that product's loyalty_max_pct when set (0 = excluded).
-function priceCart(items, { products, live, state, member, settings, loyalty, campaigns }) {
+function priceCart(items, { products, live, state, member, settings, loyalty, campaigns, redeemPaise }) {
   if (!Array.isArray(items) || items.length < 1 || items.length > 30) return null;
   const s = settings || settingsFrom({});
-  let regular = 0, inclusive = 0, pieces = 0, list = 0, bulkOff = 0, memberOff = 0, qualifying = 0;
+  let regular = 0, inclusive = 0, pieces = 0, list = 0, bulkOff = 0, memberOff = 0, qualifying = 0, pointsElig = 0, memberSaving = 0;
   const lines = [];
   for (const item of items) {
     const product = products[item && item.id];
@@ -119,6 +119,10 @@ function priceCart(items, { products, live, state, member, settings, loyalty, ca
     pieces += product.fixed ? 70 : linePieces;
     list += price * qty; bulkOff += price * qty - afterBulk; memberOff += afterBulk - net;
     qualifying += product.allInclusive ? net / (1 + GST_PCT / 100) : net; // net product value without GST (all-inclusive prices carry it)
+    // Rewards Membership inputs (the caller decides whether points are live): the net value of lines that earn points, and what the PAID membership took off
+    // (a spending-tier discount is not a membership saving; when both apply, the line's discount is split in proportion to the two requests).
+    if (member && row && row.points_eligible !== 0) pointsElig += product.allInclusive ? net / (1 + GST_PCT / 100) : net;
+    if (mp.pct > 0 && paidReq > 0) memberSaving += (afterBulk - net) * (source === "both" ? paidReq / (paidReq + tierReq) : source === "membership" ? 1 : 0);
     lines.push({ id: item.id, qty, unitPrice: price, bulkPct: bulk, memberPct: mp.pct, requestedMemberPct: requested, source, limit: mp.limit, net, allInclusive: !!product.allInclusive });
   }
   // Cart milestones: `campaigns` are pre-filtered by the caller (active, in date, audience, limits). The best one the cart has reached applies,
@@ -143,7 +147,7 @@ function priceCart(items, { products, live, state, member, settings, loyalty, ca
     campaign = best.c;
     if (best.c.reward_type === "percent_off") {
       const f = 1 - Math.min(Number(best.c.reward_value) || 0, 20) / 100;
-      campaignOff = best.benefit; regular *= f; inclusive *= f; qualifying *= f;
+      campaignOff = best.benefit; regular *= f; inclusive *= f; qualifying *= f; pointsElig *= f;
     }
   }
   // The next milestone worth promising: unmet, and not a percentage reward that this cart's existing discounts would block.
@@ -153,12 +157,21 @@ function priceCart(items, { products, live, state, member, settings, loyalty, ca
   let shipping = baseShip(regular, inclusive);
   let shippingWaived = 0;
   if (campaign && campaign.reward_type === "free_shipping" && shipping > 0) { shippingWaived = shipping; shipping = 0; }
+  // Points redemption (already validated and capped by the caller against the balance and the per-order limit) is a discount on the
+  // taxable value, applied after every other discount. Shipping was decided above on the pre-redemption cart, so spending points can
+  // never push a cart under the free-shipping line.
+  let pointsOff = 0;
+  if (Number.isSafeInteger(redeemPaise) && redeemPaise > 0 && taxable > 0) {
+    pointsOff = Math.min(redeemPaise / 100, taxable * 0.5);
+    const f = 1 - pointsOff / taxable;
+    regular *= f; inclusive *= f; qualifying *= f; pointsElig *= f;
+  }
   const gst = Math.round(regular * GST_PCT / 100);
   const amount = Math.round(regular + gst + inclusive + shipping);
   if (!Number.isSafeInteger(amount) || amount < 1 || amount > 10000000) return null;
   const r2 = (x) => Math.round(x * 100) / 100;
   // qualifyingPaise: what this order is worth to the spending tiers (after discounts, without GST and shipping). Frozen on the order.
-  return { amount, pieces, gst, shipping, shippingPaise: Math.round(shipping * 100), qualifyingPaise: Math.round(qualifying * 100), subtotal: r2(list), bulkDiscount: r2(bulkOff), memberDiscount: r2(memberOff), memberDiscountPaise: Math.round(memberOff * 100), member: memberOff > 0.004,
+  return { pointsBasisPaise: Math.round(pointsElig * 100), pointsDiscountPaise: Math.round(pointsOff * 100), memberSavingPaise: Math.round(memberSaving * 100), amount, pieces, gst, shipping, shippingPaise: Math.round(shipping * 100), qualifyingPaise: Math.round(qualifying * 100), subtotal: r2(list), bulkDiscount: r2(bulkOff), memberDiscount: r2(memberOff), memberDiscountPaise: Math.round(memberOff * 100), member: memberOff > 0.004,
     campaign: campaign ? { id: campaign.id, name: campaign.name, type: campaign.reward_type, value: Number(campaign.reward_value) || 0 } : null,
     campaignDiscountPaise: Math.round(campaignOff * 100 + shippingWaived * 100), campaignNote,
     nextCampaign: nextCampaign ? { id: nextCampaign.id, name: nextCampaign.name, type: nextCampaign.reward_type, value: Number(nextCampaign.reward_value) || 0, remainingPaise: Math.round(nextCampaign.threshold_paise - cartValue * 100) } : null,
