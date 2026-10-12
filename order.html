@@ -293,6 +293,7 @@
           <!-- QR + Pay -->
           <div class="qc-pay">
 
+            <p class="pay-error" id="payError" role="alert" hidden></p>
             <!-- Payment method tabs -->
             <div class="pay-tabs" role="tablist" aria-label="Payment method">
               <button type="button" class="pay-tab tab-upi active" id="tabUpi" data-paytab="upi" role="tab"
@@ -514,9 +515,17 @@
       try { localStorage.setItem("ntagz_pending_order", JSON.stringify(snap)); } catch (e) {}
     }
 
+    // Inline message instead of a blocking alert(); cleared when the customer tries again or changes payment method.
+    function showPayError(msg) {
+      var e = document.getElementById("payError");
+      e.textContent = msg; e.hidden = !msg;
+      if (msg) e.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+    document.querySelectorAll(".pay-tab").forEach(function(t) { t.addEventListener("click", function() { showPayError(""); }); });
+
     var rzpButton = document.getElementById("rzpPayNow");
     rzpButton.addEventListener("click", function() {
-      if (!orderItems().length) { alert("Please add products to your order first."); return; }
+      if (!orderItems().length) { showPayError("Please add products to your order first."); return; }
       var button = this;
       button.setAttribute("aria-disabled", "true");
       snapshotOrder();
@@ -560,7 +569,7 @@
       })
       .catch(function(err) {
         button.removeAttribute("aria-disabled");
-        alert(err.message || "Failed to create order. Please try again.");
+        showPayError(err.message || "Failed to create order. Please try again.");
       });
     });
 
@@ -569,9 +578,9 @@
       var email = document.getElementById("payuEmail");
       var name = document.getElementById("customerName").value.trim();
       var phone = document.getElementById("customerNumber").value.trim();
-      if (!items.length) { alert("Please add products to your order first."); return; }
+      if (!items.length) { showPayError("Please add products to your order first."); return; }
       if (!name || !/^\d{10}$/.test(phone.replace(/\D/g, "").slice(-10)) || !email.reportValidity()) {
-        if (!name || !phone) alert("Enter your name and 10-digit phone number before paying.");
+        if (!name || !phone) showPayError("Enter your name and 10-digit phone number before paying.");
         return;
       }
       var button = this;
@@ -592,7 +601,7 @@
           document.body.appendChild(form);
           form.submit();
         })
-        .catch(function(err) { button.disabled = false; alert(err.message || "Could not start PayU checkout."); });
+        .catch(function(err) { button.disabled = false; showPayError(err.message || "Could not start PayU checkout."); });
     });
 
     // GSTIN inline validation

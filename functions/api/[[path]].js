@@ -620,7 +620,7 @@ async function handleAccounts(url, request, env, allowedOrigin) {
   if (method === "GET" && path.endsWith("/accounts/me")) {
     const u = await getSession(request, env);
     if (!u) return jsonAuth({ error: "Not authenticated" }, 401, allowedOrigin);
-    return jsonAuth({ user: { email: u.email, name: u.name, phone: u.phone, gstin: u.gstin, loyaltySpend: u.loyalty_spend, loyaltyTier: u.loyalty_tier } }, 200, allowedOrigin);
+    return jsonAuth({ user: { email: u.email, name: u.name, phone: u.phone, gstin: u.gstin } }, 200, allowedOrigin);
   }
 
   // PUT /api/accounts/me
@@ -957,9 +957,6 @@ async function finalizeOrder(env, txnId, paymentRef, verifiedPaise, gateway) {
         `INSERT INTO payments (id,order_id,method,amount_paise,recorded_by,idempotency_key,reference)
          SELECT ?,id,?,?,'gateway',?,? FROM orders WHERE id=? AND changes()=1`
       ).bind(crypto.randomUUID(), intent.gateway, intent.amount_paise, String(paymentRef || txnId).slice(0, 64), String(paymentRef || "").slice(0, 128) || null, oid),
-      env.DB.prepare(
-        "UPDATE users SET loyalty_spend=loyalty_spend+?1, loyalty_tier=CASE WHEN loyalty_spend+?1>=1000000 THEN 'pro' ELSE loyalty_tier END WHERE id=?2 AND changes()=1"
-      ).bind(intent.amount_paise, intent.user_id),
       // keep the intent unless the order really exists (INSERT OR IGNORE swallows constraint errors), so a retry can finish the job
       env.DB.prepare("DELETE FROM checkout_intents WHERE txn_id=?1 AND EXISTS (SELECT 1 FROM orders WHERE txn_id=?1)").bind(txnId),
       ...stockStatements(env, oid, txnId, JSON.parse(intent.items_json || "[]")),

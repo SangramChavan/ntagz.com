@@ -46,9 +46,9 @@ global.fetch = async (url, opts) => {
   sqlite.exec("INSERT INTO users (id,email) VALUES ('u1','u1@example.test'); INSERT INTO sessions (id,user_id,expires_at) VALUES ('session-abc-12345','u1',9999999999)");
   r = await req("/api/create-order", { items, ...cust, quoteRef: "QT-222222" }, { Cookie: "ntagz_session=session-abc-12345" }); const rz2 = await r.json();
   await req("/api/verify-payment", { razorpay_order_id: rz2.id, razorpay_payment_id: "pay_2", razorpay_signature: await hmac("rzp_secret", `${rz2.id}|pay_2`) });
-  assert.equal(one("SELECT user_id FROM orders WHERE txn_id=?", rz2.id).user_id, "u1"); assert.equal(one("SELECT loyalty_spend s FROM users WHERE id='u1'").s, 39400);
+  assert.equal(one("SELECT user_id FROM orders WHERE txn_id=?", rz2.id).user_id, "u1"); assert.equal(one("SELECT loyalty_spend s FROM users WHERE id='u1'").s, 0);
   await req("/api/verify-payment", { razorpay_order_id: rz2.id, razorpay_payment_id: "pay_2", razorpay_signature: await hmac("rzp_secret", `${rz2.id}|pay_2`) });
-  assert.equal(one("SELECT loyalty_spend s FROM users WHERE id='u1'").s, 39400); ok("order linked to logged-in user; loyalty added once");
+  assert.equal(one("SELECT loyalty_spend s FROM users WHERE id='u1'").s, 0); assert.equal(one("SELECT count(*) c FROM orders WHERE txn_id=?", rz2.id).c, 1); ok("order linked to logged-in user once; the legacy loyalty_spend counter is no longer written (spend is derived from orders)");
 
   // ── PayU ──
   r = await req("/api/payu/checkout", { items, ...cust, quoteRef: "QT-333333" }); assert.equal(r.status, 200); const pu = await r.json();
