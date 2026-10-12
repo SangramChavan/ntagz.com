@@ -20,7 +20,9 @@ const resetTiersCache = () => { tiersCache = { db: null, at: 0, tiers: null }; }
 async function loadTiers(db) {
   const now = Date.now();
   if (tiersCache.db === db && now - tiersCache.at < 30000 && tiersCache.tiers) return tiersCache.tiers;
-  const { results } = await db.prepare("SELECT id,name,min_spend_paise,discount_pct,sort_order,perks FROM loyalty_tiers WHERE active=1 ORDER BY min_spend_paise, sort_order").all();
+  let results;
+  try { ({ results } = await db.prepare("SELECT id,name,min_spend_paise,discount_pct,points_per_100,sort_order,perks FROM loyalty_tiers WHERE active=1 ORDER BY min_spend_paise, sort_order").all()); }
+  catch { ({ results } = await db.prepare("SELECT id,name,min_spend_paise,discount_pct,NULL AS points_per_100,sort_order,perks FROM loyalty_tiers WHERE active=1 ORDER BY min_spend_paise, sort_order").all()); } // before migration 0015
   tiersCache = { db, at: now, tiers: results };
   return results;
 }
@@ -64,6 +66,7 @@ function validateTiers(list) {
     name: typeof t.name === "string" ? t.name.trim() : "",
     min_spend_paise: Number.isSafeInteger(t.min_spend_paise) ? t.min_spend_paise : null,
     discount_pct: typeof t.discount_pct === "number" && Number.isFinite(t.discount_pct) ? Math.round(t.discount_pct * 100) / 100 : null,
+    points_per_100: t.points_per_100 === null || t.points_per_100 === undefined ? null : typeof t.points_per_100 === "number" && Number.isFinite(t.points_per_100) ? Math.round(t.points_per_100 * 100) / 100 : NaN,
     active: t.active === false || t.active === 0 ? 0 : 1,
     perks: typeof t.perks === "string" ? t.perks.trim().slice(0, 300) : "",
     sort_order: i,
@@ -74,6 +77,7 @@ function validateTiers(list) {
     if (!t.id) errors.push(`${at}: invalid id`); else if (seen.has(t.id)) errors.push(`${at}: duplicate id`); else seen.add(t.id);
     if (t.name.length < 2 || t.name.length > 30) errors.push(`${at}: name must be 2–30 characters`);
     if (t.min_spend_paise === null || t.min_spend_paise < 0 || t.min_spend_paise > 100_000_000_00) errors.push(`${at}: threshold must be a whole number of paise, 0 or more`);
+    if (Number.isNaN(t.points_per_100) || (t.points_per_100 !== null && (t.points_per_100 < 0 || t.points_per_100 > 100))) errors.push(`${at}: points per ₹100 must be 0–100`);
     if (t.discount_pct === null || t.discount_pct < 0 || t.discount_pct > 50) errors.push(`${at}: discount must be 0–50%`);
   });
   const act = tiers.filter((t) => t.active);

@@ -56,6 +56,7 @@ function settingsFrom(cfg = {}) {
     // discount meet on one product: "best_of" (customer gets the higher one, default) or "stack" (both, still under the cap).
     loyaltyLive: cfg.loyalty_live === "1",
     loyaltyCombine: cfg.loyalty_combine === "stack" ? "stack" : "best_of",
+    checkoutOffer: cfg.checkout_offer === "1", // offer membership inside checkout (needs migration 0016)
   };
 }
 

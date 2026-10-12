@@ -67,8 +67,10 @@ function overview() {
   const d = M.data, s = d.settings, a = M.ovAn, live = s.live;
   const sw = switchBtn(live, "Rewards points", "Rewards ON: points are earned and can be redeemed", "Rewards OFF: nothing earns or redeems", toggleLive);
   const err = el("p", { class: "msg", id: "mb-live-err", role: "alert" });
+  const offerOn = d.raw.checkout_offer === "1";
+  const offerSw = switchBtn(offerOn, "Membership offer at checkout", "Offer ON: customers whose cart would be cheaper with membership see an optional offer", "Offer OFF: checkout never mentions membership", toggleOffer);
   return el("section", { class: "pcard" },
-    el("div", { class: "pcard-head" }, el("h2", {}, "Overview"), sw), err,
+    el("div", { class: "pcard-head" }, el("h2", {}, "Overview"), sw), err, el("div", { class: "pcard-head" }, el("span", {}, "Optional membership offer in checkout"), offerSw),
     el("div", { class: "ca-tiles" },
       tile("Active members", num(d.counts.active_members)),
       tile("Expiring in 30 / 60 days", a ? `${a.memberships.expiring_30d} / ${a.memberships.expiring_60d}` : "—", "Members with no renewal queued"),
@@ -84,6 +86,16 @@ async function toggleLive() {
   if (d.warnings.length) lines.push("Warnings: " + d.warnings.join(" · "));
   if (!(await ask(next ? "Turn rewards ON?" : "Turn rewards OFF?", lines, next ? "Turn ON" : "Turn OFF", !next))) return;
   try { M.data = await call("/api/points/settings", { version: d.version, settings: { pts_live: next } }); toast(next ? "Rewards are ON." : "Rewards are OFF."); M.ovAn = await call("/api/points/analytics?range=30d").catch(() => M.ovAn); render(); }
+  catch (e) { err.textContent = e.message; toast(e.message, true); }
+}
+
+async function toggleOffer() {
+  const d = M.data, next = d.raw.checkout_offer !== "1", err = $("mb-live-err");
+  err.textContent = "";
+  const lines = next ? ["Customers whose cart would be cheaper with member prices will see an optional offer to add membership in checkout.", `Fee ${inr(d.plan.fee_paise)} for ${d.plan.duration_days} days, paid with the order. Member pricing must be live (Pricing page) for the offer to appear.`]
+    : ["Checkout stops offering membership. Memberships already bought are not affected."];
+  if (!(await ask(next ? "Turn the checkout membership offer ON?" : "Turn the checkout membership offer OFF?", lines, next ? "Turn ON" : "Turn OFF", !next))) return;
+  try { M.data = await call("/api/points/settings", { version: d.version, settings: { checkout_offer: next } }); toast(next ? "Checkout offer is ON." : "Checkout offer is OFF."); render(); }
   catch (e) { err.textContent = e.message; toast(e.message, true); }
 }
 

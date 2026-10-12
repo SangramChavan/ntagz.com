@@ -29,6 +29,11 @@ function settingsFrom(cfg) {
     noticeDays: [...new Set(notice)].sort((a, b) => b - a).slice(0, 4),
   };
 }
+// Points earned: basis x (paid - refunded)/paid x rate. rateX100 = points per Rs 100 x 100, frozen on the order (null = pre-tier order: flat rate).
+const earnedPoints = (st, basisPaise, paid, refunded, rateX100) =>
+  Math.floor((basisPaise * (paid - Math.min(refunded, paid)) * (Number.isInteger(rateX100) ? rateX100 : st.earnPer100 * 100)) / (paid * 1000000));
+// The rate a new order earns at: the customer's tier rate when it has one, else the flat rate. Returns points-per-100 x 100.
+const rateX100For = (st, tier) => Math.round((tier && tier.points_per_100 !== null && tier.points_per_100 !== undefined ? Number(tier.points_per_100) : st.earnPer100) * 100);
 async function loadSettings(db) {
   const { results } = await db.prepare("SELECT key,value FROM membership_config WHERE key LIKE 'pts_%' OR key LIKE 'renew_%'").all();
   return settingsFrom(Object.fromEntries(results.map((r) => [r.key, r.value])));
@@ -43,7 +48,7 @@ function validateSettings(s) {
   if (s.pts_max_redeem_pct !== undefined) { const n = Number(s.pts_max_redeem_pct); if (!Number.isFinite(n) || n < 0 || n > 50) errors.push("Maximum redemption must be 0–50%"); else v.pts_max_redeem_pct = String(n); }
   int("pts_min_order_paise", "Minimum qualifying order (paise)", 0, 100000000); int("pts_valid_days", "Point validity (days)", 1, 3650); int("renew_window_days", "Renewal window (days)", 0, 365);
   if (s.pts_earn_on !== undefined) { if (!["delivered", "paid"].includes(s.pts_earn_on)) errors.push("Points are earned on 'delivered' or 'paid'"); else v.pts_earn_on = s.pts_earn_on; }
-  for (const k of ["pts_restore_on_cancel", "pts_clawback"]) if (s[k] !== undefined) { if (typeof s[k] !== "boolean") errors.push(`${k} must be on or off`); else v[k] = s[k] ? "1" : "0"; }
+  for (const k of ["pts_restore_on_cancel", "pts_clawback", "checkout_offer"]) if (s[k] !== undefined) { if (typeof s[k] !== "boolean") errors.push(`${k} must be on or off`); else v[k] = s[k] ? "1" : "0"; }
   if (s.renew_notice_days !== undefined) {
     const l = String(s.renew_notice_days).split(",").map((x) => x.trim()).filter(Boolean);
     if (l.length > 4 || !l.every((x) => /^\d{1,3}$/.test(x) && Number(x) >= 1 && Number(x) <= 365)) errors.push("Expiry notices: up to 4 day-counts from 1 to 365, e.g. 30,7"); else v.renew_notice_days = l.join(",");
@@ -106,7 +111,10 @@ const reserve = (db, userId, txnId, points) => [
 // ── Reconcile ────────────────────────────────────────────────────────────────────────────────────────────────
 const nowS = () => Math.floor(Date.now() / 1000);
 async function reconcileOrder(db, orderId, s) {
-  const o = await db.prepare("SELECT id,user_id,status,payment_status,paid_paise,refunded_paise,points_basis_paise,points_redeemed FROM orders WHERE id=?").bind(orderId).first();
+  const cols = "id,user_id,status,payment_status,paid_paise,refunded_paise,points_basis_paise,points_redeemed";
+  let o;
+  try { o = await db.prepare(`SELECT ${cols},points_rate_x100 FROM orders WHERE id=?`).bind(orderId).first(); }
+  catch { o = await db.prepare(`SELECT ${cols} FROM orders WHERE id=?`).bind(orderId).first(); } // before migration 0015: flat rate
   if (!o || !o.user_id) return { changed: 0 };
   const st = s || (await loadSettings(db));
   const paid = o.payment_status === "paid" && o.paid_paise > 0, dead = ["cancelled", "returned"].includes(o.status);
@@ -121,7 +129,7 @@ async function reconcileOrder(db, orderId, s) {
   // 2. points earned: exactly what the order is worth now
   const credited = st.earnOn === "paid" || o.status === "delivered";
   const desired = paid && !dead && credited && o.points_basis_paise > 0
-    ? Math.floor((o.points_basis_paise * (o.paid_paise - Math.min(o.refunded_paise, o.paid_paise)) * st.earnPer100) / (o.paid_paise * 10000)) : 0;
+    ? earnedPoints(st, o.points_basis_paise, o.paid_paise, o.refunded_paise, o.points_rate_x100) : 0;
   const cur = await db.prepare("SELECT coalesce(sum(points),0) s, count(*) n FROM points_ledger WHERE order_id=? AND kind IN ('earn','reverse')").bind(o.id).first();
   if (desired !== cur.s) {
     const d = desired - cur.s;
@@ -167,6 +175,12 @@ async function reconcileUser(db, userId, s) {
 }
 
 // ── Customer summary (dashboard) ─────────────────────────────────────────────────────────────────────────────
+// Orders still to earn points. points_rate_x100 exists from migration 0015; before it every order earns at the flat rate.
+const pendingOrders = (db, userId) => {
+  const q = (col) => db.prepare(`SELECT points_basis_paise b, paid_paise p, refunded_paise r, ${col} x FROM orders WHERE user_id=? AND points_basis_paise>0 AND payment_status='paid' AND paid_paise>0
+        AND status NOT IN ('cancelled','returned','delivered')`).bind(userId).all();
+  return q("points_rate_x100").catch(() => q("NULL"));
+};
 async function summary(db, userId, s) {
   const st = s || (await loadSettings(db)), now = nowS();
   const [bal, mem, tot, pend, sav, fee, last] = await Promise.all([
@@ -174,15 +188,14 @@ async function summary(db, userId, s) {
     db.prepare(`SELECT coalesce(sum(CASE WHEN kind IN ('earn','restore') THEN points END),0) earned, coalesce(sum(CASE WHEN kind='bonus' THEN points END),0) bonus,
         coalesce(-sum(CASE WHEN kind='redeem' THEN points END),0) redeemed, coalesce(-sum(CASE WHEN kind='expire' THEN points END),0) expired,
         coalesce(-sum(CASE WHEN kind IN ('reverse','bonus_reverse') THEN points END),0) reversed FROM points_ledger WHERE user_id=?`).bind(userId).first(),
-    db.prepare(`SELECT points_basis_paise b, paid_paise p, refunded_paise r FROM orders WHERE user_id=? AND points_basis_paise>0 AND payment_status='paid' AND paid_paise>0
-        AND status NOT IN ('cancelled','returned','delivered')`).bind(userId).all(),
+    pendingOrders(db, userId),
     db.prepare(`SELECT coalesce(sum(member_saving_paise * (paid_paise - min(refunded_paise, paid_paise)) / paid_paise),0) member_savings, coalesce(sum(points_discount_paise * (paid_paise - min(refunded_paise, paid_paise)) / paid_paise),0) redeemed_value,
         coalesce(sum(CASE WHEN points_basis_paise>0 THEN points_basis_paise * (paid_paise - min(refunded_paise, paid_paise)) / paid_paise END),0) eligible_spend, count(*) orders
         FROM orders WHERE user_id=? AND payment_status='paid' AND paid_paise>0 AND status NOT IN ('cancelled','returned')`).bind(userId).first(),
     db.prepare("SELECT coalesce(sum(price_paid),0) fee FROM memberships WHERE user_id=? AND status IN ('active','expired')").bind(userId).first(),
     db.prepare("SELECT max(expires_at) expires_at FROM memberships WHERE user_id=? AND status IN ('active','expired')").bind(userId).first(),
   ]);
-  const pending = st.earnOn === "paid" ? 0 : pend.results.reduce((a, o) => a + Math.floor((o.b * (o.p - Math.min(o.r, o.p)) * st.earnPer100) / (o.p * 10000)), 0);
+  const pending = st.earnOn === "paid" ? 0 : pend.results.reduce((a, o) => a + earnedPoints(st, o.b, o.p, o.r, o.x), 0);
   const memberSavings = Math.round(sav.member_savings), redeemedValue = Math.round(sav.redeemed_value);
   let spend = 0, ladder = [];
   if (mem) {
@@ -207,4 +220,4 @@ async function activity(db, userId, before, limit = 30) {
   return { entries: results.slice(0, limit).map((r) => ({ ...r, order_ref: r.order_id ? r.order_id.slice(0, 8) : null })), more };
 }
 
-module.exports = { RESERVE_TTL, settingsFrom, loadSettings, validateSettings, balance, sweepExpiry, planRedemption, reserve, reconcileOrder, reconcileUser, currentMembership, milestoneSpend, summary, activity };
+module.exports = { earnedPoints, rateX100For, RESERVE_TTL, settingsFrom, loadSettings, validateSettings, balance, sweepExpiry, planRedemption, reserve, reconcileOrder, reconcileUser, currentMembership, milestoneSpend, summary, activity };

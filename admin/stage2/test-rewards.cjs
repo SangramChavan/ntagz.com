@@ -54,8 +54,11 @@ function harness(db, adminWorker) {
 
   // ── defaults, public tiers, new customer ──
   let t = await (await P("/api/rewards/tiers")).json();
-  assert.equal(t.live, false); assert.deepEqual(t.tiers.map((x) => [x.name, x.minSpendPaise, x.discountPct]), [["Free", 0, 0], ["Silver", 100000, 3], ["Gold", 300000, 5], ["Platinum", 1000000, 8]]);
-  ok("defaults: Free 0% / Silver ₹1,000 3% / Gold ₹3,000 5% / Platinum ₹10,000 8%; rewards start OFF");
+  assert.equal(t.live, false); assert.deepEqual(t.tiers.map((x) => [x.name, x.minSpendPaise, x.discountPct, x.pointsPer100]), [["Free", 0, 0, null], ["Silver", 500000, 0, 3], ["Gold", 2500000, 0, 5], ["Diamond", 5000000, 0, 10]]);
+  ok("defaults: Silver ₹5,000 3 pts / Gold ₹25,000 5 pts / Diamond ₹50,000 10 pts per ₹100, no tier discount; rewards start OFF");
+  // The checks below exercise tier DISCOUNT mechanics with small amounts, so they run on a legacy-style tier ladder.
+  sqlite.exec("UPDATE loyalty_tiers SET active=0 WHERE id='diamond'; UPDATE loyalty_tiers SET active=1, min_spend_paise=100000, discount_pct=3 WHERE id='silver'; UPDATE loyalty_tiers SET min_spend_paise=300000, discount_pct=5 WHERE id='gold'; UPDATE loyalty_tiers SET active=1 WHERE id='platinum'");
+  LOYALTY.resetTiersCache(); payments.resetPricingCache();
   const u1 = user();
   let m = await me(u1); assert.equal(m.tier.id, "free"); assert.equal(m.spendPaise, 0); assert.equal(m.next.id, "silver"); assert.equal(m.next.remainingPaise, 100000); assert.equal(m.topTier, false);
   assert.equal((await P("/api/rewards/me")).status, 401); ok("new customer is Free with ₹1,000 to Silver; signed-out gets 401");
@@ -231,7 +234,7 @@ function harness(db, adminWorker) {
   sqlite.prepare("UPDATE products SET cost_paise=1950 WHERE id='nfc-coin'").run(); const wl = (await A("/api/campaigns")).d.campaigns.find((c) => c.name === "5% off from ₹300"); assert.ok(wl.warnings.length === 1 && /minimum margin/.test(wl.warnings[0])); ok("percentage rewards warn the admin when they would cut below the minimum margin");
 
   // ── legacy data and an un-migrated database ──
-  const old = makeDb({ exclude: ["0012_rewards.sql"] }); const OH = harness(old, admin);
+  const old = makeDb({ exclude: ["0012_rewards.sql", "0015_tier_points.sql"] }); const OH = harness(old, admin);
   old.sqlite.exec("UPDATE products SET track_stock=0");
   const lu = OH.user("legacy@example.test");
   // checkout still works (rewards schema absent) and records the order the old way

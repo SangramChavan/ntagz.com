@@ -5,7 +5,7 @@ import POINTS from "../../functions/lib/points.js";
 import { permsOf, rangeOf, auditStmt, sanitiseText, likeOf, now, EMAIL_RE } from "./crm/common.js";
 
 const DAY = 86400;
-const SETTING_KEYS = ["pts_live", "pts_earn_per_100", "pts_value_paise", "pts_min_redeem", "pts_max_redeem_pct", "pts_min_order_paise", "pts_valid_days", "pts_earn_on", "pts_restore_on_cancel", "pts_clawback", "renew_window_days", "renew_notice_days"];
+const SETTING_KEYS = ["checkout_offer", "pts_live", "pts_earn_per_100", "pts_value_paise", "pts_min_redeem", "pts_max_redeem_pct", "pts_min_order_paise", "pts_valid_days", "pts_earn_on", "pts_restore_on_cancel", "pts_clawback", "renew_window_days", "renew_notice_days"];
 
 async function state(env) {
   const [cfg, ms, counts, prods] = await Promise.all([

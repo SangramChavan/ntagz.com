@@ -13,3 +13,18 @@
 .pts-note:empty{display:none}
 .pts-earn{margin-top:8px;font-size:13px;font-weight:600;color:var(--green,#1a7f37)}
 .pts [hidden]{display:none!important}
+
+/* Checkout: optional membership offer. Display only; the server prices and decides. */
+.mo{margin:12px 0 4px;padding:14px 16px;border:1px solid var(--paper,#e5e5ea);border-radius:14px;background:var(--cream,#fff)}
+.mo-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 12px;font-size:15px}
+.mo-head span{color:var(--ink-3,#6b6b70)}
+.mo-rows{margin:10px 0 0}
+.mo-row{display:flex;justify-content:space-between;gap:12px;padding:4px 0;font-size:14px}
+.mo-row dt{color:var(--ink-3,#6b6b70)}.mo-row dd{margin:0;font-weight:600}
+.mo-row.strong dt{color:var(--ink,#1d1d1f)}
+.mo-net{margin-top:10px;font-size:14px;font-weight:600}
+.mo-net.good{color:var(--green,#1a7f37)}
+.mo-terms{margin-top:6px;font-size:13px;color:var(--ink-3,#6b6b70)}
+.mo-acts{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.mo-acts .btn,.mo .btn{min-height:44px}
+@media(min-width:560px){.mo-acts{flex-direction:row}}

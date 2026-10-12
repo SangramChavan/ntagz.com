@@ -37,11 +37,13 @@ function tiersCard() {
     name.oninput = () => { t.name = name.value; RW.dirty = true; };
     th.oninput = () => { t.min_spend_paise = toPaise(th.value); RW.dirty = true; };
     off.oninput = () => { t.discount_pct = Number(off.value); RW.dirty = true; };
+    const pts = el("input", { value: t.points_per_100 == null ? "" : String(t.points_per_100), inputmode: "decimal", placeholder: "flat rate", "aria-label": "Points per 100 rupees" });
+    pts.oninput = () => { t.points_per_100 = pts.value.trim() === "" ? null : Number(pts.value); RW.dirty = true; };
     perks.oninput = () => { t.perks = perks.value; RW.dirty = true; };
     act.onchange = () => { t.active = act.checked; RW.dirty = true; };
     return el("div", { class: "prow rw-row" },
       el("div", { class: "grow" }, field("Name", name)),
-      el("div", { class: "rw-two" }, field("From spend (₹)", th), field("Discount %", off)),
+      el("div", { class: "rw-two" }, field("From spend (₹)", th), field("Discount %", off), field("Points per ₹100", pts)),
       field("Shown to customers", perks),
       el("label", { class: "chk" }, act, " Active", t.min_spend_paise === 0 ? el("span", { class: "hint" }, "  (the base tier, must start at ₹0)") : ""));
   });
@@ -53,7 +55,7 @@ function tiersCard() {
 
 async function saveRewardsAll() {
   if (RW.busy) return;
-  const tiers = RW.tiers.map((t) => ({ id: t.id, name: String(t.name || "").trim(), min_spend_paise: t.min_spend_paise, discount_pct: Number(t.discount_pct), active: t.active, perks: t.perks || "" }));
+  const tiers = RW.tiers.map((t) => ({ id: t.id, name: String(t.name || "").trim(), min_spend_paise: t.min_spend_paise, discount_pct: Number(t.discount_pct), points_per_100: t.points_per_100 == null ? null : Number(t.points_per_100), active: t.active, perks: t.perks || "" }));
   const lines = [`${tiers.filter((t) => t.active).length} active tiers: ${tiers.filter((t) => t.active).map((t) => `${t.name} from ${inr(t.min_spend_paise)} at ${t.discount_pct}%`).join(", ")}.`,
     RW.settings.live ? "Rewards will be ON: customers with a tier discount get it on eligible products straight away." : "Rewards will be OFF: nobody gets a tier discount."];
   if (!(await ask("Save rewards settings?", lines, "Save"))) return;

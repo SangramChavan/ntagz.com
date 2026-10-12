@@ -282,7 +282,7 @@ async function pricedCart(env, request, member, items, state, pricing, campaigns
   const userId = member && member.paid !== false ? member.userId : null;
   let st = null;
   if (userId) { try { if (await hasPointsSchema(env)) st = await POINTS.loadSettings(env.DB); } catch (e) { console.error("points settings unavailable:", e && e.message); } }
-  const none = () => { t0.pointsBasisPaise = 0; t0.pointsRedeemed = 0; t0.pointsDiscountPaise = 0; t0.memberSavingPaise = member && member.paid !== false ? t0.memberSavingPaise : 0; return { total: t0, points: null }; };
+  const none = () => { t0.pointsRateX100 = null; t0.pointsBasisPaise = 0; t0.pointsRedeemed = 0; t0.pointsDiscountPaise = 0; t0.memberSavingPaise = member && member.paid !== false ? t0.memberSavingPaise : 0; return { total: t0, points: null }; };
   if (!st || !st.live) { if (Number(redeemRequested) > 0) return { error: "Rewards points are not available right now", status: 409 }; return none(); }
   const eligible = t0.pointsBasisPaise >= st.minOrderPaise ? t0.pointsBasisPaise : 0;
   const bal = await POINTS.balance(env.DB, userId);
@@ -296,9 +296,13 @@ async function pricedCart(env, request, member, items, state, pricing, campaigns
   total.pointsRedeemed = used.points;
   total.pointsBasisPaise = total.pointsBasisPaise >= st.minOrderPaise ? total.pointsBasisPaise : 0;
   const cap = Math.floor((eligible * st.maxRedeemPct) / 100 / st.valuePaise);
+  // The earn rate is the customer's spending tier's (derived now, frozen on the order); pre-tier or tier-less = the flat rate.
+  let tier = member && member.loyalty ? member.loyalty.tier : null;
+  if (!tier) { try { tier = (await LOYALTY.loyaltyContext(env.DB, userId, { loyaltyLive: false })).tier; } catch (e) { console.error("tier unavailable:", e && e.message); } }
+  total.pointsRateX100 = POINTS.rateX100For(st, tier);
   return { total, points: { available: bal.available, valuePaise: st.valuePaise, minRedeem: st.minRedeem, maxRedeemPct: st.maxRedeemPct,
     maxUsable: Math.max(0, Math.min(bal.available, cap)), redeemed: used.points, discountPaise: total.pointsDiscountPaise, note: used.reason,
-    willEarn: Math.floor((total.pointsBasisPaise * st.earnPer100) / 10000), earnOn: st.earnOn } };
+    willEarn: Math.floor((total.pointsBasisPaise * total.pointsRateX100) / 1000000), ratePer100: total.pointsRateX100 / 100, earnOn: st.earnOn } };
 }
 
 // {settings, paid, loyalty} for a signed-in customer who earns a price benefit: an unexpired active paid membership (while member
@@ -328,12 +332,12 @@ async function handleRewards(url, request, env, allowedOrigin) {
   if (request.method !== "GET") return jsonAuth({ error: "Method not allowed" }, 405, allowedOrigin);
   try {
     const settings = await loadMemberSettings(env), tiers = await LOYALTY.loadTiers(env.DB);
-    const publicTiers = tiers.map((t) => ({ id: t.id, name: t.name, minSpendPaise: t.min_spend_paise, discountPct: Number(t.discount_pct), perks: t.perks }));
+    const publicTiers = tiers.map((t) => ({ id: t.id, name: t.name, minSpendPaise: t.min_spend_paise, discountPct: Number(t.discount_pct), pointsPer100: t.points_per_100 === null || t.points_per_100 === undefined ? null : Number(t.points_per_100), perks: t.perks }));
     if (url.pathname.endsWith("/rewards/tiers")) {
       const now = Math.floor(Date.now() / 1000);
       const milestones = (await loadCampaigns(env)).filter((c) => (!c.starts_at || now >= c.starts_at) && (!c.ends_at || now <= c.ends_at))
         .map((c) => ({ id: c.id, name: c.name, thresholdPaise: c.threshold_paise, type: c.reward_type, value: Number(c.reward_value) || 0, audience: c.audience }));
-      const res = jsonAuth({ live: settings.loyaltyLive, combine: settings.loyaltyCombine, tiers: publicTiers, milestones }, 200, allowedOrigin);
+      const res = jsonAuth({ live: settings.loyaltyLive, combine: settings.loyaltyCombine, checkoutOffer: settings.checkoutOffer, tiers: publicTiers, milestones }, 200, allowedOrigin);
       res.headers.set("Cache-Control", "public, max-age=300");
       return res;
     }
@@ -777,10 +781,79 @@ function cleanDetails(b) {
 
 // Rewards Membership fields of a checkout intent (frozen so the order gets exactly what the customer was shown), plus the hold on the
 // points being spent. Empty until migration 0014 is applied.
+// migration 0015 (tier points rate) may land after the code: until it does, orders simply earn at the flat rate.
+let rateSchema = { db: null, at: 0, ok: false };
+async function hasRateSchema(env) {
+  if (rateSchema.db === env.DB && (rateSchema.ok || Date.now() - rateSchema.at < 60000)) return rateSchema.ok;
+  let ok = false;
+  try { ok = !!(await env.DB.prepare("SELECT 1 x FROM pragma_table_info('checkout_intents') WHERE name='points_rate_x100'").first()); } catch { ok = false; }
+  rateSchema = { db: env.DB, at: Date.now(), ok };
+  return ok;
+}
+
+// Does this database have orders.membership_fee_paise (migration 0016: membership inside checkout)?
+let ckSchema = { db: null, at: 0, ok: false };
+async function hasCheckoutMembershipSchema(env) {
+  if (ckSchema.db === env.DB && (ckSchema.ok || Date.now() - ckSchema.at < 60000)) return ckSchema.ok;
+  let ok = false;
+  try { ok = !!(await env.DB.prepare("SELECT 1 x FROM pragma_table_info('orders') WHERE name='membership_fee_paise'").first()); } catch { ok = false; }
+  ckSchema = { db: env.DB, at: Date.now(), ok };
+  return ok;
+}
+
+// ── Membership inside checkout ───────────────────────────────────────────────
+// The browser may only ASK (`membership: "add"`). The server decides whether that is allowed, adds the configured fee, and prices the
+// merchandise as a paid member would pay. The fee sits outside every discount, GST rule and points basis.
+async function membershipAdd(env, request, base) {
+  const settings = await loadMemberSettings(env);
+  if (!settings.checkoutOffer || !settings.live) return { error: "Membership can't be added at checkout right now", status: 409 };
+  if (settings.feePaise < 100 || settings.feePaise % 100) return { error: "Membership can't be added at checkout right now", status: 409 };
+  const uid = (shopperOf.get(request) || {}).userId;
+  if (!uid) return { error: "Sign in to add membership", code: "login_required", status: 401 };
+  if (!(await hasCheckoutMembershipSchema(env))) return { error: "Membership can't be added at checkout right now", status: 409 };
+  const active = await env.DB.prepare("SELECT 1 x FROM memberships WHERE user_id=? AND status='active' AND expires_at>unixepoch() LIMIT 1").bind(uid).first();
+  if (active) return { error: "You already have an active membership", code: "already_member", status: 409 };
+  return { member: { settings, paid: true, loyalty: base ? base.loyalty : null, userId: uid }, fee: { paise: settings.feePaise, rupees: settings.feePaise / 100, days: settings.durationDays } };
+}
+
+// The single entry point that prices a cart for quote, Razorpay and PayU: the caller's own member context, plus membership when asked.
+// Returns { total, points, member, base, add } or { error, status, code }.
+async function pricedCheckout(env, request, body, pricing) {
+  const base = await getMemberContext(request, env);
+  let member = base, add = null;
+  if (body.membership === "add") {
+    if (Number(body.redeemPoints) > 0) return { error: "Points can't be used on an order that includes a new membership", status: 409 };
+    add = await membershipAdd(env, request, base);
+    if (add.error) return add;
+    member = add.member;
+  }
+  const pc = await pricedCart(env, request, member, body.items, typeof body.state === "string" ? body.state.slice(0, 50) : "", pricing, await campaignsFor(request, env, member), body.redeemPoints);
+  if (pc.error) return pc;
+  if (add) { pc.total.amount += add.fee.rupees; pc.total.membershipFeePaise = add.fee.paise; pc.total.membershipDays = add.fee.days; }
+  return { ...pc, member, base, add };
+}
+
+// What the customer sees before deciding: today's total with and without membership for THIS cart, from the same engine. Nothing is stored.
+// Points redemption is left out of both so the two numbers differ only by membership.
+async function membershipOffer(env, request, body, base, pricing) {
+  const settings = await loadMemberSettings(env);
+  if (!settings.checkoutOffer || !settings.live || settings.feePaise < 100 || settings.feePaise % 100 || !(await hasCheckoutMembershipSchema(env))) return { show: false, state: "off" };
+  const uid = (shopperOf.get(request) || {}).userId;
+  if (uid && await env.DB.prepare("SELECT 1 x FROM memberships WHERE user_id=? AND status='active' AND expires_at>unixepoch() LIMIT 1").bind(uid).first()) return { show: false, state: "active" };
+  const state = typeof body.state === "string" ? body.state.slice(0, 50) : "";
+  const withCtx = { settings, paid: true, loyalty: base ? base.loyalty : null };
+  const [without, withM] = [calculateTotal(body.items, state, base, pricing, await campaignsFor(request, env, base)), calculateTotal(body.items, state, withCtx, pricing, await campaignsFor(request, env, withCtx))];
+  if (!without || !withM) return { show: false, state: "off" };
+  const savingsPaise = (without.amount - withM.amount) * 100, withoutPaise = without.amount * 100, withPaise = withM.amount * 100 + settings.feePaise;
+  // Only worth interrupting checkout when membership actually lowers this cart's price; otherwise a quiet link is enough (show:false keeps the numbers).
+  return { show: savingsPaise > 0, state: uid ? "eligible" : "login_required", feePaise: settings.feePaise, durationDays: settings.durationDays, savingsPaise, withoutPaise, withPaise, netPaise: withoutPaise - withPaise };
+}
+
 async function pointsIntentStatements(env, txnId, u, total) {
   if (!(await hasPointsSchema(env))) return [];
-  const out = [env.DB.prepare("UPDATE checkout_intents SET points_basis_paise=?, points_redeemed=?, points_discount_paise=?, member_saving_paise=? WHERE txn_id=?")
-    .bind(total.pointsBasisPaise || 0, total.pointsRedeemed || 0, total.pointsDiscountPaise || 0, total.memberSavingPaise || 0, txnId)];
+  const rate = await hasRateSchema(env);
+  const out = [env.DB.prepare("UPDATE checkout_intents SET points_basis_paise=?, points_redeemed=?, points_discount_paise=?, member_saving_paise=?" + (rate ? ", points_rate_x100=?" : "") + " WHERE txn_id=?")
+    .bind(total.pointsBasisPaise || 0, total.pointsRedeemed || 0, total.pointsDiscountPaise || 0, total.memberSavingPaise || 0, ...(rate ? [Number.isInteger(total.pointsRateX100) ? total.pointsRateX100 : null] : []), txnId)];
   if (u && total.pointsRedeemed > 0) out.push(...POINTS.reserve(env.DB, u.user_id, txnId, total.pointsRedeemed));
   return out;
 }
@@ -806,6 +879,9 @@ async function recordIntent(env, request, txnId, gateway, body, total) {
       ).bind(txnId, gateway, u ? u.user_id : null, JSON.stringify(items), d.name, d.phone, d.email, d.address, d.pincode, d.state, d.gstin, d.quoteRef,
              amountPaise - gstPaise, gstPaise, amountPaise),
       ...(await pointsIntentStatements(env, txnId, u, total)),
+      ...(await hasCheckoutMembershipSchema(env) ? [env.DB.prepare("UPDATE checkout_intents SET membership_fee_paise=?, membership_days=?, rules_json=? WHERE txn_id=?")
+        .bind(total.membershipFeePaise || 0, total.membershipDays || 0, JSON.stringify({ v: 1, fee_paise: total.membershipFeePaise || 0, duration_days: total.membershipDays || 0, member_pricing: !!total.member, loyalty_tier: total.loyaltyTier || null,
+          points_rate_x100: Number.isInteger(total.pointsRateX100) ? total.pointsRateX100 : null, points_redeemed: total.pointsRedeemed || 0, campaign: total.campaign ? total.campaign.id : null }), txnId)] : []),
     ]);
   } catch (e) { console.error("recordIntent failed:", e && e.message); }
 }
@@ -824,11 +900,25 @@ async function alertPayment(env, txnId, gateway, ref, paise, reason) {
 // Replays are harmless: the UPDATE sets the same values and the ledger key is unique.
 function pointsOrderStatements(env, oid, intent) {
   if (intent.points_basis_paise === undefined) return [];
-  const out = [env.DB.prepare("UPDATE orders SET points_basis_paise=?, points_redeemed=?, points_discount_paise=?, member_saving_paise=? WHERE id=?")
-    .bind(intent.points_basis_paise || 0, intent.points_redeemed || 0, intent.points_discount_paise || 0, intent.member_saving_paise || 0, oid)];
+  const out = [env.DB.prepare("UPDATE orders SET points_basis_paise=?, points_redeemed=?, points_discount_paise=?, member_saving_paise=?" + (intent.points_rate_x100 !== undefined ? ", points_rate_x100=?" : "") + " WHERE id=?")
+    .bind(intent.points_basis_paise || 0, intent.points_redeemed || 0, intent.points_discount_paise || 0, intent.member_saving_paise || 0, ...(intent.points_rate_x100 !== undefined ? [Number.isInteger(intent.points_rate_x100) ? intent.points_rate_x100 : null] : []), oid)];
   if (intent.user_id && intent.points_redeemed > 0) {
     out.push(env.DB.prepare("INSERT OR IGNORE INTO points_ledger (id,user_id,kind,points,order_id,idem_key,reason) SELECT ?,user_id,'redeem',?,id,?,? FROM orders WHERE id=? AND user_id IS NOT NULL")
       .bind(crypto.randomUUID(), -intent.points_redeemed, `redeem:${oid}`, "redeemed at checkout", oid));
+  }
+  return out;
+}
+
+// Same batch as the order: freezes the fee and rules on it and, when the order bought membership, activates it. The term starts when the order
+// was created (or after a term still running), and memberships.razorpay_order_id is UNIQUE, so replays and races activate it once.
+function membershipOrderStatements(env, oid, intent, txnId, ref) {
+  if (intent.membership_fee_paise === undefined) return [];
+  const out = [env.DB.prepare("UPDATE orders SET membership_fee_paise=?, rules_json=? WHERE id=?").bind(intent.membership_fee_paise || 0, intent.rules_json || null, oid)];
+  if (intent.membership_fee_paise > 0 && intent.user_id) {
+    out.push(env.DB.prepare(`INSERT OR IGNORE INTO memberships (id,user_id,status,purchased_at,expires_at,welcome_credit_paise,price_paid,payment_id,razorpay_order_id)
+      SELECT ?1, o.user_id, 'active', s.t, s.t + ?2 * 86400, 0, ?3, ?4, ?5
+      FROM orders o, (SELECT max(o2.created_at, coalesce((SELECT max(expires_at) FROM memberships WHERE user_id=?6 AND status='active' AND expires_at>unixepoch()), 0)) t FROM orders o2 WHERE o2.id=?7) s WHERE o.id=?7`)
+      .bind(crypto.randomUUID(), intent.membership_days || 365, intent.membership_fee_paise, String(ref || txnId).slice(0, 128), txnId, intent.user_id, oid));
   }
   return out;
 }
@@ -874,6 +964,7 @@ async function finalizeOrder(env, txnId, paymentRef, verifiedPaise, gateway) {
       env.DB.prepare("DELETE FROM checkout_intents WHERE txn_id=?1 AND EXISTS (SELECT 1 FROM orders WHERE txn_id=?1)").bind(txnId),
       ...stockStatements(env, oid, txnId, JSON.parse(intent.items_json || "[]")),
       ...pointsOrderStatements(env, oid, intent),
+      ...membershipOrderStatements(env, oid, intent, txnId, ref),
     ]);
     if (!await env.DB.prepare("SELECT 1 AS x FROM orders WHERE txn_id=?").bind(txnId).first()) {
       await alertPayment(env, txnId, gateway || intent.gateway, ref, intent.amount_paise, "order row was not created");
@@ -1053,11 +1144,11 @@ async function onRequest({ request, env }) {
       const blocked = unavailableReason(qb && qb.items, pricing);
       if (blocked) return json({ error: blocked }, 409, origin);
       const state = typeof qb.state === "string" ? qb.state.slice(0, 50) : "";
-      const member = await getMemberContext(request, env);
-      const pc = await pricedCart(env, request, member, qb.items, state, pricing, await campaignsFor(request, env, member), qb.redeemPoints);
-      if (pc.error) return json({ error: pc.error, points: null }, pc.status, origin);
-      const you = pc.total;
-      const out = { you, signedInMember: !!member, points: pc.points, rewards: await rewardsBlock(env, request, you, qb.items, pricing, member) };
+      const pc = await pricedCheckout(env, request, qb, pricing);
+      if (pc.error) return json({ error: pc.error, code: pc.code, points: null }, pc.status, origin);
+      const you = pc.total, member = pc.member;
+      const out = { you, signedInMember: !!pc.base, points: pc.points, rewards: await rewardsBlock(env, request, you, qb.items, pricing, member) };
+      if (qb.offer === true) out.membershipOffer = { ...(await membershipOffer(env, request, qb, pc.base, pricing)), added: !!pc.add };
       if (qb.compare === true && env.DB) {
         const settings = await loadMemberSettings(env);
         out.guest = calculateTotal(qb.items, state, null, pricing, await campaignsFor(request, env, null));
@@ -1150,13 +1241,12 @@ async function onRequest({ request, env }) {
 
   try {
     if (url.pathname.endsWith("/create-order")) {
-      const member = await getMemberContext(request, env);
       const pricing = await loadPricing(env);
       const blocked = unavailableReason(body.items, pricing);
       if (blocked) return json({ error: blocked }, 409, origin);
-      const pc = await pricedCart(env, request, member, body.items, body.state, pricing, await campaignsFor(request, env, member), body.redeemPoints);
-      if (pc.error) return json({ error: pc.error }, pc.status, origin);
-      const total = pc.total;
+      const pc = await pricedCheckout(env, request, body, pricing);
+      if (pc.error) return json({ error: pc.error, code: pc.code }, pc.status, origin);
+      const member = pc.member, total = pc.total;
       const order = await razorpayRequest("/orders", env, {
         amount: total.amount * 100,
         currency: "INR",
@@ -1164,6 +1254,7 @@ async function onRequest({ request, env }) {
         notes: {
           quote_ref: typeof body.quoteRef === "string" ? body.quoteRef.slice(0, 32) : "",
           pieces: String(total.pieces),
+          membership: total.membershipFeePaise ? "1" : "0",
         },
       });
       await recordIntent(env, request, order.id, "razorpay", body, total);
@@ -1184,12 +1275,11 @@ async function onRequest({ request, env }) {
 
     if (url.pathname.endsWith("/payu/checkout")) {
       if (!env.PAYU_KEY || !env.PAYU_SALT) return json({ error: "PayU is not configured" }, 503, origin);
-      const member = await getMemberContext(request, env);
       const pricing = await loadPricing(env);
       const blocked = unavailableReason(body.items, pricing);
       if (blocked) return json({ error: blocked }, 409, origin);
-      const pc = await pricedCart(env, request, member, body.items, body.state, pricing, await campaignsFor(request, env, member), body.redeemPoints);
-      if (pc.error) return json({ error: pc.error }, pc.status, origin);
+      const pc = await pricedCheckout(env, request, body, pricing);
+      if (pc.error) return json({ error: pc.error, code: pc.code }, pc.status, origin);
       const total = pc.total;
       const firstName = typeof body.name === "string" ? body.name.trim().split(/\s+/)[0].slice(0, 60) : "";
       const email = typeof body.email === "string" ? body.email.trim().slice(0, 254) : "";

@@ -1012,7 +1012,7 @@ const REWARD_KEYS = ["loyalty_live", "loyalty_combine"];
 async function rewardsState(env) {
   const [cfg, tiers, flags] = await Promise.all([
     env.DB.prepare("SELECT key,value FROM membership_config").all(),
-    env.DB.prepare("SELECT id,name,min_spend_paise,discount_pct,sort_order,active,perks FROM loyalty_tiers ORDER BY min_spend_paise, sort_order").all(),
+    env.DB.prepare("SELECT id,name,min_spend_paise,discount_pct,points_per_100,sort_order,active,perks FROM loyalty_tiers ORDER BY min_spend_paise, sort_order").all(),
     env.DB.prepare("SELECT id,sku,name,category,active,price_paise,cost_paise,loyalty_eligible,loyalty_max_pct FROM products ORDER BY name").all(),
   ]);
   const c = Object.fromEntries(cfg.results.map((r) => [r.key, r.value]));
@@ -1040,13 +1040,13 @@ async function saveRewards(body, actor, env) {
   if (errors.length) return json({ error: errors[0], errors }, 400);
   const incoming = new Set(tiers.map((t) => t.id));
   const stmts = [];
-  for (const t of tiers) stmts.push(env.DB.prepare(`INSERT INTO loyalty_tiers (id,name,min_spend_paise,discount_pct,sort_order,active,perks,updated_at) VALUES (?1,?2,?3,?4,?5,?6,?7,unixepoch())
-      ON CONFLICT(id) DO UPDATE SET name=?2,min_spend_paise=?3,discount_pct=?4,sort_order=?5,active=?6,perks=?7,updated_at=unixepoch()`).bind(t.id, t.name, t.min_spend_paise, t.discount_pct, t.sort_order, t.active, t.perks));
+  for (const t of tiers) stmts.push(env.DB.prepare(`INSERT INTO loyalty_tiers (id,name,min_spend_paise,discount_pct,points_per_100,sort_order,active,perks,updated_at) VALUES (?1,?2,?3,?4,?8,?5,?6,?7,unixepoch())
+      ON CONFLICT(id) DO UPDATE SET name=?2,min_spend_paise=?3,discount_pct=?4,points_per_100=?8,sort_order=?5,active=?6,perks=?7,updated_at=unixepoch()`).bind(t.id, t.name, t.min_spend_paise, t.discount_pct, t.sort_order, t.active, t.perks, t.points_per_100));
   for (const old of st.tiers) if (!incoming.has(old.id) && old.active) stmts.push(env.DB.prepare("UPDATE loyalty_tiers SET active=0, updated_at=unixepoch() WHERE id=?").bind(old.id));
   for (const [k, v] of [["loyalty_live", settings.live ? "1" : "0"], ["loyalty_combine", settings.combine]])
     stmts.push(env.DB.prepare("INSERT INTO membership_config (key,value,updated_at) VALUES (?1,?2,unixepoch()) ON CONFLICT(key) DO UPDATE SET value=?2, updated_at=unixepoch()").bind(k, v));
   stmts.push(env.DB.prepare("INSERT INTO audit_log (id,actor,action,detail) VALUES (?,?,'rewards_settings',?)").bind(crypto.randomUUID(), actor,
-    JSON.stringify({ settings: { from: st.settings, to: settings }, tiers: { from: st.tiers.map((t) => [t.id, t.name, t.min_spend_paise, t.discount_pct, t.active]), to: tiers.map((t) => [t.id, t.name, t.min_spend_paise, t.discount_pct, !!t.active]) } })));
+    JSON.stringify({ settings: { from: st.settings, to: settings }, tiers: { from: st.tiers.map((t) => [t.id, t.name, t.min_spend_paise, t.discount_pct, t.points_per_100, t.active]), to: tiers.map((t) => [t.id, t.name, t.min_spend_paise, t.discount_pct, t.points_per_100, !!t.active]) } })));
   await env.DB.batch(stmts);
   return getRewards(env);
 }

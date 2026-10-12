@@ -266,6 +266,9 @@
             </div>
           </div>
 
+          <!-- Optional membership offer (filled from the server quote; hidden unless membership would lower this cart) -->
+          <div class="mo" id="memOffer" hidden></div>
+
           <!-- Rewards points (signed-in members only; filled from the server quote) -->
           <div class="pts" id="ptsBox" hidden>
             <div class="pts-head"><strong>Rewards points</strong><span id="ptsAvail"></span></div>
@@ -464,6 +467,7 @@
       return {
         items: orderItems(),
         redeemPoints: window.NTAGZ_REDEEM ? window.NTAGZ_REDEEM() : 0,
+        membership: window.NTAGZ_MEMBERSHIP ? window.NTAGZ_MEMBERSHIP() : undefined,
         state: document.getElementById("customerState").value,
         quoteRef: document.getElementById("quoteNum").innerText,
         name: document.getElementById("customerName").value.trim(),

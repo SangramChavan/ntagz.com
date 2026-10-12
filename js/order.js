@@ -387,27 +387,32 @@
   /* ── MEMBER QUOTE (server-priced; members only) ───────────────
      One status check per page view; quotes are fetched only for active members, debounced, and only re-render when the
      server answers for the cart currently on screen. Any failure leaves the guest estimate (checkout re-prices anyway). */
-  var MQ = { member: false, key: '', data: null, pts: null, timer: null, redeem: 0, items: '', err: '' };
+  var MQ = { member: false, key: '', data: null, pts: null, timer: null, redeem: 0, items: '', err: '', add: false, offer: null };
   /* Rewards points are spent on online payments only (Razorpay / PayU): offline UPI / bank / WhatsApp orders are priced without them. */
   function onlinePay() { var t = document.querySelector('.pay-tab.active'), k = t && t.getAttribute('data-paytab'); return k === 'razorpay' || k === 'payu'; }
-  function effRedeem() { return MQ.redeem > 0 && onlinePay() ? MQ.redeem : 0; }
+  /* Membership bought in this checkout: only on online payments, only when the server says this customer is eligible. The browser just asks;
+     the server adds the fee and prices the cart as a member would pay. */
+  function effAdd() { return !!(MQ.add && onlinePay() && MQ.offer && MQ.offer.state === 'eligible'); }
+  window.NTAGZ_MEMBERSHIP = function () { return effAdd() ? 'add' : undefined; };
+  function effRedeem() { return MQ.redeem > 0 && onlinePay() && !effAdd() ? MQ.redeem : 0; }
   window.NTAGZ_REDEEM = effRedeem; /* read by the payment buttons in order.html; the server re-prices and decides how many points are allowed */
   function memberQuoteFor(lineItems, state) {
     if (!MQ || !MQ.member || !lineItems.length) return null;
     var items = lineItems.map(function (li) { return { id: li.p.id, qty: li.qty }; });
     var ik = JSON.stringify(items);
     if (MQ.items !== ik) { MQ.items = ik; MQ.redeem = 0; MQ.err = ''; } /* the cart changed: any points choice is void */
-    var rd = effRedeem(), key = JSON.stringify([items, state, rd]);
+    var rd = effRedeem(), add = effAdd(), key = JSON.stringify([items, state, rd, add]);
     if (MQ.key === key) return MQ.data;
     clearTimeout(MQ.timer);
     MQ.timer = setTimeout(function () {
-      var body = { items: items, state: state }; if (rd > 0) body.redeemPoints = rd;
+      var body = { items: items, state: state, offer: true }; if (rd > 0) body.redeemPoints = rd; if (add) body.membership = 'add';
       fetch('/api/quote', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
         .then(function (r) { return r.json().catch(function () { return null; }).then(function (d) { return { r: r, d: d }; }); })
         .then(function (x) {
           if (x.r.status === 409 && rd > 0 && x.d && x.d.error) { MQ.redeem = 0; MQ.err = String(x.d.error); calculateQuote(); return; } /* server refused: show its words, re-quote without points */
+          if (add && !x.r.ok) { MQ.add = false; MQ.err = x.d && x.d.error ? String(x.d.error) : 'Membership could not be added.'; MQ.key = ''; calculateQuote(); return; } /* e.g. signed out, already a member */
           var d = x.r.ok ? x.d : null;
-          MQ.key = key; MQ.data = d && d.you ? d.you : null; MQ.pts = d && d.points ? d.points : null; calculateQuote();
+          MQ.key = key; MQ.data = d && d.you ? d.you : null; MQ.pts = d && d.points ? d.points : null; MQ.offer = d && d.membershipOffer ? d.membershipOffer : null; calculateQuote();
         })
         .catch(function () { });
     }, 350);
@@ -437,6 +442,38 @@
     earn.hidden = !(p.willEarn > 0);
     earn.textContent = p.willEarn > 0 ? 'You’ll earn about ' + fmtNum(p.willEarn) + ' points on this order' + (p.earnOn === 'delivered' ? ' once it is delivered.' : ' once payment is confirmed.') : '';
   }
+  /* Optional membership card. Every number is the server's; nothing is preselected and "Continue without" is always there. */
+  function renderOffer(mq) {
+    var box = $('memOffer'), o = MQ.offer;
+    if (!box) return;
+    var added = !!(mq && mq.membershipFeePaise > 0);
+    if (!MQ.member || !o || (o.state !== 'eligible' && o.state !== 'login_required') || (!o.show && !added)) { box.hidden = true; return; }
+    box.hidden = false;
+    while (box.firstChild) box.removeChild(box.firstChild);
+    var mk = function (tag, cls, txt) { var e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+    var term = o.durationDays === 365 ? 'year' : o.durationDays + ' days';
+    var head = mk('div', 'mo-head'); head.appendChild(mk('strong', '', 'Ntagz Rewards Membership')); head.appendChild(mk('span', '', fmt(o.feePaise / 100) + ' / ' + term));
+    box.appendChild(head);
+    var rows = [['Member savings on this order', '− ' + fmt(o.savingsPaise / 100)], ['Membership fee', '+ ' + fmt(o.feePaise / 100)], ['Total without membership', fmt(o.withoutPaise / 100)], ['Total with membership', fmt(o.withPaise / 100)]];
+    var dl = mk('dl', 'mo-rows');
+    rows.forEach(function (r, i) { var row = mk('div', i > 1 ? 'mo-row strong' : 'mo-row'); row.appendChild(mk('dt', '', r[0])); row.appendChild(mk('dd', '', r[1])); dl.appendChild(row); });
+    box.appendChild(dl);
+    var net = o.netPaise;
+    box.appendChild(mk('p', 'mo-net' + (net > 0 ? ' good' : ''), net > 0 ? 'You save ' + fmt(net / 100) + ' today with membership.' : net < 0
+      ? 'Membership costs ' + fmt(-net / 100) + ' more on this order. It only pays back if you keep buying eligible products; future savings are not guaranteed.' : 'No difference in today’s total.'));
+    box.appendChild(mk('p', 'mo-terms', 'Member prices on eligible products for ' + (o.durationDays === 365 ? '1 year' : o.durationDays + ' days') + ' after payment is confirmed. Optional.'));
+    if (o.state === 'login_required') {
+      var a = mk('a', 'btn btn-outline', 'Sign in to add membership'); a.href = '/account/login.html?next=' + encodeURIComponent('/order.html'); box.appendChild(a);
+      return;
+    }
+    if (!onlinePay()) { box.appendChild(mk('p', 'mo-terms', 'Membership can be added with Razorpay or PayU payments.')); return; }
+    var acts = mk('div', 'mo-acts');
+    var yes = mk('button', 'btn' + (added ? ' btn-primary' : ''), added ? 'Membership added' : 'Add membership'), no = mk('button', 'btn btn-outline', 'Continue without membership');
+    yes.type = no.type = 'button'; yes.setAttribute('aria-pressed', added ? 'true' : 'false'); no.setAttribute('aria-pressed', added ? 'false' : 'true');
+    yes.onclick = function () { MQ.err = ''; MQ.add = true; MQ.redeem = 0; calculateQuote(); };
+    no.onclick = function () { MQ.err = ''; MQ.add = false; calculateQuote(); };
+    acts.appendChild(yes); acts.appendChild(no); box.appendChild(acts);
+  }
   (function () {
     var use = $('ptsUse'), num = $('ptsNum'), max = $('ptsMax'); if (!use) return;
     use.addEventListener('change', function () { MQ.err = ''; MQ.redeem = use.checked && MQ.pts ? Math.max(MQ.pts.maxUsable, 0) : 0; calculateQuote(); });
@@ -453,7 +490,7 @@
       if (d && ((d.membership && d.membership.active) || (d.tier && d.tier.discountPct > 0))) { MQ.member = true; calculateQuote(); return; }
       /* Anyone else only needs a server quote when a cart milestone reward is running (public list, cached by the browser). */
       return fetch('/api/rewards/tiers', { credentials: 'omit' }).then(function (r) { return r.ok ? r.json() : null; })
-        .then(function (t) { if (t && t.milestones && t.milestones.length) { MQ.member = true; calculateQuote(); } });
+        .then(function (t) { if (t && ((t.milestones && t.milestones.length) || t.checkoutOffer)) { MQ.member = true; calculateQuote(); } });
     })
     .catch(function () { });
 
@@ -545,7 +582,7 @@
     /* Member prices. Only the server knows whether this customer is an active member, so for members the quote shows the
        server's numbers for this exact cart: the same amount checkout will charge. Guests keep the local estimate. */
     var memberOff = 0, rewardOff = 0, pointsOff = 0, mq = memberQuoteFor(lineItems, cState);
-    if (mq && (mq.member || mq.campaign)) {
+    if (mq && (mq.member || mq.campaign || mq.membershipFeePaise)) {
       memberOff = mq.memberDiscount;
       rewardOff = mq.campaign && mq.campaign.type === 'percent_off' ? mq.campaignDiscountPaise / 100 : 0;
       pointsOff = (mq.pointsDiscountPaise || 0) / 100;
@@ -590,7 +627,17 @@
     }
     pRow.style.display = mq && mq.pointsRedeemed > 0 ? 'flex' : 'none';
     if (mq && mq.pointsRedeemed > 0) { $('pointsLabel').textContent = 'Rewards points (' + fmtNum(mq.pointsRedeemed) + ')'; $('outPoints').textContent = '− ' + fmtRate(pointsOff); }
+    /* Membership fee: its own line, outside every discount; the server's total above already includes it. */
+    var fRow = $('membershipFeeRow');
+    if (!fRow) {
+      fRow = document.createElement('div'); fRow.id = 'membershipFeeRow'; fRow.className = 'qt-line';
+      fRow.innerHTML = '<span class="qt-label">Ntagz membership</span><span class="qt-val" id="outMembershipFee"></span>';
+      pRow.parentNode.insertBefore(fRow, pRow.nextSibling);
+    }
+    fRow.style.display = mq && mq.membershipFeePaise > 0 ? 'flex' : 'none';
+    if (mq && mq.membershipFeePaise > 0) $('outMembershipFee').textContent = '+ ' + fmt(mq.membershipFeePaise / 100);
     renderPoints(mq);
+    renderOffer(mq);
 
     $('outSubtotal').textContent = fmt(totalSubtotal);
     $('outDiscountAmt').textContent = totalDiscount > 0 ? '− ' + fmt(totalDiscount) : '₹0';

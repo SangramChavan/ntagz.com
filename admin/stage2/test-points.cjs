@@ -189,6 +189,25 @@ const hmac = async (secret, msg) => Array.from(new Uint8Array(await crypto.subtl
   const ex3 = user(); member(ex3); o = await buy(ex3, "black-nfc-card", 30); assert.equal(o.order.points_basis_paise, 0); assert.ok(o.order.member_saving_paise > 0); ok("an excluded product earns no points but still gets the member price");
   r = await A(OW, "/api/products/black-nfc-card", { points_eligible: false }); await A(OW, "/api/products/black-nfc-card", { points_eligible: true });
 
+  // ── tier points rates (migration 0015): Silver ₹5,000 3 / Gold ₹25,000 5 / Diamond ₹50,000 10 points per ₹100 ──
+  setCfg("pts_earn_on", "paid"); const LOYALTY = require(path.join(root, "functions", "lib", "loyalty.js"));
+  const withSpend = (paise) => { const u = user(); member(u); if (paise) sqlite.prepare("INSERT INTO loyalty_adjustments (id,user_id,delta_paise,reason,actor,spend_before,spend_after,idempotency_key) VALUES (?,?,?,?,?,0,?,?)").run(crypto.randomUUID(), u.id, paise, "test spend", "test", paise, "t" + crypto.randomUUID()); LOYALTY.resetTiersCache(); return u; };
+  const earnedBy = async (u) => { const b = await buy(u, "black-nfc-card", 30); assert.equal(b.order.points_basis_paise, 270000); return { b, pts: q("SELECT coalesce(sum(points),0) s FROM points_ledger WHERE order_id=? AND kind IN ('earn','reverse')", b.order.id)[0].s }; };
+  assert.equal((await earnedBy(withSpend(499999))).pts, 135); ok("below ₹5,000 qualifying spend: no tier yet, the flat rate (5 per ₹100) applies");
+  const sil = await earnedBy(withSpend(500000)); assert.equal(sil.pts, 81); assert.equal(sil.b.order.points_rate_x100, 300); ok("exactly ₹5,000 reaches Silver: 3 points per ₹100, rate frozen on the order");
+  assert.equal((await earnedBy(withSpend(2499999))).pts, 81); assert.equal((await earnedBy(withSpend(2500000))).pts, 135); ok("Gold starts at ₹25,000 cumulative (not ₹30,000): 5 per ₹100");
+  assert.equal((await earnedBy(withSpend(4999999))).pts, 135); assert.equal((await earnedBy(withSpend(5000000))).pts, 270); ok("Diamond starts at ₹50,000: 10 per ₹100");
+  assert.equal(q("SELECT discount_pct FROM loyalty_tiers WHERE id IN ('silver','gold','diamond') AND discount_pct<>0").length, 0); ok("tier rates are points rates: the default tiers give no price discount");
+  const cfgT = await A(OW, "/api/rewards"); const bump = (id, v) => cfgT.d.tiers.map((x) => (x.id === id ? { ...x, points_per_100: v } : x));
+  assert.equal((await A(OW, "/api/rewards", { version: cfgT.d.version, settings: { live: false }, tiers: bump("silver", 101) })).status, 400); assert.equal((await A(OW, "/api/rewards", { version: cfgT.d.version, settings: { live: false }, tiers: bump("silver", -1) })).status, 400); ok("invalid points rates are rejected by the admin API");
+  assert.equal((await A(OW, "/api/rewards", { version: cfgT.d.version, settings: { live: false }, tiers: bump("silver", 4) })).status, 200); payments.resetPricingCache(); LOYALTY.resetTiersCache();
+  await POINTS.reconcileOrder(D1, sil.b.order.id); assert.equal(q("SELECT coalesce(sum(points),0) s FROM points_ledger WHERE order_id=? AND kind IN ('earn','reverse')", sil.b.order.id)[0].s, 81); ok("an admin rate change does not rewrite points already earned on an order");
+  assert.equal(q("SELECT points_rate_x100 r FROM orders WHERE id=?", sil.b.order.id)[0].r, 300);
+  sqlite.prepare("UPDATE orders SET refunded_paise=paid_paise/2 WHERE id=?").run(sil.b.order.id); await POINTS.reconcileOrder(D1, sil.b.order.id); await POINTS.reconcileOrder(D1, sil.b.order.id);
+  const half = q("SELECT coalesce(sum(points),0) s, count(*) n FROM points_ledger WHERE order_id=? AND kind IN ('earn','reverse')", sil.b.order.id)[0]; assert.ok(half.s >= 40 && half.s <= 41); assert.equal(half.n, 2); ok("a partial refund reverses points at the frozen rate, once; repeated reconciliation adds nothing");
+  const qs = await quote(withSpend(500000), [{ id: "black-nfc-card", qty: 30 }]); assert.equal(qs.d.points.ratePer100, 4); ok("quote shows the points rate of the customer's current tier");
+  setCfg("pts_earn_on", "delivered");
+
   // ── analytics + access ──
   r = await A(OW, "/api/points/analytics?range=90d"); assert.equal(r.status, 200); assert.ok(r.d.points.issued > 0); assert.ok(r.d.memberships.active >= 5); assert.equal(r.d.economics.product_contribution_paise, null); assert.match(r.d.economics.note, /not profit/); ok("analytics: memberships, points liability and economics; contribution is withheld without full cost data");
   assert.equal((await A("nobody", "/api/points")).status, 401); ok("admin points API requires an admin session");
