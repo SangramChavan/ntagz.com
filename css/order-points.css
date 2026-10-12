@@ -14,20 +14,23 @@
 .pts-earn{margin-top:8px;font-size:13px;font-weight:600;color:var(--green,#1a7f37)}
 .pts [hidden]{display:none!important}
 
-/* Checkout: optional membership offer. Display only; the server prices and decides. */
-.mo{margin:12px 0 4px;padding:14px 16px;border:1px solid var(--paper,#e5e5ea);border-radius:14px;background:var(--cream,#fff)}
-.mo-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 12px;font-size:15px}
-.mo-head span{color:var(--ink-3,#6b6b70)}
-.mo-rows{margin:10px 0 0}
-.mo-row{display:flex;justify-content:space-between;gap:12px;padding:4px 0;font-size:14px}
-.mo-row dt{color:var(--ink-3,#6b6b70)}.mo-row dd{margin:0;font-weight:600}
-.mo-row.strong dt{color:var(--ink,#1d1d1f)}
-.mo-net{margin-top:10px;font-size:14px;font-weight:600}
-.mo-net.good{color:var(--green,#1a7f37)}
-.mo-terms{margin-top:6px;font-size:13px;color:var(--ink-3,#6b6b70)}
-.mo-acts{display:flex;flex-direction:column;gap:8px;margin-top:12px}
-.mo-acts .btn,.mo .btn{min-height:44px}
-@media(min-width:560px){.mo-acts{flex-direction:row}}
+/* Checkout: membership offered inside the Grand Total (dark panel). Display only; the server prices and decides. */
+.qgt-mem{margin:0 0 14px}
+.qgt-mem-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 12px;font-size:14px}
+.qgt-mem-head strong{color:#fff}
+.qgt-mem-head span{color:rgba(255,255,255,.72)}
+.qgt-opts{display:grid;gap:8px;margin-top:10px}
+@media(min-width:480px){.qgt-opts{grid-template-columns:1fr 1fr}}
+.qgt-opt{display:flex;flex-direction:column;gap:2px;text-align:left;cursor:pointer;min-height:56px;padding:10px 14px;border:1.5px solid rgba(255,255,255,.24);border-radius:12px;background:rgba(255,255,255,.06);color:#fff;font:inherit}
+.qgt-opt-lbl{font-size:12px;letter-spacing:.02em;text-transform:uppercase;color:rgba(255,255,255,.68)}
+.qgt-opt-amt{font-family:var(--ff-head);font-size:20px;font-weight:700;letter-spacing:-.02em}
+.qgt-opt.sel{border-color:#FF5722;background:rgba(255,87,34,.18)}
+.qgt-opt.locked{cursor:pointer;opacity:.85}
+.qgt-opt:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.qgt-mem-net{margin-top:10px;font-size:14px;font-weight:600;color:#fff}
+.qgt-mem-net.good{color:#7BD88F}
+.qgt-mem-terms{margin-top:4px;font-size:12px;color:rgba(255,255,255,.62)}
+
 
 /* Checkout: inline payment error (replaces blocking alerts) */
 .pay-error{margin:0 0 12px;padding:12px 14px;border-radius:12px;background:#fdecea;color:#b3261e;font-size:14px;font-weight:600}

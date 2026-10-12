@@ -50,8 +50,8 @@
   <script src="https://checkout.razorpay.com/v1/checkout.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <link rel="stylesheet" href="css/base.css">
-  <link rel="stylesheet" href="css/order.css">
-  <link rel="stylesheet" href="css/order-points.css">
+  <link rel="stylesheet" href="css/order.css?v=20261019">
+  <link rel="stylesheet" href="css/order-points.css?v=20261019">
 </head>
 
 <body>
@@ -261,9 +261,6 @@
             </div>
           </div>
 
-          <!-- Optional membership offer (filled from the server quote; hidden unless membership would lower this cart) -->
-          <div class="mo" id="memOffer" hidden></div>
-
           <!-- Rewards points (signed-in members only; filled from the server quote) -->
           <div class="pts" id="ptsBox" hidden>
             <div class="pts-head"><strong>Rewards points</strong><span id="ptsAvail"></span></div>
@@ -279,10 +276,13 @@
             <p class="pts-earn" id="ptsEarn" hidden></p>
           </div>
 
-          <!-- Grand Total -->
-          <div class="qc-grand-total">
-            <span class="qgt-label">Grand Total</span>
-            <span class="qgt-amount"><small>₹</small><span id="outTotal">0</span></span>
+          <!-- Grand Total — membership is offered right here: the customer picks the total with or without it -->
+          <div class="qc-grand-total" id="qcGrand">
+            <div class="qgt-mem" id="memGt" hidden></div>
+            <div class="qgt-sum">
+              <span class="qgt-label">Grand Total</span>
+              <span class="qgt-amount"><small>₹</small><span id="outTotal">0</span></span>
+            </div>
           </div>
 
           <!-- QR + Pay -->
@@ -449,7 +449,7 @@
   <script src="js/cart.js" defer></script>
   <script src="js/cart-ui.js" defer></script>
 <script defer src="js/member-pricing.js?v=20261012"></script>
-  <script src="js/order.js?v=20261012" defer></script>
+  <script src="js/order.js?v=20261019" defer></script>
   <script defer="" src="js/component-loader.js"></script>
   <script>
     // Same origin (ntagz.com/api/* is routed to the payments Worker) so the customer's sign-in cookie reaches checkout:

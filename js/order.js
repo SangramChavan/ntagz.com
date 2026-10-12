@@ -430,39 +430,40 @@
     earn.hidden = !(p.willEarn > 0);
     earn.textContent = p.willEarn > 0 ? 'You’ll earn about ' + fmtNum(p.willEarn) + ' points on this order' + (p.earnOn === 'delivered' ? ' once it is delivered.' : ' once payment is confirmed.') : '';
   }
-  /* Optional membership card. Every number is the server's; nothing is preselected and "Continue without" is always there. */
+  /* Membership is offered inside the Grand Total: the customer picks the total with or without it. Every number is the server's from the same quote. */
   function track(name) { try { if (window.NZ_ANALYTICS && window.NZ_ANALYTICS.track) window.NZ_ANALYTICS.track(name); } catch (e) { /* analytics never blocks checkout */ } }
-  function renderOffer(mq) {
-    var box = $('memOffer'), o = MQ.offer;
+  function renderGrandMem(mq) {
+    var box = $('memGt'), o = MQ.offer;
     if (!box) return;
     var added = !!(mq && mq.membershipFeePaise > 0);
-    if (!MQ.member || !o || (o.state !== 'eligible' && o.state !== 'login_required') || (!o.show && !added)) { box.hidden = true; return; }
+    if (!MQ.member || !o || (o.state !== 'eligible' && o.state !== 'login_required')) { box.hidden = true; return; }
     box.hidden = false;
     if (!MQ.shownLogged) { MQ.shownLogged = true; track('membership_offer_shown'); }
     while (box.firstChild) box.removeChild(box.firstChild);
     var mk = function (tag, cls, txt) { var e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
     var term = o.durationDays === 365 ? 'year' : o.durationDays + ' days';
-    var head = mk('div', 'mo-head'); head.appendChild(mk('strong', '', 'Ntagz Rewards Membership')); head.appendChild(mk('span', '', fmt(o.feePaise / 100) + ' / ' + term));
+    var head = mk('div', 'qgt-mem-head'); head.appendChild(mk('strong', '', 'Ntagz Rewards Membership')); head.appendChild(mk('span', '', fmt(o.feePaise / 100) + ' / ' + term));
     box.appendChild(head);
-    var rows = [['Member savings on this order', '− ' + fmt(o.savingsPaise / 100)], ['Membership fee', '+ ' + fmt(o.feePaise / 100)], ['Total without membership', fmt(o.withoutPaise / 100)], ['Total with membership', fmt(o.withPaise / 100)]];
-    var dl = mk('dl', 'mo-rows');
-    rows.forEach(function (r, i) { var row = mk('div', i > 1 ? 'mo-row strong' : 'mo-row'); row.appendChild(mk('dt', '', r[0])); row.appendChild(mk('dd', '', r[1])); dl.appendChild(row); });
-    box.appendChild(dl);
-    var net = o.netPaise;
-    box.appendChild(mk('p', 'mo-net' + (net > 0 ? ' good' : ''), net > 0 ? 'You save ' + fmt(net / 100) + ' today with membership.' : net < 0
-      ? 'Membership costs ' + fmt(-net / 100) + ' more on this order. It only pays back if you keep buying eligible products; future savings are not guaranteed.' : 'No difference in today’s total.'));
-    box.appendChild(mk('p', 'mo-terms', 'Member prices on eligible products for ' + (o.durationDays === 365 ? '1 year' : o.durationDays + ' days') + ' after payment is confirmed. Optional.'));
-    if (o.state === 'login_required') {
-      var a = mk('a', 'btn btn-outline', 'Sign in to add membership'); a.href = '/account/login.html?next=' + encodeURIComponent('/order.html'); box.appendChild(a);
-      return;
+    var login = o.state === 'login_required', canAdd = o.state === 'eligible' && onlinePay();
+    function opt(id, label, paise, sel) {
+      var b = mk('button', 'qgt-opt' + (sel ? ' sel' : '')); b.type = 'button'; b.id = id;
+      b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', sel ? 'true' : 'false');
+      b.appendChild(mk('span', 'qgt-opt-lbl', label));
+      b.appendChild(mk('span', 'qgt-opt-amt', fmt(paise)));
+      return b;
     }
-    if (!onlinePay()) { box.appendChild(mk('p', 'mo-terms', 'Membership can be added with Razorpay or PayU payments.')); return; }
-    var acts = mk('div', 'mo-acts');
-    var yes = mk('button', 'btn' + (added ? ' btn-primary' : ''), added ? 'Membership added' : 'Add membership'), no = mk('button', 'btn btn-outline', 'Continue without membership');
-    yes.type = no.type = 'button'; yes.setAttribute('aria-pressed', added ? 'true' : 'false'); no.setAttribute('aria-pressed', added ? 'false' : 'true');
-    yes.onclick = function () { track('membership_offer_added'); MQ.err = ''; MQ.add = true; MQ.redeem = 0; calculateQuote(); };
+    var no = opt('qgtNo', 'Without membership', o.withoutPaise / 100, !added);
+    var yes = opt('qgtYes', 'With membership', o.withPaise / 100, added);
     no.onclick = function () { if (added) track('membership_offer_declined'); MQ.err = ''; MQ.add = false; calculateQuote(); };
-    acts.appendChild(yes); acts.appendChild(no); box.appendChild(acts);
+    if (login) yes.onclick = function () { location.href = '/account/login.html?next=' + encodeURIComponent('/order.html'); };
+    else if (canAdd) yes.onclick = function () { track('membership_offer_added'); MQ.err = ''; MQ.add = true; MQ.redeem = 0; calculateQuote(); };
+    else yes.classList.add('locked');
+    var opts = mk('div', 'qgt-opts'); opts.setAttribute('role', 'radiogroup'); opts.setAttribute('aria-label', 'Grand total with or without membership');
+    opts.appendChild(no); opts.appendChild(yes); box.appendChild(opts);
+    var net = o.netPaise;
+    box.appendChild(mk('p', 'qgt-mem-net' + (net > 0 ? ' good' : ''), net > 0 ? 'You save ' + fmt(net / 100) + ' today with membership.' : net < 0
+      ? 'Membership adds ' + fmt(-net / 100) + ' to this order; it pays back if you keep buying eligible products.' : 'No difference in today’s total.'));
+    box.appendChild(mk('p', 'qgt-mem-terms', login ? 'Sign in to add membership.' : !canAdd ? 'Membership can be added with Razorpay or PayU payments.' : 'Member prices on eligible products for ' + (o.durationDays === 365 ? '1 year' : o.durationDays + ' days') + ' after payment is confirmed. Optional.'));
   }
   (function () {
     var use = $('ptsUse'), num = $('ptsNum'), max = $('ptsMax'); if (!use) return;
@@ -627,7 +628,7 @@
     fRow.style.display = mq && mq.membershipFeePaise > 0 ? 'flex' : 'none';
     if (mq && mq.membershipFeePaise > 0) $('outMembershipFee').textContent = '+ ' + fmt(mq.membershipFeePaise / 100);
     renderPoints(mq);
-    renderOffer(mq);
+    renderGrandMem(mq);
 
     $('outSubtotal').textContent = fmt(totalSubtotal);
     $('outDiscountAmt').textContent = totalDiscount > 0 ? '− ' + fmt(totalDiscount) : '₹0';
