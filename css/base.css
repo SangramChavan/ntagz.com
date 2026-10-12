@@ -809,3 +809,47 @@ body.cart-open-lock {
   .footer-col li { margin-bottom: 0; break-inside: avoid; }
   .footer-col a { padding: 8px 0; line-height: 1.3; }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   MOBILE-FIRST HARDENING
+   Small-screen ergonomics applied site-wide: never blow up body
+   text on rotate, keep every tappable control at a comfortable
+   ≥44px, and let the sticky chrome clear notches / home bars.
+   ═══════════════════════════════════════════════════════════ */
+
+html {
+  -webkit-text-size-adjust: 100%; /* iOS: don't inflate text when rotating to landscape */
+  text-size-adjust: 100%;
+}
+
+.top-strip {
+  padding-left: max(10px, env(safe-area-inset-left));
+  padding-right: max(10px, env(safe-area-inset-right));
+}
+
+@media (max-width: 767px) {
+  a,
+  button,
+  input,
+  select,
+  textarea,
+  [role="button"] {
+    touch-action: manipulation; /* kill the 300ms double-tap zoom delay */
+  }
+
+  /* Footer + breadcrumb links are inline text by default (≈18-37px tall);
+     lift them to a real touch target. */
+  .footer-col a,
+  .footer-bottom-r a,
+  .footer-mp-pill,
+  p[style*="margin:20px 0 0"] a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+
+  .footer-mp-pill { padding-block: 6px; }
+
+  p[style*="margin:20px 0 0"] { line-height: 1.2; }
+  p[style*="margin:20px 0 0"] a { padding-inline: 2px; }
+}

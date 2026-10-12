@@ -374,6 +374,11 @@
   .sticky-cta.show{transform:translateY(0);}
   .sticky-cta .btn{flex:1; justify-content:center;}
   @media(min-width:960px){ .sticky-cta{display:none;} }
+  @media (max-width:767px){
+    /* Touch targets: these controls were 25-36px tall on a phone. */
+    .nav-cta, .qa, .uc-btn, .chat-input button, .chat-input input, .sim-reset { min-height:44px; }
+    .sim-reset { top:12px; padding:10px 12px; }
+  }
 </style>
 </head>
 <body>

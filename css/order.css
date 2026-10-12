@@ -992,6 +992,10 @@
       .pay-tab { flex: 1 1 calc(50% - 4px); }
     }
 
+    @media (max-width: 767px) {
+      .pay-tab { min-height: 44px; } /* 9px padding gave a ~32px touch target */
+    }
+
     .pay-panel {
       display: none;
     }
@@ -2036,6 +2040,10 @@
     .prod-card.bundle-card .prod-badge {
       background: rgba(0, 122, 107, .12);
       color: var(--teal);
+    }
+
+    @media (max-width: 767px) {
+      .prod-card .prod-badge { font-size: 11px; } /* 8.5px was unreadable on a phone */
     }
 
     .prod-card .prod-name {
