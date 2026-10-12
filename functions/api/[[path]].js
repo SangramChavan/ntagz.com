@@ -363,7 +363,7 @@ async function handleRewards(url, request, env, allowedOrigin) {
         } catch (e) { console.error("tier suggestions failed:", e && e.message); }
       }
       const counts = (o) => o.payment_status === "paid" && o.paid_paise > 0 && !["cancelled", "returned"].includes(o.status);
-      const pub = (t) => (t ? { id: t.id, name: t.name, discountPct: Number(t.discount_pct), perks: t.perks, minSpendPaise: t.min_spend_paise } : null);
+      const pub = (t) => (t ? { id: t.id, name: t.name, discountPct: Number(t.discount_pct), pointsPer100: t.points_per_100 === null || t.points_per_100 === undefined ? null : Number(t.points_per_100), perks: t.perks, minSpendPaise: t.min_spend_paise } : null);
       return jsonAuth({
         live: ctx.live, suggest, spendPaise: ctx.spend, tier: pub(ctx.tier), next: ctx.next ? { ...pub(ctx.next), remainingPaise: ctx.remaining } : null, topTier: !ctx.next,
         discountPct: ctx.pct, savingsPaise: Number(sav && sav.s) || 0, tiers: publicTiers,

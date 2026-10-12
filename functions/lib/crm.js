@@ -1,7 +1,7 @@
 // CRM primitives shared by the payments Worker (public tracking / unsubscribe / click redirect) and the admin Worker (campaigns, consent).
 // No I/O at import time. Everything that touches the database takes `db` (a D1 binding) explicitly.
 
-const EVENTS = new Set(["page_view", "product_view", "search", "add_to_cart", "remove_from_cart", "begin_checkout", "membership_view", "email_click"]);
+const EVENTS = new Set(["page_view", "product_view", "search", "add_to_cart", "remove_from_cart", "begin_checkout", "membership_view", "email_click", "membership_offer_shown", "membership_offer_added", "membership_offer_declined"]);
 // 'purchase', 'refund' and 'membership_tier_changed' are deliberately NOT accepted from browsers: they are derived from orders/refunds/loyalty_tier_log.
 const ID = /^[A-Za-z0-9_-]{8,40}$/;
 const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;

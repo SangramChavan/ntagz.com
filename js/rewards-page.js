@@ -19,10 +19,12 @@
       if (me && me.tier && me.tier.id === t.id) card.appendChild(el('span', 't-you', 'Your tier'));
       card.appendChild(el('h3', null, t.name));
       card.appendChild(el('div', 't-spend', t.minSpendPaise === 0 ? 'Everyone starts here' : 'From ' + rupee(t.minSpendPaise) + ' qualifying spend'));
-      var off = el('div', 't-off', t.discountPct > 0 ? pct(t.discountPct) + ' ' : 'Standard pricing');
+      var hasPts = t.pointsPer100 != null && t.pointsPer100 > 0;
+      var off = el('div', 't-off', t.discountPct > 0 ? pct(t.discountPct) + ' ' : hasPts ? nf.format(t.pointsPer100) + ' ' : 'Standard pricing');
       if (t.discountPct > 0) off.appendChild(el('small', null, 'off eligible products'));
+      else if (hasPts) off.appendChild(el('small', null, 'points per ₹100'));
       card.appendChild(off);
-      var dup = t.perks === 'Standard pricing' || t.perks === nf.format(t.discountPct) + '% off eligible products';  // don't repeat what the discount line already says
+      var dup = t.perks === 'Standard pricing' || t.perks === nf.format(t.discountPct) + '% off eligible products' || (hasPts && t.perks === nf.format(t.pointsPer100) + ' points per ₹100');  // don't repeat what the headline already says
       if (t.perks && !dup) card.appendChild(el('p', 't-perk', t.perks));
       if (me && me.next && me.tier && t.id === me.next.id) card.appendChild(el('p', 't-perk', rupee(me.next.remainingPaise) + ' to go'));
       host.appendChild(card);
@@ -37,7 +39,8 @@
     var a = el('div', 'card');
     a.appendChild(el('h3', null, (me.tier ? me.tier.name : 'Free') + ' tier'));
     a.appendChild(stat('Qualifying spend', rupee(me.spendPaise)));
-    a.appendChild(stat('Your member discount', me.live ? (me.discountPct > 0 ? pct(me.discountPct) + ' on eligible products' : 'None at this tier') : 'Not switched on yet'));
+    if (me.tier && me.tier.pointsPer100 > 0) a.appendChild(stat('Points rate at your tier', nf.format(me.tier.pointsPer100) + ' points per ₹100'));
+    if (!(me.tier && me.tier.pointsPer100 > 0) || me.discountPct > 0) a.appendChild(stat('Your member discount', me.live ? (me.discountPct > 0 ? pct(me.discountPct) + ' on eligible products' : 'None at this tier') : 'Not switched on yet'));
     a.appendChild(stat('Saved with Ntagz so far', rupee(me.savingsPaise)));
     if (me.paidMembership && me.paidMembership.active) a.appendChild(stat('Paid membership', 'Active until ' + when(me.paidMembership.expiresAt)));
     host.appendChild(a);
@@ -47,13 +50,13 @@
       b.appendChild(el('h3', null, 'You’re on our top tier'));
       b.appendChild(el('p', 'm-fine', me.discountPct > 0 ? 'You get ' + pct(me.discountPct) + ' off eligible products. Thank you for shopping with Ntagz.' : 'There is no higher tier to reach.'));
     } else {
-      var from = me.tier ? me.tier.minSpendPaise : 0, span = me.next.minSpendPaise - from, done = Math.min(Math.max(me.spendPaise - from, 0), span);
+      var span = me.next.minSpendPaise, done = Math.min(Math.max(me.spendPaise, 0), span); /* progress = qualifying spend ÷ the next threshold */
       b.appendChild(el('h3', null, rupee(me.next.remainingPaise) + ' to ' + me.next.name));
-      b.appendChild(el('p', 'm-fine', me.next.name + ' gives ' + pct(me.next.discountPct) + ' off eligible products.'));
+      b.appendChild(el('p', 'm-fine', me.next.discountPct > 0 ? me.next.name + ' gives ' + pct(me.next.discountPct) + ' off eligible products.' : me.next.pointsPer100 > 0 ? me.next.name + ' earns ' + nf.format(me.next.pointsPer100) + ' points for every ₹100 of eligible spend.' : ''));
       var bar = el('div', 'm-bar'); bar.setAttribute('role', 'progressbar'); bar.setAttribute('aria-valuemin', '0'); bar.setAttribute('aria-valuemax', '100');
       var w = span > 0 ? Math.round(done / span * 100) : 0; bar.setAttribute('aria-valuenow', String(w)); bar.setAttribute('aria-label', 'Progress to ' + me.next.name);
       var fill = el('i'); fill.style.width = w + '%'; bar.appendChild(fill); b.appendChild(bar);
-      b.appendChild(el('p', 'm-fine', rupee(me.spendPaise) + ' of ' + rupee(me.next.minSpendPaise)));
+      b.appendChild(el('p', 'm-fine', rupee(me.spendPaise) + ' of ' + rupee(me.next.minSpendPaise) + ' (' + w + '%)'));
     }
     host.appendChild(b);
 

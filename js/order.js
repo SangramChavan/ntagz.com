@@ -443,12 +443,14 @@
     earn.textContent = p.willEarn > 0 ? 'You’ll earn about ' + fmtNum(p.willEarn) + ' points on this order' + (p.earnOn === 'delivered' ? ' once it is delivered.' : ' once payment is confirmed.') : '';
   }
   /* Optional membership card. Every number is the server's; nothing is preselected and "Continue without" is always there. */
+  function track(name) { try { if (window.NZ_ANALYTICS && window.NZ_ANALYTICS.track) window.NZ_ANALYTICS.track(name); } catch (e) { /* analytics never blocks checkout */ } }
   function renderOffer(mq) {
     var box = $('memOffer'), o = MQ.offer;
     if (!box) return;
     var added = !!(mq && mq.membershipFeePaise > 0);
     if (!MQ.member || !o || (o.state !== 'eligible' && o.state !== 'login_required') || (!o.show && !added)) { box.hidden = true; return; }
     box.hidden = false;
+    if (!MQ.shownLogged) { MQ.shownLogged = true; track('membership_offer_shown'); }
     while (box.firstChild) box.removeChild(box.firstChild);
     var mk = function (tag, cls, txt) { var e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
     var term = o.durationDays === 365 ? 'year' : o.durationDays + ' days';
@@ -470,8 +472,8 @@
     var acts = mk('div', 'mo-acts');
     var yes = mk('button', 'btn' + (added ? ' btn-primary' : ''), added ? 'Membership added' : 'Add membership'), no = mk('button', 'btn btn-outline', 'Continue without membership');
     yes.type = no.type = 'button'; yes.setAttribute('aria-pressed', added ? 'true' : 'false'); no.setAttribute('aria-pressed', added ? 'false' : 'true');
-    yes.onclick = function () { MQ.err = ''; MQ.add = true; MQ.redeem = 0; calculateQuote(); };
-    no.onclick = function () { MQ.err = ''; MQ.add = false; calculateQuote(); };
+    yes.onclick = function () { track('membership_offer_added'); MQ.err = ''; MQ.add = true; MQ.redeem = 0; calculateQuote(); };
+    no.onclick = function () { if (added) track('membership_offer_declined'); MQ.err = ''; MQ.add = false; calculateQuote(); };
     acts.appendChild(yes); acts.appendChild(no); box.appendChild(acts);
   }
   (function () {

@@ -174,8 +174,25 @@ async function endMembership(ctx, m) {
 }
 
 // ── Analytics ──────────────────────────────────────────────────────────────────────────────────────────────────
+// Checkout membership offer funnel. Sessions come from consented first-party events (a sample, not everyone); orders are all paid orders that
+// bought membership. Acceptance is a share of sessions that SAW the offer, not a measured effect on conversion.
+async function offerFunnel(env, r) {
+  try {
+    const [ev, ord] = await Promise.all([
+      env.DB.prepare("SELECT event, count(DISTINCT sid) n FROM crm_events WHERE event IN ('membership_offer_shown','membership_offer_added','membership_offer_declined') AND ts>=? AND ts<? GROUP BY event").bind(r.from, r.to).all(),
+      env.DB.prepare("SELECT count(*) n, coalesce(sum(membership_fee_paise),0) fee FROM orders WHERE membership_fee_paise>0 AND payment_status='paid' AND status NOT IN ('cancelled','returned') AND created_at>=? AND created_at<?").bind(r.from, r.to).first(),
+    ]);
+    const c = Object.fromEntries(ev.results.map((x) => [x.event, x.n]));
+    const shown = c.membership_offer_shown || 0, added = c.membership_offer_added || 0;
+    return { sessions_shown: shown, sessions_added: added, sessions_declined: c.membership_offer_declined || 0, accept_rate: shown ? Math.round((1000 * added) / shown) / 10 : null,
+      orders_with_membership: ord.n, membership_fees_paise: ord.fee,
+      note: "Sessions are counted only for visitors who allowed analytics, so they are a sample. Orders are complete. Acceptance is the share of sessions that saw the offer and chose to add it; it does not show whether the offer changed overall conversion." };
+  } catch { return null; } // before migration 0016 / without the events table
+}
+
 async function analytics(ctx) {
   const { env } = ctx, r = rangeOf(ctx.url.searchParams), t = now();
+  const funnel = offerFunnel(env, r);
   const [mem, newM, rev, exp30, exp60, ren, aov, pts, liab, econ, conv] = await Promise.all([
     env.DB.prepare("SELECT count(DISTINCT user_id) n FROM memberships WHERE status='active' AND expires_at>?").bind(t).first(),
     env.DB.prepare("SELECT count(*) n FROM memberships WHERE purchased_at>=? AND purchased_at<? AND price_paid>0").bind(r.from, r.to).first(),
@@ -212,6 +229,7 @@ async function analytics(ctx) {
     range: r,
     memberships: { active: mem.n, new_in_range: newM.n, revenue_paise: rev.s, expiring_30d: exp30.n, expiring_60d: exp60.n, renewal_rate: ren.ended ? Math.round((1000 * ren.renewed) / ren.ended) / 10 : null, terms_ended: ren.ended,
       conversion_rate: conv.buyers ? Math.round((1000 * conv.paying) / conv.buyers) / 10 : null },
+    checkout_offer: await funnel,
     orders: { member_orders: aov.mo_n || 0, nonmember_orders: aov.no_n || 0, member_aov_paise: aov.mo_n ? Math.round(aov.mo_net / aov.mo_n) : null, nonmember_aov_paise: aov.no_n ? Math.round(aov.no_net / aov.no_n) : null },
     points: { issued: pts.issued, redeemed: pts.redeemed, expired: pts.expired, reversed: pts.reversed, outstanding_points: liab.pts, holders: liab.holders, outstanding_liability_paise: liab.pts * st.valuePaise,
       liability_note: "Includes points past their expiry date that the daily sweep has not yet removed." },

@@ -76,6 +76,7 @@
     if (c === 'denied') return;
     enabled(function (on) { if (!on) return; if (c === 'granted') start(); else bar(); });
   }
-  window.NZ_ANALYTICS = { reset: function () { del(CONSENT); try { sessionStorage.removeItem(CFG); } catch (e) { /* ignore */ } location.reload(); } };
+  var TRACKABLE = { membership_offer_shown: 1, membership_offer_added: 1, membership_offer_declined: 1 };
+  window.NZ_ANALYTICS = { track: function (name) { if (started && TRACKABLE[name]) ev(name, {}); }, reset: function () { del(CONSENT); try { sessionStorage.removeItem(CFG); } catch (e) { /* ignore */ } location.reload(); } };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
