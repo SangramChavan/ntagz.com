@@ -18,6 +18,7 @@
 
   var P = null;          // /api/membership/pricing
   var M = null;          // /api/membership/me (null = signed out or unknown)
+  var CM = [];           // cart milestones from /api/rewards/tiers (free shipping / % off — a separate programme from spending milestones)
   var cta = null;        // current primary action {label, href, act, disabled, ghost}
   var avgPct = 0, minPct = 0, maxPct = 0, nProducts = 0;
 
@@ -67,7 +68,6 @@
     var add = function (t) { chips.appendChild(el('li', null, t)); };
     if (live && maxPct > 0) add('Member prices up to ' + maxPct + '% off');
     if (p) add('Earn ' + rateText());
-    if (msList().length) add('Bonus points at milestones');
     if (canBuy()) add('No auto-renewal');
     $('mJoinPrice').textContent = canBuy() ? paise(P.feePaise) + ' / ' + duration(P.durationDays) : '';
   }
@@ -81,8 +81,6 @@
       host.appendChild(benefitCard('Rewards points', 'Earn ' + rateText() + ' of eligible product value you buy, depending on your spending tier. Each point is worth ' + paise(p.valuePaise) + ' at checkout.'));
       host.appendChild(benefitCard('Use points at checkout', 'Redeem from ' + pts(p.minRedeem) + ' points, for up to ' + p.maxRedeemPct + '% of an order’s eligible value. Points last ' + duration(p.validDays) + ' from the day they are earned.'));
     }
-    var ms = msList();
-    if (ms.length) host.appendChild(benefitCard('Spending milestones', 'Bonus points when your eligible spend in a membership year reaches ' + ms.slice(0, 3).map(function (m) { return paise(m.thresholdPaise) + ' (+' + pts(m.bonusPoints) + ')'; }).join(', ') + (ms.length > 3 ? ' and more' : '') + '.'));
     host.appendChild(benefitCard('Simple and honest', canBuy() ? 'One payment of ' + paise(P.feePaise) + ' for ' + duration(P.durationDays) + '. No automatic renewal. For small one-off orders it may not pay for itself, so use the estimate below.' : 'Membership is not on sale right now. You can still shop at regular prices.'));
   }
 
@@ -104,7 +102,6 @@
       row('Rewards points', 'Not earned', rateText());
       row('Use points at checkout', 'No', 'Up to ' + p.maxRedeemPct + '% of an order');
     }
-    if (msList().length) row('Milestone bonus points', 'No', msList().length + (msList().length === 1 ? ' milestone' : ' milestones') + ' per year');
     row('Cost', 'Free', paise(P.feePaise) + ' / ' + duration(P.durationDays));
     sec.hidden = false;
   }
@@ -153,19 +150,44 @@
     renderCalc();
   }
 
-  /* ── milestones: the member's real progress, or a clearly labelled example ── */
+  /* ── milestones: both kinds in one section — spending (bonus points) and cart (checkout rewards) ── */
   function renderMilestones() {
-    var sec = $('milestones'), ms = msList(); sec.hidden = !ms.length; if (!ms.length) return;
-    var p = P.points, real = M && M.live && M.membership && M.membership.active && M.milestones && M.milestones.ladder && M.milestones.ladder.length;
-    $('msLede').textContent = 'Reach each level of eligible spend in a membership year and earn bonus points on top of the points you earn on orders. Spend counts ' + (p.earnOn === 'paid' ? 'once your payment is confirmed' : 'once orders are delivered') + ', after discounts and refunds.';
-    if (real) {
-      window.NTAGZ_MEMDASH.ladder($('msLadder'), M.milestones.ladder, M.milestones.spendPaise || 0);
-      $('msNote').textContent = 'This is your real progress for the current membership year.';
-    } else {
-      var a = ms[0].thresholdPaise, ex = ms.length > 1 ? a + Math.floor((ms[1].thresholdPaise - a) / 2) : Math.floor(a / 2);
-      window.NTAGZ_MEMDASH.ladder($('msLadder'), ms.map(function (m) { return { id: m.id, label: m.label, thresholdPaise: m.thresholdPaise, bonusPoints: m.bonusPoints, reached: ex >= m.thresholdPaise, awarded: ex >= m.thresholdPaise }; }), ex);
-      $('msNote').textContent = 'Example only: this shows a member who has spent ' + paise(ex) + '. It is not your spend. Join to track your own progress.';
-    }
+    var sec = $('milestones'), ms = msList(), spend = $('msSpend');
+    if (ms.length) {
+      var p = P.points, real = M && M.live && M.membership && M.membership.active && M.milestones && M.milestones.ladder && M.milestones.ladder.length;
+      $('msLede').textContent = 'Reach each level of eligible spend in a membership year and earn bonus points on top of the points you earn on orders. Spend counts ' + (p.earnOn === 'paid' ? 'once your payment is confirmed' : 'once orders are delivered') + ', after discounts and refunds.';
+      if (real) {
+        window.NTAGZ_MEMDASH.ladder($('msLadder'), M.milestones.ladder, M.milestones.spendPaise || 0);
+        $('msNote').textContent = 'This is your real progress for the current membership year.';
+      } else {
+        var a = ms[0].thresholdPaise, ex = ms.length > 1 ? a + Math.floor((ms[1].thresholdPaise - a) / 2) : Math.floor(a / 2);
+        window.NTAGZ_MEMDASH.ladder($('msLadder'), ms.map(function (m) { return { id: m.id, label: m.label, thresholdPaise: m.thresholdPaise, bonusPoints: m.bonusPoints, reached: ex >= m.thresholdPaise, awarded: ex >= m.thresholdPaise }; }), ex);
+        $('msNote').textContent = 'Example only: this shows a member who has spent ' + paise(ex) + '. It is not your spend. Join to track your own progress.';
+      }
+      spend.hidden = false;
+    } else spend.hidden = true;
+    renderCartMilestones();
+    sec.hidden = !(ms.length || CM.length);
+  }
+  /* Cart milestones (free shipping / % off) — a separate programme from spending milestones, shown in the same section but in its own block. */
+  function renderCartMilestones() {
+    var block = $('msCart'), list = $('msCartList'), up = CM.filter(function (m) { return m && m.thresholdPaise != null; });
+    if (!up.length) { block.hidden = true; return; }
+    list.textContent = '';
+    up.forEach(function (m) {
+      var li = el('li', 'm-ms-item');
+      li.appendChild(el('span', 'm-ms-cond', 'Add ' + paise(m.thresholdPaise) + ' of eligible products'));
+      var what = m.type === 'free_shipping' ? 'Free shipping' : m.type === 'percent_off' ? nf.format(m.value) + '% off' : (m.name || 'A reward');
+      li.appendChild(el('b', 'm-ms-reward', what + (m.audience === 'members' ? ' (members)' : m.audience === 'signed_in' ? ' (signed in)' : '')));
+      list.appendChild(li);
+    });
+    $('msCartNote').textContent = 'Cart rewards are limited-time offers. They apply automatically when you pay online, based on the eligible product value in your cart, and do not combine with member or quantity discounts unless stated.';
+    block.hidden = false;
+  }
+  function loadCartMilestones() {
+    return fetch('/api/rewards/tiers', { credentials: 'omit' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+      CM = d && Array.isArray(d.milestones) ? d.milestones : [];
+    }).catch(function () { CM = []; });
   }
 
   /* ── FAQ, all from the configuration ── */
@@ -343,6 +365,8 @@
   }).then(function (d) {
     if (!P) return;
     return onMe(d);
+  }).then(function () {
+    return P ? loadCartMilestones() : null;
   }).then(function () {
     if (!P) return;
     applyCta(); renderMilestones(); showDash(); resumeJoin();

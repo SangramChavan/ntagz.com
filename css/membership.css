@@ -124,6 +124,14 @@
 .m-hist{margin-top:10px;font-size:14px}.m-hist summary{cursor:pointer;font-weight:700;min-height:44px;display:flex;align-items:center}
 .m-hist ul{margin:6px 0 0;padding-left:18px;color:var(--m-ink-2)}
 
+/* milestones: one section, two clearly separated kinds (spending = points, cart = checkout rewards) */
+.m-ms-block{margin-top:28px;padding-top:24px;border-top:1px solid var(--m-line)}
+.m-ms-block>.m-h3{margin-top:0}
+.m-ms-list{list-style:none;padding:0;margin:16px 0 0;display:grid;gap:10px}
+.m-ms-item{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:6px 12px;border:1px solid var(--m-line);border-radius:14px;padding:14px 16px;font-size:15px;background:var(--m-soft)}
+.m-ms-cond{color:var(--m-ink-2)}
+.m-ms-reward{font-variant-numeric:tabular-nums}
+
 @media (min-width:640px){
   .m-cta{flex-direction:row;justify-content:center;max-width:none}
   .m-split{grid-template-columns:repeat(2,1fr)}

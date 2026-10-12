@@ -20,7 +20,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="../css/base.css" />
   <link rel="stylesheet" href="../css/membership-dashboard.css?v=20261018" />
-  <link rel="stylesheet" href="../css/membership.css?v=20261018" />
+  <link rel="stylesheet" href="../css/membership.css?v=20261019" />
 </head>
 <body>
   <div id="header-placeholder"></div>
@@ -107,14 +107,25 @@
         </div>
       </section>
 
-      <!-- Milestones -->
+      <!-- Milestones: one place for both kinds (spending = bonus points, cart = checkout rewards) -->
       <section id="milestones" aria-labelledby="msH" hidden>
         <div class="m-wrap">
-          <p class="m-eyebrow">Spending milestones</p>
-          <h2 class="m-h2" id="msH">Bonus points as you spend.</h2>
-          <p class="m-lede" id="msLede"></p>
-          <div class="md" id="msLadder"></div>
-          <p class="m-fine" id="msNote"></p>
+          <p class="m-eyebrow">Milestones</p>
+          <h2 class="m-h2" id="msH">Milestones, in one place.</h2>
+
+          <div class="m-ms-block" id="msSpend" hidden>
+            <h3 class="m-h3">Spending milestones — bonus points</h3>
+            <p class="m-lede" id="msLede"></p>
+            <div class="md" id="msLadder"></div>
+            <p class="m-fine" id="msNote"></p>
+          </div>
+
+          <div class="m-ms-block" id="msCart" hidden>
+            <h3 class="m-h3">Cart milestones — save at checkout</h3>
+            <p class="m-lede" id="msCartLede">Get an automatic reward when your cart reaches an amount. The best one your cart qualifies for is applied when you pay online.</p>
+            <ul class="m-ms-list" id="msCartList"></ul>
+            <p class="m-fine" id="msCartNote"></p>
+          </div>
         </div>
       </section>
 
@@ -166,7 +177,7 @@
 
   <script src="../js/member-calc.js?v=20261013" defer></script>
   <script src="../js/membership-dashboard.js?v=20261016" defer></script>
-  <script src="../js/membership.js?v=20261014" defer></script>
+  <script src="../js/membership.js?v=20261019" defer></script>
   <script src="../js/rewards-page.js?v=20261016" defer></script>
 </body>
 </html>
