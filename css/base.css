@@ -797,6 +797,18 @@ body.cart-open-lock {
   background: var(--tagz-lt);
 }
 
+/* The nav CTA is a button, not a nav link: the generic link colour above
+   was overriding .btn-tagz and leaving greige-on-orange (~1.7:1). */
+.mobile-nav-panel a.btn {
+  color: #1F1C20;
+  border-bottom: 0;
+}
+.mobile-nav-panel a.btn:active,
+.mobile-nav-panel a.btn:hover {
+  color: #1F1C20;
+  background: var(--tagz);
+}
+
 @media (min-width: 768px) {
   .mobile-nav-panel {
     display: none;
