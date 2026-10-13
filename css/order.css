@@ -1351,7 +1351,6 @@
 
       nav,
       footer,
-      .top-strip,
       .tap-hero,
       .calc-form-card,
       .page-header,
@@ -1914,15 +1913,6 @@
        (products come from js/catalog.js; no emoji anywhere here)
     ═══════════════════════════════════════════════════════════ */
 
-    /* ── Top strip separator (replaces the old emoji spacers) ── */
-    .top-strip-sep {
-      width: 4px;
-      height: 4px;
-      border-radius: 50%;
-      background: currentColor;
-      opacity: .35;
-      display: inline-block;
-    }
 
     /* ── Small helper copy ── */
     .section-note {
