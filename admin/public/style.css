@@ -171,3 +171,7 @@ dialog#sdlg { width:min(760px, calc(100vw - 24px)); }
 .rw-elig { display:grid; grid-template-columns:1fr auto 110px; gap:8px; align-items:center; } .rw-cust { display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center; }
 .chk { display:flex; align-items:center; gap:8px; min-height:44px; } .chk input { width:auto; min-height:0; }
 @media (max-width:480px) { .rw-elig { grid-template-columns:1fr auto; } .rw-elig > input { grid-column:1/-1; } }
+
+/* phone numbers that open WhatsApp */
+a.wa { color:var(--brand, #1a7f37); text-decoration:underline; text-underline-offset:2px; }
+.sub a.wa { font-size:inherit; }

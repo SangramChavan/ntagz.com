@@ -8,6 +8,22 @@ const todayIST = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/
 const dayText = (d) => (d ? new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—");
 const OKEY = "ntagz.admin.ofilters";
 
+// WhatsApp follow-up link for an order. Indian mobiles (10 digits, or with a leading 0 / 91) get +91; anything that is not a plausible
+// number stays plain text. The message is only pre-filled: the admin reads and sends it themselves. Opens in a new tab.
+function waHref(phone, text) {
+  let d = String(phone || "").replace(/\D/g, "");
+  if (d.length === 11 && d[0] === "0") d = d.slice(1);
+  if (d.length === 10) d = "91" + d;
+  return /^\d{11,15}$/.test(d) ? "https://wa.me/" + d + (text ? "?text=" + encodeURIComponent(text) : "") : null;
+}
+const waText = (o) => `Hi ${(o.name || "").trim().split(/\s+/)[0] || "there"}, this is ntagz about your order ${orderRef(o)}.`;
+function phoneLink(o) {
+  const href = waHref(o.phone, waText(o));
+  if (!href) return o.phone || "";
+  const stop = (e) => e.stopPropagation(); // the table row opens the order; the number must not
+  return el("a", { class: "wa", href, target: "_blank", rel: "noopener noreferrer", title: "Follow up on WhatsApp", "aria-label": "Follow up on WhatsApp: " + o.phone, onclick: stop, onkeydown: stop }, o.phone);
+}
+
 const payPill = (o) => el("span", { class: "pill " + o.payment_status }, o.payment_status === "paid" ? "Paid" : "Unpaid");
 const fulPill = (o) => el("span", { class: "pill st-" + o.status }, STATUS_TXT[o.status] || o.status);
 const methodTxt = (o) => (o.payment_method || "—").toUpperCase();
@@ -49,7 +65,7 @@ async function load() {
       buildLine(o),
       o.tracking_id ? el("div", { class: "sub" }, `${o.courier || ""} · ${o.tracking_id}`) : "")));
     $("rows").replaceChildren(...d.orders.map((o) => el("tr", { tabindex: "0", onclick: () => openOrder(o.id), onkeydown: (e) => { if (e.key === "Enter") openOrder(o.id); } },
-      el("td", { class: "mono" }, orderRef(o)), el("td", {}, when(o.created_at)), el("td", {}, o.name || "Guest", el("div", { class: "sub" }, o.phone || "")),
+      el("td", { class: "mono" }, orderRef(o)), el("td", {}, when(o.created_at)), el("td", {}, o.name || "Guest", el("div", { class: "sub" }, phoneLink(o))),
       el("td", {}, payPill(o), el("div", { class: "sub" }, methodTxt(o))), el("td", {}, fulPill(o), priPill(o), o.is_preorder ? el("span", { class: "pill pre" }, "Pre-order") : "", dispatchLine(o), buildLine(o)),
       el("td", {}, inr(o.total)), el("td", {}, o.courier || "—"), el("td", { class: "mono" }, o.tracking_id || "—"))));
   } catch (e) {
@@ -184,7 +200,7 @@ async function openOrder(id, preloaded) {
       el("h3", { class: "sec" }, "Order journey"), el("ol", { class: "timeline" }, tl),
       el("h3", { class: "sec" }, "Customer emails"),
       ...(o.notifications.length ? o.notifications.map((n) => el("div", { class: "sub" }, `${when(n.created_at)} · ${n.subject || n.event} · ${n.status}${n.detail ? " (" + n.detail + ")" : ""}`)) : [el("p", { class: "sub" }, o.email ? "Nothing sent yet. Emails go out when the order is confirmed, packed, shipped, out for delivery or delivered." : "No customer email on this order, so no emails are sent.")]),
-      el("h3", { class: "sec" }, "Customer"), el("dl", {}, ...row("Name", o.name || "—"), ...row("Phone", o.phone || "—"), ...row("Email", o.email || "—"), ...row("Ship to", [o.address, o.state, o.pincode].filter(Boolean).join(", ") || "—"), ...row("GSTIN", o.gstin || "—")),
+      el("h3", { class: "sec" }, "Customer"), el("dl", {}, ...row("Name", o.name || "—"), ...row("Phone", o.phone ? phoneLink(o) : "—"), ...row("Email", o.email || "—"), ...row("Ship to", [o.address, o.state, o.pincode].filter(Boolean).join(", ") || "—"), ...row("GSTIN", o.gstin || "—")),
       el("h3", { class: "sec" }, "Items & payment"), el("table", { class: "items" }, el("tbody", {}, items)),
       el("dl", {}, ...row("Subtotal", inr(o.subtotal)), ...row("GST", inr(o.gst)), ...row("Total", inr(o.total)), ...row("Paid", inr(o.paid_paise)), ...row("Outstanding", inr(o.outstanding_paise)), ...row("Method", methodTxt(o)), ...row("Order ID", o.id), ...row("Transaction", o.txn_id || "—"), ...row("Placed", when(o.created_at))),
       o.payments.length ? el("p", { class: "sub" }, o.payments.map((p) => `${inr(p.amount_paise)} ${p.method}${p.reference ? " (" + p.reference + ")" : ""} · ${p.recorded_by}`).join(" · ")) : "")
