@@ -193,6 +193,22 @@
       desc: 'Tap-to-review counter stand, 12×12 cm, NFC plus a printed QR fallback for phones without NFC. Pre-programmed before dispatch.',
       home: true
     },
+    {
+      id: 'google-review-nfc-qr-stand-custom-10x10',
+      sku: 'GRC2000',
+      name: 'Custom Google Review NFC + QR Stand — 10×10 cm',
+      price: 2000,
+      unit: 'pc',
+      moq: 1,
+      allInclusive: true,
+      image: 'images/google-review-stand-12x12.jpg',
+      detail: 'product/google-review-nfc-stand/',
+      category: 'nfc',
+      homeCategory: 'review',
+      tags: ['NFC', 'QR', 'Custom', '10×10 cm'],
+      desc: 'Custom-made 10×10 cm tabletop stand with NFC tap and a printed QR code, both pointing to your Google review link. Send us your logo and review link when you order.',
+      home: true
+    },
 
     {
       id: 'nfc-card-custom-printing',

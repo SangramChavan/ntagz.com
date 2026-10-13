@@ -23,6 +23,7 @@ const PRODUCTS = {
   "google-review-nfc-stand-5x5":  { price: 99, allInclusive: true },
   "google-review-nfc-stand-10x10":{ price: 149, allInclusive: true },
   "google-review-nfc-stand-12x12":{ price: 199, allInclusive: true },
+  "google-review-nfc-qr-stand-custom-10x10": { price: 2000, allInclusive: true, moq: 1 }, // custom-made, sold singly (the default minimum is 10)
   "nfc-card-custom-printing":     { price: 75 },
   "anti-metal-tag":               { price: 20 },
   "ntag216-adhesive-tag":         { price: 18 },
