@@ -1281,7 +1281,10 @@ async function onRequest({ request, env }) {
   const payuReturn = url.pathname.endsWith("/payu/success") || url.pathname.endsWith("/payu/failure");
   if (request.method !== "POST" && !(request.method === "GET" && (url.pathname.endsWith("/payu/verify-payment") || payuReturn))) return json({ error: "Method not allowed" }, 405, origin);
   const payuCallback = payuReturn || url.pathname.endsWith("/payu/verify-payment");
-  if (origin && !["https://www.ntagz.com", "https://ntagz.com"].includes(origin)) {
+  // Browser-facing API calls must come from our own pages. PayU's return routes are the exception: PayU sends the customer back to them
+  // from its own site (Origin: https://secure.payu.in), so an origin check would 403 every payment result. They are authenticated by PayU's
+  // signed hash instead (verifyPayuResponse), and a success is re-confirmed with PayU's verify API before any order is recorded.
+  if (!payuReturn && origin && !["https://www.ntagz.com", "https://ntagz.com"].includes(origin)) {
     return json({ error: "Origin not allowed" }, 403, origin);
   }
   if (!payuCallback && !url.pathname.endsWith("/payu/checkout") &&
@@ -1400,9 +1403,10 @@ async function onRequest({ request, env }) {
         firstname: firstName,
         email,
         phone,
-        surl: "https://ntagz-payments.ambivert.workers.dev/api/payu/success",
-        furl: "https://ntagz-payments.ambivert.workers.dev/api/payu/failure",
-        curl: "https://ntagz-payments.ambivert.workers.dev/api/payu/failure",
+        // PayU returns the customer here. Use the real domain (routed to this Worker): the workers.dev address is not enabled for this Worker.
+        surl: "https://ntagz.com/api/payu/success",
+        furl: "https://ntagz.com/api/payu/failure",
+        curl: "https://ntagz.com/api/payu/failure",
       };
       fields.hash = await payuHash(fields, env.PAYU_SALT);
       await recordIntent(env, request, fields.txnid, "payu", body, total);

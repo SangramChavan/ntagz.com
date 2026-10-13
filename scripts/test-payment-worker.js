@@ -45,7 +45,8 @@ async function main() {
   assert.equal(checkoutData.action, "https://test.payu.in/_payment");
   assert.equal(await payuHash(checkoutData.fields, payuSalt), checkoutData.fields.hash);
   assert.equal(checkoutData.fields.amount, "394.00");
-  assert.equal(checkoutData.fields.surl, "https://ntagz-payments.ambivert.workers.dev/api/payu/success");
+  assert.equal(checkoutData.fields.surl, "https://ntagz.com/api/payu/success");
+  assert.equal(checkoutData.fields.furl, "https://ntagz.com/api/payu/failure");
 
   const mockedFetch = global.fetch;
   const validPayuResponse = { ...payuResponse };

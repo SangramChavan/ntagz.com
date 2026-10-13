@@ -60,6 +60,15 @@ global.fetch = async (url, opts) => {
   payuAmount = "394.00"; r = await cb(await mkResp("394.00")); assert.equal(r.status, 303);
   o = one("SELECT * FROM orders WHERE txn_id=?", tx); assert.equal(o.payment_status, "paid"); assert.equal(o.total, 39400); assert.equal(o.payment_method, "payu"); ok("verified PayU payment creates a paid order");
   await cb(await mkResp("394.00")); assert.equal(one("SELECT count(*) c FROM orders WHERE txn_id=?", tx).c, 1); ok("PayU callback repeat is idempotent");
+  // PayU sends the customer back from its own site, so the browser adds Origin: https://secure.payu.in. Those return routes must still work.
+  const cbFrom = (f, route, origin = "https://secure.payu.in") => worker.onRequest({ request: new Request("https://ntagz-payments.ambivert.workers.dev/api/payu/" + route, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", Origin: origin }, body: new URLSearchParams(f) }), env });
+  const signed = async (f) => { f.hash = await sha512(["payu_salt", f.status, "", "", "", "", "", "", "", "", "", "", f.email, f.firstname, f.productinfo, f.amount, f.txnid, f.key].join("|")); return f; };
+  const failF = await signed({ key: "payu_key", txnid: "ntagzfailtest1", amount: "394.00", productinfo: pu.fields.productinfo, firstname: pu.fields.firstname, email: pu.fields.email, status: "failure", mihpayid: "pu_f" });
+  r = await cbFrom(failF, "failure"); assert.equal(r.status, 303); assert.match(r.headers.get("location"), /confirm\.html\?status=failed&gateway=payu/); assert.equal(one("SELECT count(*) c FROM orders WHERE txn_id='ntagzfailtest1'").c, 0); ok("PayU failure callback from payu.in is accepted (303 to the failed page), not 403 Origin not allowed, and records no order");
+  r = await cbFrom(await mkResp("394.00"), "success"); assert.equal(r.status, 303); assert.match(r.headers.get("location"), /status=success/); assert.equal(one("SELECT count(*) c FROM orders WHERE txn_id=?", tx).c, 1); ok("PayU success callback from payu.in is accepted and stays idempotent");
+  const forged = { ...(await mkResp("394.00")), txnid: "ntagzforged1" }; forged.hash = "0".repeat(128);
+  r = await cbFrom(forged, "success"); assert.equal(r.status, 303); assert.match(r.headers.get("location"), /status=failed/); assert.equal(one("SELECT count(*) c FROM orders WHERE txn_id='ntagzforged1'").c, 0); ok("a forged PayU callback (bad hash) is sent to the failed page and creates nothing: the hash, not the origin, is the control");
+  r = await worker.onRequest({ request: new Request("https://x/api/create-order", { method: "POST", headers: { "Content-Type": "application/json", Origin: "https://secure.payu.in" }, body: JSON.stringify({ items, ...cust }) }), env }); assert.equal(r.status, 403); ok("every other API route still rejects foreign origins");
 
   // ── forged recording route is closed ──
   const before = one("SELECT count(*) c FROM orders").c;

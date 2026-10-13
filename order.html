@@ -47,7 +47,6 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Instrument+Serif:ital@0;1&family=Manrope:wght@300;400;500;600&display=swap"
     rel="stylesheet">
-  <script src="https://checkout.razorpay.com/v1/checkout.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/order.css?v=20261019">
@@ -520,13 +519,34 @@
     }
     document.querySelectorAll(".pay-tab").forEach(function(t) { t.addEventListener("click", function() { showPayError(""); }); });
 
+    // Razorpay's checkout script is loaded on demand (nothing is downloaded for customers who pay another way), and a blocked or failed
+    // load becomes a readable message instead of "Razorpay is not defined". Loaded BEFORE the order is created, so a failure leaves no orphan order.
+    var rzpLoading = null;
+    function loadRazorpay() {
+      if (window.Razorpay) return Promise.resolve();
+      if (rzpLoading) return rzpLoading;
+      rzpLoading = new Promise(function(resolve, reject) {
+        var s = document.createElement("script");
+        s.src = "https://checkout.razorpay.com/v1/checkout.js";
+        s.onload = function() { window.Razorpay ? resolve() : (rzpLoading = null, reject(new Error("The Razorpay payment window did not start. Please try again."))); };
+        s.onerror = function() {
+          rzpLoading = null; s.remove();
+          reject(new Error("Could not load the Razorpay payment window. If you use an ad or privacy blocker, allow checkout.razorpay.com, or pay with PayU, UPI or bank transfer."));
+        };
+        document.head.appendChild(s);
+      });
+      return rzpLoading;
+    }
+    document.getElementById("tabRazorpay").addEventListener("click", function() { loadRazorpay().catch(function() {}); }); // warm up; errors surface on Pay
+
     var rzpButton = document.getElementById("rzpPayNow");
     rzpButton.addEventListener("click", function() {
       if (!orderItems().length) { showPayError("Please add products to your order first."); return; }
       var button = this;
       button.setAttribute("aria-disabled", "true");
       snapshotOrder();
-      postPayment("/create-order", paymentDetails())
+      showPayError("");
+      loadRazorpay().then(function() { return postPayment("/create-order", paymentDetails()); })
       .then(data => {
         var options = {
           key: data.keyId,
