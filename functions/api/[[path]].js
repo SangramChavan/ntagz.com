@@ -900,6 +900,7 @@ async function recordIntent(env, request, txnId, gateway, body, total) {
   try {
     const u = await getSession(request, env);
     const d = cleanDetails(body);
+    if (!d.email && u && u.email) d.email = u.email;   // signed in: the order carries the account's email (order emails, invoices)
     const items = (Array.isArray(body.items) ? body.items : []).map((i) => ({ id: String(i.id).slice(0, 64), qty: i.qty }));
     const amountPaise = total.amount * 100, gstPaise = total.gst * 100;
     const rw = await hasRewardsSchema(env);
@@ -1390,11 +1391,16 @@ async function onRequest({ request, env }) {
       if (pc.error) return json({ error: pc.error, code: pc.code }, pc.status, origin);
       const total = pc.total;
       const firstName = typeof body.name === "string" ? body.name.trim().split(/\s+/)[0].slice(0, 60) : "";
-      const email = typeof body.email === "string" ? body.email.trim().slice(0, 254) : "";
       const phone = typeof body.phone === "string" ? body.phone.replace(/\D/g, "").slice(-10) : "";
-      if (!firstName || /[|<>]/.test(firstName) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || /[|<>]/.test(email) || !/^\d{10}$/.test(phone)) {
-        return json({ error: "Enter a valid name, email, and 10-digit phone number for PayU" }, 400, origin);
+      if (!firstName || /[|<>]/.test(firstName) || !/^\d{10}$/.test(phone)) {
+        return json({ error: "Enter a valid name and 10-digit phone number for PayU" }, 400, origin);
       }
+      // PayU needs an email on every transaction, but the customer is not asked for one. In order: an address the client sent, the signed-in
+      // account's, else our own support address (PayU's receipt then reaches us; our order emails use the order's own email, never this fallback).
+      const given = typeof body.email === "string" ? body.email.trim().slice(0, 254) : "";
+      const account = await getSession(request, env);
+      const validEmail = (e) => !!e && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) && !/[|<>]/.test(e);
+      const email = [given, account && account.email].find(validEmail) || env.PAYU_FALLBACK_EMAIL || "hello@ntagz.com";
       const fields = {
         key: env.PAYU_KEY,
         txnid: `ntagz${crypto.randomUUID().replaceAll("-", "").slice(0, 20)}`,

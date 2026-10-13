@@ -96,6 +96,17 @@ const hmac = async (secret, msg) => Array.from(new Uint8Array(await crypto.subtl
   const u4 = t.user(); r = await t.P("/api/payu/checkout", { items: t.items, ...t.cust, membership: "add" }, u4.cookie); d = await r.json(); assert.equal(r.status, 200);
   const q4 = await t.quote(u4, { membership: "add" }); assert.equal(d.fields.amount, q4.d.you.amount.toFixed(2)); assert.equal(t.one("SELECT membership_fee_paise f FROM checkout_intents WHERE txn_id=?", d.fields.txnid).f, 99900); ok("PayU charges the same total and records the same fee");
 
+  // PayU email: the customer is never asked for one; the server supplies it
+  const noEmail = { items: t.items, name: t.cust.name, phone: t.cust.phone, address: t.cust.address, pincode: t.cust.pincode, state: t.cust.state, quoteRef: "QT-NOEMAIL" };
+  r = await t.P("/api/payu/checkout", noEmail); d = await r.json(); assert.equal(r.status, 200); assert.equal(d.fields.email, "hello@ntagz.com");
+  assert.equal(t.one("SELECT email e FROM checkout_intents WHERE txn_id=?", d.fields.txnid).e, ""); ok("a guest is not asked for an email: PayU gets our support address, and the order does not record it as the customer's");
+  const ue = t.user(); t.sqlite.prepare("UPDATE users SET email='acct@example.test' WHERE id=?").run(ue.id);
+  r = await t.P("/api/payu/checkout", noEmail, ue.cookie); d = await r.json(); assert.equal(d.fields.email, "acct@example.test");
+  assert.equal(t.one("SELECT email e FROM checkout_intents WHERE txn_id=?", d.fields.txnid).e, "acct@example.test"); ok("a signed-in customer's account email goes to PayU and onto the order");
+  r = await t.P("/api/payu/checkout", { ...noEmail, email: "typed@example.test" }, ue.cookie); d = await r.json(); assert.equal(d.fields.email, "typed@example.test"); ok("an email a client still sends is used");
+  r = await t.P("/api/payu/checkout", { ...noEmail, email: "bad|<x>@example.test" }); d = await r.json(); assert.equal(r.status, 200); assert.equal(d.fields.email, "hello@ntagz.com"); ok("a malformed or hash-breaking email is ignored (support address used), never reaches PayU's hash");
+  r = await t.P("/api/payu/checkout", { ...noEmail, phone: "123" }); assert.equal(r.status, 400); assert.match((await r.json()).error, /name and 10-digit phone/); ok("name and phone are still validated");
+
   // expired member can buy again; active term is respected
   const u5 = t.user(); t.sqlite.prepare("INSERT INTO memberships (id,user_id,status,purchased_at,expires_at,welcome_credit_paise,price_paid,payment_id) VALUES (?,?,'active',?,?,0,99900,'x')").run(crypto.randomUUID(), u5.id, NOW - 400 * DAY, NOW - 35 * DAY);
   assert.equal((await t.quote(u5)).d.membershipOffer.state, "eligible"); ok("an expired member is offered membership again");

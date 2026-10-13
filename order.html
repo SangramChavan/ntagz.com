@@ -344,10 +344,6 @@
             <!-- PayU Panel -->
             <div class="pay-panel" id="panelPayu" role="tabpanel" aria-labelledby="tabPayu">
               <p class="field-note">Pay securely with cards, UPI, net banking, and more via PayU.</p>
-              <div class="form-group">
-                <label for="payuEmail">Email address <span class="req-star">*</span></label>
-                <input type="email" id="payuEmail" class="form-control" autocomplete="email" required maxlength="254">
-              </div>
               <div class="quote-actions">
                 <button type="button" id="payuPayNow" class="btn btn-razorpay btn-lg btn-block">Continue to PayU</button>
               </div>
@@ -586,18 +582,17 @@
 
     document.getElementById("payuPayNow").addEventListener("click", function() {
       var items = orderItems();
-      var email = document.getElementById("payuEmail");
       var name = document.getElementById("customerName").value.trim();
       var phone = document.getElementById("customerNumber").value.trim();
       if (!items.length) { showPayError("Please add products to your order first."); return; }
-      if (!name || !/^\d{10}$/.test(phone.replace(/\D/g, "").slice(-10)) || !email.reportValidity()) {
-        if (!name || !phone) showPayError("Enter your name and 10-digit phone number before paying.");
+      if (!name || !/^\d{10}$/.test(phone.replace(/\D/g, "").slice(-10))) {
+        showPayError("Enter your name and 10-digit phone number before paying.");
         return;
       }
       var button = this;
       button.disabled = true;
       snapshotOrder();
-      postPayment("/payu/checkout", Object.assign(paymentDetails(), { name: name, phone: phone, email: email.value.trim() }))
+      postPayment("/payu/checkout", Object.assign(paymentDetails(), { name: name, phone: phone }))
         .then(function(data) {
           var form = document.createElement("form");
           form.method = "POST";
@@ -631,20 +626,10 @@
       });
     })();
 
-    // Signed-in customers already have an email on their account: reuse it for PayU and Razorpay instead of asking again.
+    // Signed-in customers: prefill the payment window with their account details. PayU's email is supplied by the server, so nobody is asked for one.
     fetch(paymentApi + "/accounts/me", { credentials: "same-origin" })
       .then(function(r) { return r.ok ? r.json() : null; })
-      .then(function(a) {
-        var u = a && a.user;
-        if (!u) return;
-        accountUser = u;
-        var email = document.getElementById("payuEmail");
-        if (!u.email || !email || email.value) return;
-        email.value = u.email;
-        email.required = false;
-        var star = document.querySelector('label[for="payuEmail"] .req-star');
-        if (star) star.remove();
-      })
+      .then(function(a) { if (a && a.user) accountUser = a.user; })
       .catch(function() {});
 
   </script>
