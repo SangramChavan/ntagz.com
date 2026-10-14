@@ -51,6 +51,7 @@ global.fetch = async (url, opts) => String(url).includes("api.razorpay.com")
   vm.runInContext(fs.readFileSync(path.join(root, "js", "catalog.js"), "utf8"), sandbox);
   const cat = sandbox.NTAGZ_CATALOG && sandbox.NTAGZ_CATALOG.byId ? sandbox.NTAGZ_CATALOG.byId(ID) : null;
   assert.ok(cat, "catalog.js lists the product"); assert.equal(cat.price, 2000); assert.equal(cat.moq, 1); assert.equal(cat.allInclusive, true); assert.equal(cat.name, row.name); assert.equal(cat.sku, row.sku);
+  assert.equal(row.image_url, "images/custom-google-review-stand-10x10.png"); assert.equal(cat.image, row.image_url); assert.ok(fs.existsSync(path.join(root, row.image_url)), "image file is in the repo"); assert.ok(fs.statSync(path.join(root, row.image_url)).size < 300000);
   assert.equal(cat.price, PRICING.PRODUCTS[ID].price); ok("js/catalog.js and the server price table agree on name, SKU, price, all-inclusive and minimum quantity");
 
   console.log(`\n${n} custom-stand checks passed`);

@@ -201,7 +201,7 @@
       unit: 'pc',
       moq: 1,
       allInclusive: true,
-      image: 'images/google-review-stand-12x12.jpg',
+      image: 'images/custom-google-review-stand-10x10.png',
       detail: 'product/google-review-nfc-stand/',
       category: 'nfc',
       homeCategory: 'review',
