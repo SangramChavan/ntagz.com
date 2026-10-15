@@ -185,12 +185,19 @@ document.getElementById("carrier").addEventListener("change", (e) => {
     const lbl = (d.status_label || d.status) + (d.is_preorder && !/pre-?order/i.test(d.status_label || "") ? " (pre-order)" : "");
     head.append(hl, el("span", "ov-badge " + (d.status === "delivered" ? "ok" : EXC.includes(d.status) ? "warn" : ""), lbl));
     sum.append(head);
-    const det = document.createElement("details");
-    det.append(el("summary", null, "Order details"));
-    const body = el("div");
-    det.append(body);
-    sum.append(det);
-    const sum2 = body;
+    const step = EXC.includes(d.status) ? -1 : idx(d.status);
+    if (step >= 0) {
+      const bar = el("div", "ov-bar");
+      bar.setAttribute("role", "img");
+      bar.setAttribute("aria-label", "Step " + (step + 1) + " of " + STAGES.length + ": " + STAGES[step][1]);
+      STAGES.forEach((_, i) => bar.append(el("i", i <= step ? "on" : "")));
+      sum.append(bar, el("div", "ov-step", "Step " + (step + 1) + " of " + STAGES.length));
+    }
+    const det = card();
+    const dd = document.createElement("details");
+    dd.append(el("summary", null, "Order details"));
+    const sum2 = el("div");
+    dd.append(sum2); det.append(dd);
     sum2.append(row("Payment", d.payment_status === "paid" ? "Paid" : "Unpaid"));
     if (d.ship_to) sum2.append(row("Ship to", [d.ship_to.state, d.ship_to.pincode].filter(Boolean).join(" - ")));
     if (d.expected_dispatch && /^\d{4}-\d{2}-\d{2}$/.test(d.expected_dispatch)) {
@@ -209,6 +216,7 @@ document.getElementById("carrier").addEventListener("change", (e) => {
     }
     sum2.append(ul, row("Total", inr(d.total_paise)));
     const nodes = [sum];
+    const tail = det;
 
     for (const s of d.shipments || []) {
       const c = card("Shipment · " + s.courier);
@@ -225,7 +233,7 @@ document.getElementById("carrier").addEventListener("change", (e) => {
     }
     const t = card("Order journey");
     t.append(timeline(d));
-    nodes.push(t);
+    nodes.push(t, tail);
     show(...nodes);
   }
 
