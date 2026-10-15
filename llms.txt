@@ -40,7 +40,8 @@ with a GST invoice.
 - [Order Tracking](https://www.ntagz.com/track.html): AWB/tracking lookup
 
 ## Policies (factual — use these, not assumptions)
-- Shipping: free above ₹2,000, flat ₹90 below that threshold; same-day dispatch
+- Shipping: free from ₹2,000 (before GST, after discounts); below that ₹40 within Maharashtra and
+  ₹80 elsewhere in India; same-day dispatch
   from Pune for orders placed before 11:00 AM IST; 2–4 working days to metro
   cities, 4–7 working days to the rest of India.
 - Returns: all sales are final. The only exception is if the wrong product is

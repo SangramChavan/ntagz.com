@@ -4,8 +4,8 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <meta name="referrer" content="no-referrer">
-<title>Track Your Order — ntagz</title>
-<meta name="description" content="Track your ntagz NFC products order instantly. Enter your AWB or tracking ID to get real-time shipping updates." />
+<title>Track Your Order | Ntagz</title>
+<meta name="description" content="Track your Ntagz order to check order status, shipment updates, and delivery progress." />
 <link rel="canonical" href="https://www.ntagz.com/track.html" />
   <script type="application/ld+json">
   {
@@ -54,16 +54,24 @@
 
 <div id="header-placeholder"></div>
 
-<main style="position: relative;">
-  <div class="bg-blob"></div>
-  <div class="wrap" style="position: relative; z-index: 2;">
-    <section class="order-view" id="orderView" hidden aria-live="polite"></section>
-    <section class="track-hero">
-      <div class="track-icon">📦</div>
-      <h1>Track Your Shipment</h1>
-      <p>Enter your AWB or tracking number below. We ship pan-India via Delhivery, Blue Dart, Trackon and Ekart Logistics.</p>
-      
-      <div class="track-form-card">
+<main class="tk-main">
+  <div class="wrap tk-wrap">
+    <section class="tk-hero">
+      <h1>Track Your Order</h1>
+      <p>Check your order status, shipment updates and delivery progress.</p>
+    </section>
+
+    <section class="tk-card" aria-labelledby="lookupTitle">
+      <h2 id="lookupTitle">Find your order</h2>
+      <form id="orderForm" novalidate>
+        <label for="orderLink">Your private order link</label>
+        <input type="text" id="orderLink" class="form-control" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste the link from your order email or WhatsApp" aria-describedby="orderLinkHelp orderLinkErr">
+        <p class="tk-help" id="orderLinkHelp">It looks like <code>ntagz.com/track.html?o=…&amp;t=…</code>. The link is your verification, so only you can see your order.</p>
+        <p class="tk-err" id="orderLinkErr" role="alert" hidden></p>
+        <button type="submit" class="btn btn-tagz btn-block" id="orderBtn">Track order</button>
+      </form>
+      <details class="tk-alt">
+        <summary>Have a courier tracking number instead?</summary>
         <form id="trackingForm" onsubmit="handleTracking(event)">
           <div class="form-group">
             <label for="carrier">Courier</label>
@@ -75,19 +83,24 @@
             </select>
           </div>
           <div class="form-group">
-            <label for="trackingId">Tracking ID / AWB Number</label>
+            <label for="trackingId">Tracking ID / AWB number</label>
             <input type="text" id="trackingId" class="form-control" placeholder="e.g. 1234567890" required autocomplete="off">
           </div>
           <button type="submit" class="btn btn-tagz btn-block" id="trackBtn">Track via Delhivery →</button>
-          <p class="track-copied" id="trackCopied" hidden></p>
+          <p class="track-copied" id="trackCopied" hidden role="status"></p>
+          <p class="tk-help">This opens the courier’s official site in a new tab. Some couriers can’t take a prefilled ID, so we copy it for you to paste.</p>
         </form>
+      </details>
+    </section>
 
-        <div class="track-meta">
-          <span class="track-meta-icon">🔒</span>
-          <div>
-            For security and accuracy, clicking 'Track' will securely open the official courier tracking portal in a new tab. Some couriers do not accept a prefilled tracking ID, so we copy it to your clipboard to paste there.
-          </div>
-        </div>
+    <section class="order-view" id="orderView" hidden aria-live="polite"></section>
+
+    <section class="tk-help-card" aria-labelledby="helpTitle">
+      <h2 id="helpTitle">Need help with your order?</h2>
+      <p>Orders usually dispatch from Pune the same working day and arrive in 2–7 days. If something looks wrong, message us with your order reference.</p>
+      <div class="tk-help-actions">
+        <a class="btn btn-tagz" href="https://wa.me/919960160016" target="_blank" rel="noopener noreferrer">WhatsApp us</a>
+        <a class="tk-link" href="shipping.html">Shipping policy</a>
       </div>
     </section>
   </div>
@@ -95,7 +108,7 @@
 
 <div id="footer-placeholder"></div>
 
-  <script src="js/track.js?v=20261021" defer></script>
+  <script src="js/track.js?v=20261022" defer></script>
 
 <script defer="" src="js/component-loader.js"></script>
 </body>

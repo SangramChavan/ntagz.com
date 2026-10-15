@@ -43,13 +43,38 @@ document.getElementById("carrier").addEventListener("change", (e) => {
 /* ── Secure order journey (?o=<orderId>&t=<token>) ── */
 (function () {
   const qs = new URLSearchParams(location.search);
-  const oid = qs.get("o"), tok = qs.get("t");
-  if (!oid || !tok) return;
-
+  let oid = qs.get("o"), tok = qs.get("t");
   const root = document.getElementById("orderView");
-  const m = document.createElement("meta");
-  m.name = "robots"; m.content = "noindex";
-  document.head.appendChild(m);
+  const form = document.getElementById("orderForm"), linkIn = document.getElementById("orderLink"), linkErr = document.getElementById("orderLinkErr");
+  const noindex = () => {
+    if (document.querySelector('meta[name="robots"]')) return;
+    const m = document.createElement("meta");
+    m.name = "robots"; m.content = "noindex";
+    document.head.appendChild(m);
+  };
+
+  /* Accept the full private link, or just its query string. Only o and t are read; nothing is stored. */
+  function parseLink(v) {
+    try {
+      const q = new URL(v.trim(), "https://www.ntagz.com/track.html").searchParams;
+      const o = q.get("o"), t = q.get("t");
+      return /^[0-9a-fA-F-]{8,64}$/.test(o || "") && /^[0-9a-f]{32}$/.test(t || "") ? [o, t] : null;
+    } catch (_) { return null; }
+  }
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const p = parseLink(linkIn.value);
+    linkErr.hidden = !!p;
+    linkIn.setAttribute("aria-invalid", p ? "false" : "true");
+    if (!p) {
+      linkErr.textContent = "That doesn't look like a Ntagz order link. Paste the full link from your order email or WhatsApp.";
+      return linkIn.focus();
+    }
+    [oid, tok] = p;
+    linkIn.value = "";
+    load();
+    root.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+  });
 
   const STAGES = [
     ["placed", "Order placed"], ["paid", "Payment confirmed"], ["processing", "Processing"],
@@ -154,18 +179,27 @@ document.getElementById("carrier").addEventListener("change", (e) => {
 
   function render(d) {
     const sum = card();
-    sum.append(el("h2", null, "Order " + d.ref));
-    sum.append(row("Placed on", day(d.placed_at)));
-    sum.append(row("Payment", d.payment_status === "paid" ? "Paid" : "Unpaid"));
-    sum.append(row("Status", (d.status_label || d.status) + (d.is_preorder && !/pre-?order/i.test(d.status_label || "") ? " (pre-order)" : "")));
-    if (d.ship_to) sum.append(row("Ship to", [d.ship_to.state, d.ship_to.pincode].filter(Boolean).join(" - ")));
+    const head = el("div", "ov-head");
+    const hl = el("div");
+    hl.append(el("h2", null, "Order " + d.ref), el("div", "ov-sub", "Placed on " + day(d.placed_at)));
+    const lbl = (d.status_label || d.status) + (d.is_preorder && !/pre-?order/i.test(d.status_label || "") ? " (pre-order)" : "");
+    head.append(hl, el("span", "ov-badge " + (d.status === "delivered" ? "ok" : EXC.includes(d.status) ? "warn" : ""), lbl));
+    sum.append(head);
+    const det = document.createElement("details");
+    det.append(el("summary", null, "Order details"));
+    const body = el("div");
+    det.append(body);
+    sum.append(det);
+    const sum2 = body;
+    sum2.append(row("Payment", d.payment_status === "paid" ? "Paid" : "Unpaid"));
+    if (d.ship_to) sum2.append(row("Ship to", [d.ship_to.state, d.ship_to.pincode].filter(Boolean).join(" - ")));
     if (d.expected_dispatch && /^\d{4}-\d{2}-\d{2}$/.test(d.expected_dispatch)) {
       const dt = new Date(d.expected_dispatch + "T00:00:00+05:30");
-      if (!isNaN(dt)) sum.append(row("Expected dispatch", day(dt / 1000) + " (expected, not a delivery date)"));
+      if (!isNaN(dt)) sum2.append(row("Expected dispatch", day(dt / 1000) + " (expected, not a delivery date)"));
     }
     if (d.promised_dispatch) {
       const dt = new Date(d.promised_dispatch + "T00:00:00+05:30");
-      if (!isNaN(dt)) sum.append(row("Dispatch promise", day(dt / 1000) + " (working-day promise)"));
+      if (!isNaN(dt)) sum2.append(row("Dispatch promise", day(dt / 1000) + " (working-day promise)"));
     }
     const ul = el("ul", "ov-items");
     for (const i of d.items || []) {
@@ -173,7 +207,7 @@ document.getElementById("carrier").addEventListener("change", (e) => {
         ? " (" + i.ready_qty + " ready, " + i.pre_qty + " pre-order)" : "";
       ul.append(el("li", null, i.name + " × " + i.qty + split));
     }
-    sum.append(ul, row("Total", inr(d.total_paise)));
+    sum2.append(ul, row("Total", inr(d.total_paise)));
     const nodes = [sum];
 
     for (const s of d.shipments || []) {
@@ -196,14 +230,16 @@ document.getElementById("carrier").addEventListener("change", (e) => {
   }
 
   async function load() {
-    show(el("p", "ov-msg", "Loading your order…"));
+    noindex();
+    const sk = el("div", "ov-skel"); sk.setAttribute("role", "status"); sk.setAttribute("aria-label", "Loading your order");
+    show(sk, el("div", "ov-skel"));
     let r;
     try {
       r = await fetch("/api/track?o=" + encodeURIComponent(oid) + "&t=" + encodeURIComponent(tok), { headers: { Accept: "application/json" } });
     } catch (_) { return message("We couldn't reach the server. Please check your connection.", true); }
-    if (r.status === 404) return message("We couldn't find that order. Check your link.");
+    if (r.status === 404) return message("We couldn't find that order. Check that you pasted the complete link, or message us on WhatsApp.");
     if (!r.ok) return message("Something went wrong on our side. Please try again.", true);
     try { render(await r.json()); } catch (_) { message("Something went wrong on our side. Please try again.", true); }
   }
-  load();
+  if (oid && tok) load();
 })();

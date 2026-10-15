@@ -8,110 +8,31 @@
 
 /* ── LAYOUT ── */
 .wrap{max-width:1320px;margin:auto;padding:0 20px;}
-main { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; padding: 60px 0 100px; }
+main.tk-main { display: block; }
 
-/* ── TRACKING SECTION ── */
-.track-hero {
-  text-align: center;
-  max-width: 600px;
-  margin: 0 auto;
-  position: relative;
-  z-index: 2;
-}
-.track-icon {
-  width: 64px; height: 64px;
-  background: #fff;
-  border: 1.5px solid var(--paper);
-  border-radius: 16px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 32px; margin: 0 auto 24px;
-  box-shadow: 0 12px 30px rgba(0,0,0,0.04);
-}
-.track-hero h1 {
-  font-family: var(--ff-head);
-  font-size: clamp(32px, 6vw, 48px);
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  margin-bottom: 12px;
-}
-.track-hero p {
-  color: var(--ink-2);
-  font-size: 16px;
-  line-height: 1.6;
-  margin-bottom: 40px;
-}
-
-.track-form-card {
-  background: #fff;
-  border: 1px solid var(--paper);
-  border-radius: var(--r-lg);
-  padding: 32px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.08);
-  text-align: left;
-}
-.form-group { margin-bottom: 24px; }
-.form-group label {
-  display: block;
-  font-family: var(--ff-head);
-  font-weight: 700;
-  font-size: 14px;
-  margin-bottom: 8px;
-  color: var(--ink);
-}
-.form-control {
-  width: 100%;
-  padding: 16px;
-  border: 1.5px solid var(--paper);
-  border-radius: var(--r);
-  font-family: var(--ff-body);
-  font-size: 16px;
-  color: var(--ink);
-  background: var(--cream);
-  transition: all 0.2s;
-  appearance: none;
-}
-.form-control:focus {
-  outline: none;
-  border-color: var(--tagz);
-  background: #fff;
-  box-shadow: 0 0 0 4px var(--tagz-lt);
-}
-select.form-control {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' fill='none' stroke='%23888' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 16px center;
-  padding-right: 44px;
-}
-.track-copied {
-  margin-top: 14px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--tagz);
-}
-
-.track-meta {
-  margin-top: 24px;
-  padding-top: 24px;
-  border-top: 1.5px dashed var(--paper);
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  font-size: 13px;
-  color: var(--ink-3);
-  line-height: 1.5;
-}
-.track-meta-icon { font-size: 18px; flex-shrink: 0; }
-
-/* ── BG BLOB ── */
-.bg-blob {
-  position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  width: 600px; height: 600px;
-  background: radial-gradient(circle, rgba(255,69,0,0.05) 0%, transparent 70%);
-  z-index: 1;
-  pointer-events: none;
-}
+/* ── TRACKING PAGE ── */
+.tk-main { flex-grow: 1; padding: 32px 0 72px; }
+.tk-wrap { max-width: 640px; }
+.tk-hero { text-align: center; margin-bottom: 24px; }
+.tk-hero h1 { font-family: var(--ff-head); font-size: clamp(30px, 6vw, 44px); font-weight: 700; letter-spacing: -0.03em; margin-bottom: 8px; }
+.tk-hero p { color: var(--ink-2); font-size: 16px; line-height: 1.6; }
+.tk-card, .tk-help-card, .ov-card { background: var(--surface); border: 1px solid var(--paper); border-radius: var(--r-lg); padding: 20px; margin-bottom: 16px; box-shadow: var(--shadow-card); }
+.tk-card h2, .tk-help-card h2 { font-family: var(--ff-head); font-size: 18px; font-weight: 700; margin-bottom: 12px; }
+.tk-card label, .form-group label { display: block; font-family: var(--ff-head); font-weight: 700; font-size: 14px; margin-bottom: 8px; color: var(--ink); }
+.form-group { margin-bottom: 16px; }
+.form-control { width: 100%; min-height: 48px; padding: 12px 16px; border: 1.5px solid var(--paper); border-radius: var(--r); font-family: var(--ff-body); font-size: 16px; color: var(--ink); background: var(--cream); appearance: none; }
+.form-control:focus-visible { outline: none; border-color: var(--tagz); box-shadow: 0 0 0 4px var(--tagz-lt); }
+select.form-control { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' fill='none' stroke='%23888' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 16px center; padding-right: 44px; }
+.tk-help, .track-copied { font-size: 13px; color: var(--ink-3); line-height: 1.5; margin: 8px 0 16px; }
+.tk-help code { font-size: 12px; overflow-wrap: anywhere; }
+.track-copied { color: var(--tagz); font-weight: 600; margin-top: 12px; }
+.tk-err { font-size: 14px; font-weight: 600; color: #b42318; margin: -8px 0 16px; }
+.tk-alt { margin-top: 20px; padding-top: 16px; border-top: 1px dashed var(--paper); }
+.tk-alt summary { cursor: pointer; font-weight: 600; font-size: 14px; color: var(--ink-2); min-height: 44px; display: flex; align-items: center; }
+.tk-alt form { margin-top: 12px; }
+.tk-help-card p { color: var(--ink-2); font-size: 14px; line-height: 1.6; margin-bottom: 16px; }
+.tk-help-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; }
+.tk-link { font-weight: 600; font-size: 14px; color: var(--ink-2); text-decoration: underline; min-height: 44px; display: inline-flex; align-items: center; }
 
 /* ── FOOTER ── */
 
@@ -154,11 +75,17 @@ select.form-control {
 }
 
 /* ── ORDER VIEW (?o=&t=) ── */
-.order-view { max-width: 600px; margin: 0 auto 40px; text-align: left; }
+.order-view { margin: 0; text-align: left; }
 .order-view[hidden] { display: none; }
-.ov-card { background: var(--dark); border: 1px solid var(--paper); border-radius: var(--r-lg); padding: 20px; margin-bottom: 16px; box-shadow: 0 12px 40px rgba(0,0,0,0.3); }
+.ov-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.ov-head h2 { font-family: var(--ff-head); font-size: 20px; font-weight: 700; overflow-wrap: anywhere; margin: 0; }
+.ov-sub { font-size: 13px; color: var(--ink-3); margin-top: 2px; }
+.ov-badge { font: 700 13px var(--ff-head); padding: 6px 12px; border-radius: 999px; background: var(--tagz-lt); color: var(--tagz-dk); white-space: nowrap; }
+.ov-badge.ok { background: var(--green-lt); color: var(--green); }
+.ov-badge.warn { background: rgba(249,112,102,0.14); color: #b42318; }
 .ov-card h2 { font-family: var(--ff-head); font-size: 18px; font-weight: 700; margin-bottom: 12px; overflow-wrap: anywhere; }
-.ov-row { display: flex; justify-content: space-between; gap: 16px; padding: 8px 0; font-size: 14px; border-top: 1px solid var(--paper); }
+.ov-card details > summary { cursor: pointer; font: 700 18px var(--ff-head); min-height: 44px; display: flex; align-items: center; }
+.ov-row { display: flex; justify-content: space-between; gap: 16px; padding: 10px 0; font-size: 14px; border-top: 1px solid var(--paper); }
 .ov-k { color: var(--ink-3); flex-shrink: 0; }
 .ov-v { color: var(--ink); font-weight: 600; text-align: right; overflow-wrap: anywhere; }
 .ov-items { list-style: none; padding: 8px 0; margin: 0; font-size: 14px; border-top: 1px solid var(--paper); }
@@ -168,6 +95,8 @@ select.form-control {
 .ov-awb code { font-family: ui-monospace, monospace; font-weight: 600; overflow-wrap: anywhere; flex: 1; min-width: 0; }
 .ov-copy { min-height: 44px; min-width: 64px; padding: 0 14px; border: 1.5px solid var(--paper); border-radius: var(--r); background: transparent; font: 600 14px var(--ff-head); color: var(--ink); cursor: pointer; }
 .ov-card .btn { margin-top: 12px; }
+.ov-skel { height: 120px; border-radius: var(--r-lg); background: linear-gradient(90deg, var(--paper), var(--warm), var(--paper)); background-size: 200% 100%; animation: ov-sh 1.4s linear infinite; margin-bottom: 16px; }
+@keyframes ov-sh { to { background-position: -200% 0; } }
 .tl { list-style: none; margin: 0; padding: 0; }
 .tl-item { position: relative; display: flex; gap: 14px; padding-bottom: 20px; }
 .tl-item:not(:last-child)::before { content: ""; position: absolute; left: 13px; top: 28px; bottom: 0; width: 2px; background: var(--paper); }
@@ -182,6 +111,7 @@ select.form-control {
 .tl-note { color: var(--ink-2); }
 .tl-item.future .tl-label { color: var(--ink-3); font-weight: 500; }
 .tl-item.current .tl-label { color: var(--tagz); }
-.tl-item.exception .tl-label { color: #f97066; }
+.tl-item.exception .tl-label { color: #b42318; }
 .tl-item.exception .tl-body { background: rgba(249,112,102,0.1); border-radius: var(--r); padding: 8px 12px; flex: 1; }
-@media (max-width: 480px) { main { padding: 32px 0 60px; } }
+@media (min-width: 768px) { .tk-card, .tk-help-card, .ov-card { padding: 28px; } .tk-main { padding-top: 56px; } }
+@media (prefers-reduced-motion: reduce) { .ov-skel { animation: none; } }
