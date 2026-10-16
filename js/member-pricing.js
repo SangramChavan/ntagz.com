@@ -10,6 +10,7 @@
 
   var C = window.NTAGZ_CATALOG, CART = window.NTAGZ_CART;
   if (!C) return;
+  try { var mkt = JSON.parse(localStorage.getItem('ntagz.market') || 'null'); if (mkt && mkt.country && mkt.country !== 'IN') return; } catch (e) { } // rewards and member prices are India-only
 
   var CK = 'ntagz.member.choice', HK = 'ntagz.member.hint', PK = 'ntagz.member.pending', QK = 'ntagz.member.q';
   var sget = function (k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } };

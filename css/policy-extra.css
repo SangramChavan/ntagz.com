@@ -1,0 +1,7 @@
+/* shared extras for the legal pages (sidebar related links, contact line, lists) */
+.policy-related{font-size:13px;color:var(--ink-3);margin-top:20px;line-height:1.8}
+.policy-related a{color:var(--ink-2);text-decoration:underline}
+.policy-contact{margin-top:32px;padding-top:20px;border-top:1px solid var(--line,#e5e0d6);font-size:15px}
+.policy-section ul{margin:8px 0 12px 20px;padding:0}
+.policy-section li{margin:6px 0;line-height:1.6}
+.policy-section h2{scroll-margin-top:96px}

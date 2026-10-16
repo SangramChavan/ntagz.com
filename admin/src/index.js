@@ -8,6 +8,7 @@ import DELIVERY from "../../functions/lib/delivery.js"; // the same Pune-origin 
 import LOYALTY from "../../functions/lib/loyalty.js"; // spending tiers: same derivation as the storefront
 import POINTS from "../../functions/lib/points.js"; // rewards wallet: reconciled from orders after every payment / status / refund change
 import { notify, STATUS_EVENT } from "./notify.js";
+import * as INTLADM from "./intl-admin.js"; // international orders: quotations, destination review, payments, settings, enquiries
 import { membershipRoute, tick as membershipTick } from "./membership.js"; // Rewards Membership admin (/api/points, /api/members)
 import { crmRoute, crmScheduled, crmWebhook } from "./crm/index.js"; // Customers / CRM (all under /api/crm/)
 
@@ -178,7 +179,7 @@ function dayStart(s, endOfDay) {
   return Number.isNaN(t) ? null : Math.floor(t / 1000) - IST_OFFSET + (endOfDay ? 86400 : 0);
 }
 
-function filters(sp) {
+function filters(sp, intl = false) {
   const where = [], bind = [];
   const q = (sp.get("q") || "").trim().slice(0, 100);
   if (q) {
@@ -193,6 +194,13 @@ function filters(sp) {
   eq("payment_status", "payment_status", ["unpaid", "paid"]);
   eq("payment_method", "payment_method", ["razorpay", "payu", "cash", "cod", "upi", "bank", "whatsapp"]);
   eq("fulfilment", "status", FULFILMENT);
+  if (intl) { // market / destination / quotation filters exist only once migration 0019 is applied
+    eq("market", "market", ["IN", "INTL"]); eq("quote_status", "quote_status", ["required", "sent", "accepted", "declined", "expired"]);
+    const c = (sp.get("country") || "").toUpperCase(); if (/^[A-Z]{2}$/.test(c)) { bind.push(c); where.push(`country=?${bind.length}`); }
+  }
+  const dv = sp.get("dispatch");
+  if (dv === "dispatched") where.push("status IN ('shipped','out_for_delivery','delivered')");
+  else if (dv === "not_dispatched") where.push("status NOT IN ('shipped','out_for_delivery','delivered','cancelled','returned')");
   const view = sp.get("view");
   if (view && VIEWS[view]) where.push(`(${VIEWS[view]})`);
   const from = dayStart(sp.get("from"), false), to = dayStart(sp.get("to"), true);
@@ -202,22 +210,24 @@ function filters(sp) {
 }
 
 async function listOrders(sp, env) {
-  const { sql, bind } = filters(sp);
+  const intl = await INTLADM.hasIntl(env), cols = COLS + (intl ? INTLADM.INTL_COLS : "");
+  const { sql, bind } = filters(sp, intl);
   const page = Math.max(1, parseInt(sp.get("page"), 10) || 1);
   const col = SORTS[sp.get("sort")] || "created_at";
   const dir = sp.get("dir") === "asc" ? "ASC" : "DESC";
   const total = (await env.DB.prepare(`SELECT count(*) c FROM orders ${sql}`).bind(...bind).first()).c;
   const { results } = await env.DB.prepare(
-    `SELECT ${COLS} FROM orders ${sql} ORDER BY ${col} ${dir}, id LIMIT ${PAGE_SIZE} OFFSET ${(page - 1) * PAGE_SIZE}`
+    `SELECT ${cols} FROM orders ${sql} ORDER BY ${col} ${dir}, id LIMIT ${PAGE_SIZE} OFFSET ${(page - 1) * PAGE_SIZE}`
   ).bind(...bind).all();
   return json({ orders: results.map(shape), page, pages: Math.max(1, Math.ceil(total / PAGE_SIZE)), total });
 }
 
 async function getOrder(id, env) {
-  const o = await env.DB.prepare(`SELECT ${COLS} FROM orders WHERE id=?`).bind(id).first();
+  const intl = await INTLADM.hasIntl(env);
+  const o = await env.DB.prepare(`SELECT ${COLS}${intl ? INTLADM.INTL_COLS : ""} FROM orders WHERE id=?`).bind(id).first();
   if (!o) return null;
   const tok = (await env.DB.prepare("SELECT track_token FROM orders WHERE id=?").bind(id).first())?.track_token; // detail only, never in COLS/list/CSV
-  const pays = await env.DB.prepare("SELECT method,amount_paise,recorded_by,reference,created_at FROM payments WHERE order_id=? ORDER BY created_at")
+  const pays = await env.DB.prepare(`SELECT method,amount_paise,recorded_by,reference,created_at${intl ? ",currency" : ""} FROM payments WHERE order_id=? ORDER BY created_at`)
     .bind(id).all();
   const ships = await env.DB.prepare("SELECT id,courier,awb,tracking_url,shipped_on,est_delivery,notes,created_by,created_at,updated_at FROM shipments WHERE order_id=? ORDER BY created_at, rowid").bind(id).all();
   const revs = ships.results.length
@@ -229,11 +239,11 @@ async function getOrder(id, env) {
   const timeline = [
     { kind: "placed", label: "Order placed", at: o.created_at },
     ...pays.results.map((p) => ({ kind: "payment", label: `Payment received (${p.method})`, at: p.created_at, actor: p.recorded_by })),
-    ...events.results.map((e) => ({ kind: e.kind, status: e.status, label: e.kind === "dispatch" ? "Expected dispatch" : STATUS_LABEL[e.status] || e.kind, note: e.note, public_note: e.public_note, customer_visible: !!e.customer_visible, actor: e.actor, at: e.created_at })),
+    ...events.results.map((e) => ({ kind: e.kind, status: e.status, label: e.kind === "dispatch" ? "Expected dispatch" : INTLADM.eventLabel(e) || STATUS_LABEL[e.status] || e.kind, note: e.note, public_note: e.public_note, customer_visible: !!e.customer_visible, actor: e.actor, at: e.created_at })),
   ].sort((x, y) => x.at - y.at);
   const lines = await env.DB.prepare("SELECT l.product_id,p.name,l.ready_qty,l.pre_qty FROM order_stock_lines l LEFT JOIN products p ON p.id=l.product_id WHERE l.order_id=? ORDER BY l.rowid").bind(id).all();
   const notifications = (await env.DB.prepare("SELECT event,status,detail,subject,created_at FROM notifications WHERE order_id=? ORDER BY created_at, rowid").bind(id).all()).results;
-  return { ...shape(o), transit_days: DELIVERY.transitFor(o.pincode, !!o.priority_build), notifications, stock_lines: lines.results.map((l) => ({ ...l, name: l.name || l.product_id })), ...(tok ? { track_url: `https://ntagz.com/track.html?o=${id}&t=${tok}` } : {}), is_preorder: !!o.is_preorder, payments: pays.results, shipments, timeline, actions: allowedActions(o.status, !!o.is_preorder), status_label: STATUS_LABEL[o.status] || o.status };
+  return { ...shape(o), transit_days: DELIVERY.transitFor(o.pincode, !!o.priority_build), notifications, stock_lines: lines.results.map((l) => ({ ...l, name: l.name || l.product_id })), ...(await INTLADM.orderExtras(env, o)), ...(tok ? { track_url: `https://ntagz.com/${o.market === "INTL" ? "order/international.html" : "track.html"}?o=${id}&t=${tok}` } : {}), is_preorder: !!o.is_preorder, payments: pays.results, shipments, timeline, actions: allowedActions(o.status, !!o.is_preorder), status_label: STATUS_LABEL[o.status] || o.status };
 }
 
 const MANUAL_ORDER_METHODS = ["cash", "cod", "upi", "bank", "whatsapp"];
@@ -316,6 +326,10 @@ const keyOf = (b) => (typeof b.idempotency_key === "string" && b.idempotency_key
 
 // Status change (everything except shipping, which needs the shipment form). Guarded by the status we validated against and by
 // a unique idempotency key, so repeated submits and races cannot create duplicate timeline events.
+async function isIntlOrder(env, id) {
+  return (await INTLADM.hasIntl(env)) && (await env.DB.prepare("SELECT market FROM orders WHERE id=?").bind(id).first())?.market === "INTL";
+}
+
 async function changeStatus(id, body, actor, env) {
   const to = body.to ?? body.status;
   if (!FULFILMENT.includes(to)) return fail(400, "Invalid status");
@@ -351,6 +365,7 @@ async function changeStatus(id, body, actor, env) {
   } catch { return json(await getOrder(id, env)); } // unique-key race: another identical request won
   if (res[0].meta.changes !== 1) return fail(409, "The order changed while you were working. Refresh and try again.");
   if (STATUS_EVENT[to]) await notify(env, id, STATUS_EVENT[to], eid, { note: pub });
+  else if ((to === "processing" || to === "cancelled") && (await isIntlOrder(env, id))) await notify(env, id, to === "processing" ? "intl_processing" : "intl_cancelled", eid, { note: pub });
   if (to === "cancelled" || to === "returned") await tierSyncFor(env, id, `order ${to}`);
   await pointsSyncFor(env, id);
   return json(await getOrder(id, env));
@@ -396,6 +411,8 @@ async function shipOrder(id, body, actor, env) {
   const o = await env.DB.prepare("SELECT status FROM orders WHERE id=?").bind(id).first();
   if (!o) return fail(404, "Order not found");
   if (await dupKey(env, id, key)) return json(await getOrder(id, env));
+  const guard = await INTLADM.shipGuard(env, id, body); // international: quotation accepted + paid, or an explicit recorded override
+  if (guard && guard.error) return fail(409, guard.error);
   const addExtra = ["shipped", "out_for_delivery"].includes(o.status); // additional parcel for an order already on its way
   if (!addExtra && !(TRANSITIONS[o.status] || []).includes("shipped")) return fail(409, `An order that is ${STATUS_LABEL[o.status] || o.status} cannot be shipped`);
   if (await env.DB.prepare("SELECT 1 FROM shipments WHERE order_id=? AND lower(awb)=lower(?)").bind(id, f.awb).first()) return json({ error: "This AWB is already on the order", fields: { awb: "This AWB is already on the order" } }, 409);
@@ -414,6 +431,10 @@ async function shipOrder(id, body, actor, env) {
     ]);
   } catch { return json(await getOrder(id, env)); }
   if (res[0].meta.changes !== 1) return fail(409, "The order changed while you were working. Refresh and try again.");
+  if (guard && guard.override) await env.DB.batch([
+    env.DB.prepare("UPDATE orders SET dispatch_override_reason=? WHERE id=?").bind(guard.override, id),
+    env.DB.prepare("INSERT INTO audit_log (id,actor,action,order_id,detail) VALUES (?,?,'intl_dispatch_override',?,?)").bind(crypto.randomUUID(), actor, id, JSON.stringify({ reason: guard.override })),
+  ]);
   await notify(env, id, "shipped", eid, { courier: f.courier, awb: f.awb, tracking_url: f.tracking_url, est_delivery: f.est_delivery, note: pub });
   return json(await getOrder(id, env));
 }
@@ -441,6 +462,10 @@ async function correctShipment(id, sid, body, actor, env) {
   ];
   if (latest && latest.id === sid && (changes.courier || changes.awb)) stmts.push(env.DB.prepare("UPDATE orders SET courier=?, tracking_id=?, updated_at=unixepoch() WHERE id=?").bind(f.courier ?? cur.courier, f.awb ?? cur.awb, id));
   await env.DB.batch(stmts);
+  if (await isIntlOrder(env, id)) { // tell an international customer when carrier / tracking details change
+    const sh = await env.DB.prepare("SELECT courier,awb,tracking_url,est_delivery,updated_at FROM shipments WHERE id=?").bind(sid).first();
+    if (sh) await notify(env, id, "intl_tracking_updated", `track-${sid}-${sh.updated_at}`, { courier: sh.courier, awb: sh.awb, tracking_url: sh.tracking_url, est_delivery: sh.est_delivery });
+  }
   return json(await getOrder(id, env));
 }
 
@@ -451,12 +476,15 @@ const csvCell = (v) => {
 };
 
 async function exportCsv(sp, env) {
-  const { sql, bind } = filters(sp);
-  const { results } = await env.DB.prepare(`SELECT ${COLS} FROM orders ${sql} ORDER BY created_at DESC LIMIT 5000`).bind(...bind).all();
-  const head = ["order_id", "created", "name", "phone", "email", "address", "pincode", "state", "total_inr", "payment_method", "payment_status", "paid_inr", "fulfilment", "tracking_id", "courier"];
+  const intl = await INTLADM.hasIntl(env);
+  const { sql, bind } = filters(sp, intl);
+  const { results } = await env.DB.prepare(`SELECT ${COLS}${intl ? INTLADM.INTL_COLS : ""} FROM orders ${sql} ORDER BY created_at DESC LIMIT 5000`).bind(...bind).all();
+  // total_inr / paid_inr are in the order's own currency: the currency column says which (USD orders are cents, not paise).
+  const head = ["order_id", "created", "name", "phone", "email", "address", "pincode", "state", "total_inr", "payment_method", "payment_status", "paid_inr", "fulfilment", "tracking_id", "courier"].concat(intl ? ["currency", "market", "country"] : []);
   const lines = [head.join(",")].concat(results.map((o) => [
     o.id, new Date(o.created_at * 1000).toISOString(), o.name, o.phone, o.email, o.address, o.pincode, o.state,
     (o.total / 100).toFixed(2), o.payment_method, o.payment_status, (o.paid_paise / 100).toFixed(2), o.status, o.tracking_id, o.courier,
+    ...(intl ? [o.currency, o.market, o.country] : []),
   ].map(csvCell).join(",")));
   return new Response(lines.join("\n"), {
     headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="ntagz-orders.csv"', "Cache-Control": "no-store", ...SEC_HEADERS },
@@ -610,7 +638,7 @@ async function getProduct(id, env) {
   const mv = await env.DB.prepare(
     "SELECT type,qty_change,prev_stock,new_stock,reason,reference,notes,admin,created_at FROM inventory_movements WHERE product_id=? ORDER BY created_at DESC, rowid DESC LIMIT 50"
   ).bind(id).all();
-  return { ...pshape(p), movements: mv.results };
+  return { ...pshape(p), movements: mv.results, ...(await INTLADM.productIntl(env, id)) };
 }
 
 function sanitiseText(v, max) { return typeof v === "string" ? v.trim().slice(0, max) : ""; }
@@ -703,7 +731,12 @@ async function deleteProduct(id, actor, env) {
 async function updateProduct(id, body, actor, env) {
   if ("stock_qty" in body || "stock" in body) return fail(400, "Stock can only be changed through a stock adjustment");
   const { f, errors } = validateProduct(body, true);
+  const intlT = INTLADM.validateProductIntl(body, f, errors); // USD price, MOQ, lead time, tax treatment, quantity breaks (migration 0019)
   const cur = await env.DB.prepare(`SELECT ${PCOLS} FROM products WHERE id=?`).bind(id).first();
+  const intlNow = cur ? (await INTLADM.productIntl(env, id)).intl : null;
+  if (cur && !intlNow && Object.keys(f).some((k) => /^(price_usd_cents|intl_|weight_g|dims_mm)/.test(k)) || (cur && !intlNow && intlT.tiers)) errors.intl = "International fields need migration 0019 to be applied first";
+  if (cur && intlNow && (f.intl_enabled === 1 || (f.intl_enabled === undefined && intlNow.intl_enabled)) && !(f.price_usd_cents !== undefined ? f.price_usd_cents : intlNow.price_usd_cents)) errors.price_usd = "Set a USD price before selling internationally";
+  if (cur && intlNow) Object.assign(cur, { price_usd_cents: intlNow.price_usd_cents, intl_enabled: intlNow.intl_enabled ? 1 : 0, intl_moq: intlNow.intl_moq, intl_lead_days: intlNow.intl_lead_days, intl_custom_quote: intlNow.intl_custom_quote ? 1 : 0, weight_g: intlNow.weight_g, dims_mm: intlNow.dims_mm, intl_tax_treatment: intlNow.intl_tax_treatment });
   if (cur && ("loyalty_eligible" in f || "loyalty_max_pct" in f)) Object.assign(cur, await env.DB.prepare("SELECT loyalty_eligible,loyalty_max_pct FROM products WHERE id=?").bind(id).first());
   if (cur && "points_eligible" in f) Object.assign(cur, await env.DB.prepare("SELECT points_eligible FROM products WHERE id=?").bind(id).first());
   if (cur) preorderRule(f, cur, errors);
@@ -714,17 +747,19 @@ async function updateProduct(id, body, actor, env) {
   const mrp = f.mrp_paise !== undefined ? f.mrp_paise : cur.mrp_paise, price = f.price_paise ?? cur.price_paise;
   if (mrp !== null && mrp < price) return json({ error: "MRP cannot be lower than the selling price", fields: { mrp: "MRP cannot be lower than the selling price" } }, 400);
   const keys = Object.keys(f);
-  if (!keys.length) return json(await getProduct(id, env));
+  if (!keys.length && !intlT.tiers) return json(await getProduct(id, env));
   const changed = {};
   for (const k of keys) if (f[k] !== cur[k]) changed[k] = { from: cur[k], to: f[k] };
   // Column names come from the fixed validateProduct whitelist above, never from request input.
   const setSql = keys.map((k) => `${k}=?`).join(",");
-  try {
-    await env.DB.batch([
-      env.DB.prepare(`UPDATE products SET ${setSql}, updated_at=unixepoch() WHERE id=?`).bind(...keys.map((k) => f[k]), id),
-      env.DB.prepare("INSERT INTO audit_log (id,actor,action,detail) VALUES (?,?,'product_update',?)").bind(crypto.randomUUID(), actor, JSON.stringify({ id, changed })),
-    ]);
-  } catch { return json({ error: "SKU already exists", fields: { sku: "This SKU is already in use" } }, 409); }
+  const stmts = keys.length ? [
+    env.DB.prepare(`UPDATE products SET ${setSql}, updated_at=unixepoch() WHERE id=?`).bind(...keys.map((k) => f[k]), id),
+    env.DB.prepare("INSERT INTO audit_log (id,actor,action,detail) VALUES (?,?,'product_update',?)").bind(crypto.randomUUID(), actor, JSON.stringify({ id, changed })),
+  ] : [];
+  if (intlT.tiers) stmts.push(env.DB.prepare("DELETE FROM product_intl_tiers WHERE product_id=?").bind(id),
+    ...intlT.tiers.map((t) => env.DB.prepare("INSERT INTO product_intl_tiers (product_id,min_qty,unit_cents) VALUES (?,?,?)").bind(id, t.min_qty, t.unit_cents)),
+    env.DB.prepare("INSERT INTO audit_log (id,actor,action,detail) VALUES (?,?,'product_intl_tiers',?)").bind(crypto.randomUUID(), actor, JSON.stringify({ id, tiers: intlT.tiers })));
+  try { await env.DB.batch(stmts); } catch { return json({ error: "SKU already exists", fields: { sku: "This SKU is already in use" } }, 409); }
   return json(await getProduct(id, env));
 }
 
@@ -1133,6 +1168,7 @@ async function adjustSpend(id, body, actor, env) {
 async function refundOrder(id, body, actor, env) {
   const o = await env.DB.prepare("SELECT id,user_id,payment_status,paid_paise,refunded_paise FROM orders WHERE id=?").bind(id).first();
   if (!o) return fail(404, "Order not found");
+  const intl = await INTLADM.hasIntl(env);
   const amount = rupeesToPaise(typeof body.amount_rupees === "string" || typeof body.amount_rupees === "number" ? body.amount_rupees : "");
   const reason = sanitiseText(body.reason, 200), key = typeof body.idempotency_key === "string" ? body.idempotency_key.slice(0, 64) : "";
   if (amount === null || amount <= 0) return json({ error: "Enter the refund amount in rupees", fields: { amount_rupees: "Enter an amount" } }, 400);
@@ -1145,13 +1181,14 @@ async function refundOrder(id, body, actor, env) {
   try {
     const res = await env.DB.batch([
       env.DB.prepare("UPDATE orders SET refunded_paise = refunded_paise + ?2, updated_at = unixepoch() WHERE id = ?1 AND payment_status = 'paid' AND refunded_paise = ?3 AND refunded_paise + ?2 <= paid_paise").bind(id, amount, o.refunded_paise),
-      env.DB.prepare("INSERT INTO order_refunds (id,order_id,amount_paise,reason,actor,idempotency_key) SELECT ?1,?2,?3,?4,?5,?6 WHERE changes() = 1").bind(rid, id, amount, reason, actor, key),
+      (intl ? env.DB.prepare("INSERT INTO order_refunds (id,order_id,amount_paise,reason,actor,idempotency_key,currency) SELECT ?1,?2,?3,?4,?5,?6,(SELECT currency FROM orders WHERE id=?2) WHERE changes() = 1") : env.DB.prepare("INSERT INTO order_refunds (id,order_id,amount_paise,reason,actor,idempotency_key) SELECT ?1,?2,?3,?4,?5,?6 WHERE changes() = 1")).bind(rid, id, amount, reason, actor, key),
       env.DB.prepare("INSERT INTO audit_log (id,actor,action,order_id,detail) SELECT ?1,?2,'order_refund',?3,?4 WHERE EXISTS (SELECT 1 FROM order_refunds WHERE id=?5)").bind(crypto.randomUUID(), actor, id, JSON.stringify({ amount_paise: amount, reason }), rid),
     ]);
     if (res[0].meta.changes !== 1) return fail(409, "The order changed while you were working. Refresh and try again.");
   } catch { return fail(409, "This refund was already recorded"); }
   if (o.user_id) await LOYALTY.syncTier(env.DB, o.user_id, "refund recorded").catch(() => {});
   await pointsSyncFor(env, id);
+  if (intl && (await isIntlOrder(env, id))) await notify(env, id, "intl_refund", "refund-" + rid, { amount });
   return json({ ok: true, refunded_paise: o.refunded_paise + amount });
 }
 
@@ -1237,7 +1274,7 @@ export default {
       if (!asset) {
         const user = await session(request, env);
         if (path === "/") asset = user ? "/app.html" : "/login.html";
-        else if ((path === "/app.js" || path === "/orders.js" || path === "/products.js" || path === "/pricing.js" || path === "/rewards.js" || CRM_ASSETS.has(path)) && user) asset = path;
+        else if ((path === "/app.js" || path === "/orders.js" || path === "/products.js" || path === "/pricing.js" || path === "/rewards.js" || path === "/intl.js" || CRM_ASSETS.has(path)) && user) asset = path;
         else return new Response("Not found", { status: 404, headers: SEC_HEADERS });
       }
       const res = await env.ASSETS.fetch(new Request(new URL(asset, url), { method: "GET" }));
@@ -1303,6 +1340,21 @@ export default {
         if (pm[2] === "/duplicate" && method === "POST") return await duplicateProduct(pid, actor, env);
         if (pm[2] === "/delete" && method === "POST") return await deleteProduct(pid, actor, env);
       }
+      // International orders (all validated and audited in intl-admin.js)
+      const idep = { json, fail, getOrder, notify, sha256 };
+      const im = path.match(/^\/api\/orders\/([0-9a-fA-F-]{8,64})\/intl\/(destination|quote|payment-link|payment-received)$/);
+      const dm = path.match(/^\/api\/orders\/([0-9a-fA-F-]{8,64})\/intl\/quote\/([0-9a-f-]{36})\/decision$/);
+      if (method === "POST" && dm) return await INTLADM.recordQuoteDecision(dm[1], dm[2], body, actor, env, idep);
+      if (method === "POST" && im) {
+        const fn = { destination: INTLADM.destinationDecision, quote: INTLADM.sendQuote, "payment-link": INTLADM.attachPaymentLink, "payment-received": INTLADM.recordPayment }[im[2]];
+        return await fn(im[1], body, actor, env, idep);
+      }
+      if (path === "/api/intl/products" && method === "GET") return json(await INTLADM.listIntlProducts(env));
+      if (path === "/api/intl/settings" && method === "GET") return json(await INTLADM.getIntlSettings(env, sha256));
+      if (path === "/api/intl/settings" && method === "POST") return await INTLADM.saveIntlSettings(body, actor, env, idep);
+      if (path === "/api/intl/enquiries" && method === "GET") return json(await INTLADM.listEnquiries(url.searchParams, env));
+      const em = path.match(/^\/api\/intl\/enquiries\/([0-9a-f-]{36})$/);
+      if (em && method === "POST") return await INTLADM.updateEnquiry(em[1], body, actor, env, idep);
       if (method === "GET" && path === "/api/rewards") return await getRewards(env);
       if (method === "POST" && path === "/api/rewards") return await saveRewards(body, actor, env);
       if (method === "GET" && path === "/api/campaigns") return await listCampaigns(env);

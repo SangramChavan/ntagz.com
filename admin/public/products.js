@@ -333,10 +333,11 @@ $("padd").onclick = () => openPanel(null);
 $("pprev").onclick = () => { P.page--; loadProducts(); }; $("pnext").onclick = () => { P.page++; loadProducts(); };
 function route() {
   const [h, hq] = location.hash.split("?"); // "#/orders?q=abc12345" deep-links from the customer profile
-  const view = h === "#/products" ? "products" : h === "#/pricing" ? "pricing" : h === "#/rewards" ? "rewards" : h.startsWith("#/customers") ? "customers" : h === "#/membership" ? "membership" : "orders";
-  for (const v of ["orders", "products", "pricing", "rewards", "customers", "membership"]) { $("view-" + v).hidden = v !== view; $("nav-" + v).setAttribute("aria-current", v === view ? "page" : "false"); }
+  const view = h === "#/products" ? "products" : h === "#/pricing" ? "pricing" : h === "#/rewards" ? "rewards" : h.startsWith("#/customers") ? "customers" : h === "#/membership" ? "membership" : h === "#/international" ? "international" : "orders";
+  for (const v of ["orders", "products", "pricing", "rewards", "customers", "membership", "international"]) { $("view-" + v).hidden = v !== view; $("nav-" + v).setAttribute("aria-current", v === view ? "page" : "false"); }
   if (window.pricingVisible) window.pricingVisible(view === "pricing");
   if (window.rewardsVisible) window.rewardsVisible(view === "rewards");
+  if (window.intlVisible) window.intlVisible(view === "international");
   if (window.customersVisible) window.customersVisible(view === "customers");
   if (window.membershipVisible) window.membershipVisible(view === "membership");
   if (view === "products") { if (!P.loaded) { P.loaded = true; restoreFilters(); refresh(); } }

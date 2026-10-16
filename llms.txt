@@ -35,8 +35,11 @@ with a GST invoice.
 - [NFC Programmer Tool](https://www.ntagz.com/programmer.html): free browser-based tool to write data to NFC tags
 - [NFC Capability Checker](https://www.ntagz.com/nfc-check.html): free tool to test if a phone has NFC hardware
 - [About ntagz](https://www.ntagz.com/about.html): company background
-- [Shipping Policy](https://www.ntagz.com/shipping.html): rates, free-shipping threshold, delivery timelines
-- [Returns & Refunds Policy](https://www.ntagz.com/terms.html): no-return policy and the wrong-item exception
+- [Shipping & Delivery Policy](https://www.ntagz.com/shipping-policy.html): India rates and delivery, and how international shipping is quoted separately for each order
+- [Returns, Refunds & Cancellation Policy](https://www.ntagz.com/refund-policy.html): cancellations, custom orders, defects, transit damage and refunds
+- [Terms and Conditions](https://www.ntagz.com/terms-and-conditions.html)
+- [Privacy Policy](https://www.ntagz.com/privacy-policy.html)
+- [International orders](https://www.ntagz.com/international.html): USD prices, shipping quoted separately, enquiries
 - [Order Tracking](https://www.ntagz.com/track.html): AWB/tracking lookup
 
 ## Policies (factual — use these, not assumptions)

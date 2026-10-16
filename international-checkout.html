@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>International Checkout — Request a Shipping Quotation | ntagz</title>
+  <meta name="description" content="Submit an international ntagz order and request a shipping quotation. Nothing is charged until you accept the quotation." />
+  <link rel="canonical" href="https://www.ntagz.com/international-checkout.html" />
+  <meta name="robots" content="noindex,nofollow" />
+  <meta name="referrer" content="no-referrer" />
+  <link rel="icon" href="images/favicon.ico" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/intl.css?v=20261016">
+</head>
+<body>
+  <div id="header-placeholder"></div>
+  <script src="js/component-loader.js"></script>
+  <main class="ix" id="main">
+    <h1>International checkout</h1>
+    <p class="lede">Review your cart, tell us where to ship, and request your shipping quotation. Nothing is charged when you submit.</p>
+    <div id="icoGate" class="ix-notice" hidden></div>
+
+    <section id="icoCart" class="ix-card" aria-labelledby="cartH">
+      <h2 id="cartH" style="margin-top:0">1. Cart review</h2>
+      <div id="icoLines" aria-live="polite"><p class="fine">Loading your cart…</p></div>
+    </section>
+
+    <section class="ix-card" aria-labelledby="shipH">
+      <h2 id="shipH" style="margin-top:0">2. Shipping</h2>
+      <div class="ix-notice" role="note" style="margin-top:0">International shipping is quoted separately based on your destination, order quantity, package dimensions, weight, and preferred shipping method. Our team will contact you to confirm the shipping cost and delivery options before dispatch.</div>
+      <p class="fine">You can submit the order and request a shipping quotation now. You will accept or decline the quotation before paying.</p>
+    </section>
+
+    <form id="icoForm" class="ix-card" novalidate aria-labelledby="formH">
+      <h2 id="formH" style="margin-top:0">3. Your details</h2>
+      <div class="row2"><div><label for="fName">Full name</label><input id="fName" autocomplete="name" required /><div class="err" id="err-name"></div></div>
+      <div><label for="fCompany">Company <span class="opt">(optional)</span></label><input id="fCompany" autocomplete="organization" /></div></div>
+      <div class="row2"><div><label for="fEmail">Email address</label><input id="fEmail" type="email" autocomplete="email" required /><div class="err" id="err-email"></div></div>
+      <div><label for="fPhone">Phone (with country code)</label><input id="fPhone" type="tel" autocomplete="tel" inputmode="tel" placeholder="+1 415 555 0100" required /><div class="err" id="err-phone"></div></div></div>
+      <label for="fCountry">Country</label><select id="fCountry" autocomplete="country"><option value="">Select a country</option></select><div class="err" id="err-country"></div>
+      <label for="fAddr1">Address line 1</label><input id="fAddr1" autocomplete="address-line1" required /><div class="err" id="err-address1"></div>
+      <label for="fAddr2">Address line 2 <span class="opt">(optional)</span></label><input id="fAddr2" autocomplete="address-line2" />
+      <div class="row2"><div><label for="fCity">City</label><input id="fCity" autocomplete="address-level2" required /><div class="err" id="err-city"></div></div>
+      <div><label for="fRegion" id="lRegion">State / Province / Region</label><input id="fRegion" autocomplete="address-level1" /><div class="err" id="err-region"></div></div></div>
+      <div class="row2"><div><label for="fPostal" id="lPostal">Postal code</label><input id="fPostal" autocomplete="postal-code" /><div class="err" id="err-postal"></div></div>
+      <div><label for="fTax">Tax identification number <span class="opt">(if applicable)</span></label><input id="fTax" placeholder="VAT / GST / EIN" /></div></div>
+      <label for="fNotes">Order notes and customization requirements <span class="opt">(optional)</span></label><textarea id="fNotes" maxlength="1500"></textarea>
+      <div class="hp" aria-hidden="true"><label for="fWeb">Website</label><input id="fWeb" tabindex="-1" autocomplete="off" /></div>
+      <label style="display:flex;gap:10px;align-items:flex-start;font-weight:500"><input type="checkbox" id="fTerms" style="width:22px;min-height:22px;margin-top:2px" /><span>I have read and accept the <a href="terms-and-conditions.html" target="_blank" rel="noopener">Terms and Conditions</a>, <a href="shipping-policy.html" target="_blank" rel="noopener">Shipping Policy</a>, <a href="refund-policy.html" target="_blank" rel="noopener">Returns and Refunds Policy</a> and <a href="privacy-policy.html" target="_blank" rel="noopener">Privacy Policy</a>. I understand shipping is quoted separately and customs duties or import taxes may be payable by me.</span></label>
+      <div class="err" id="err-accept_terms"></div>
+      <p class="fine">Prices are shown in USD and exclude shipping and taxes. The payment currency is stated before you pay.</p>
+      <div class="actions"><button type="submit" class="btn-primary" id="icoSubmit">Submit order and request shipping quote</button></div>
+      <p class="err" id="icoErr" role="alert"></p>
+    </form>
+
+    <section id="icoDone" class="ok" role="status" hidden></section>
+  </main>
+  <div id="footer-placeholder"></div>
+  <script src="js/catalog.js?v=20261009" defer></script>
+  <script src="js/cart.js" defer></script>
+  <script src="js/cart-ui.js" defer></script>
+  <script src="js/market.js?v=20261016" defer></script>
+  <script src="js/intl-checkout.js?v=20261016" defer></script>
+</body>
+</html>

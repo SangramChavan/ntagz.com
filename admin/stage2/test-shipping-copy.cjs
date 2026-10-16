@@ -6,18 +6,18 @@ const root = path.join(__dirname, "..", "..");
 const { SHIPPING } = require(path.join(root, "functions", "lib", "pricing.js"));
 let n = 0; const ok = (m) => console.log(`ok ${++n} ${m}`);
 
-const shipping = fs.readFileSync(path.join(root, "shipping.html"), "utf8");
+const shipping = fs.readFileSync(path.join(root, "shipping-policy.html"), "utf8");
 const llms = fs.readFileSync(path.join(root, "llms.txt"), "utf8");
 const inr = (v) => "₹" + v.toLocaleString("en-IN");
 
 // the numbers the server charges are the numbers the page states
-for (const [name, text] of [["shipping.html", shipping], ["llms.txt", llms]]) {
+for (const [name, text] of [["shipping-policy.html", shipping], ["llms.txt", llms]]) {
   assert.ok(text.includes(inr(SHIPPING.freeAbove)), `${name} states the free-shipping threshold ${inr(SHIPPING.freeAbove)}`);
   assert.ok(text.includes(inr(SHIPPING.home)), `${name} states the ${SHIPPING.homeState} rate ${inr(SHIPPING.home)}`);
   assert.ok(text.includes(inr(SHIPPING.rest)), `${name} states the rest-of-India rate ${inr(SHIPPING.rest)}`);
   assert.ok(!/₹\s?90\b/.test(text), `${name} no longer states the old ₹90 flat rate`);
 }
-ok(`shipping.html and llms.txt state ${inr(SHIPPING.home)} (${SHIPPING.homeState}), ${inr(SHIPPING.rest)} (elsewhere) and free from ${inr(SHIPPING.freeAbove)}, as checkout charges`);
+ok(`shipping-policy.html and llms.txt state ${inr(SHIPPING.home)} (${SHIPPING.homeState}), ${inr(SHIPPING.rest)} (elsewhere) and free from ${inr(SHIPPING.freeAbove)}, as checkout charges`);
 
 // the storefront's client-side table agrees with the server's
 const vm = require("node:vm"); const sb = { window: {}, document: { addEventListener() {}, getElementById() { return null; } }, localStorage: { getItem() { return null; }, setItem() {} } };

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>International Orders — USD Prices, Shipping Quoted Separately | ntagz</title>
+  <meta name="description" content="Order ntagz NFC and QR products from outside India: USD prices, shipping quoted separately and confirmed before dispatch, bulk and custom orders, and an enquiry form." />
+  <link rel="canonical" href="https://www.ntagz.com/international.html" />
+  
+  <link rel="icon" href="images/favicon.ico" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/intl.css?v=20261016">
+</head>
+<body>
+  <div id="header-placeholder"></div>
+  <script src="js/component-loader.js"></script>
+  <main class="ix" id="main">
+    <h1>Ordering from outside India?</h1>
+    <p class="lede">Ntagz ships NFC cards, tags and QR products worldwide, in small or bulk quantities, and makes custom printed products to order.</p>
+    <div class="ix-notice" role="note"><b>Ordering from outside India?</b> Product prices are shown in USD where available. International shipping is quoted separately for your destination and order. We will confirm shipping charges with you before dispatch. Selecting USD for display does not guarantee that the payment processor will charge or settle in USD; the actual payment currency is shown at checkout.</div>
+
+    <section class="ix-card" aria-labelledby="pickH">
+      <h2 id="pickH" style="margin-top:0">Choose your destination</h2>
+      <p id="icStatus" class="fine">Checking international ordering…</p>
+      <label for="icCountry">Country</label>
+      <select id="icCountry"><option value="">Select a country</option></select>
+      <div class="actions"><button type="button" class="btn-primary" id="icShop" disabled>Shop in USD</button><a class="btn-ghost" href="#enquiry">Send an enquiry instead</a></div>
+      <p class="fine" id="icUnsupported" hidden>We cannot take online orders for every country yet. If yours is not listed, send us an enquiry and we will tell you what is possible.</p>
+    </section>
+
+    <h2>How an international order works</h2>
+    <ol class="ix-steps">
+      <li><b>Cart review.</b> You see product prices in USD, quantity prices, and the production lead time. Shipping shows as <i>quotation required</i>.</li>
+      <li><b>Submit your order.</b> Add your delivery details (no Indian phone number or PIN code needed). Nothing is charged at this point.</li>
+      <li><b>We quote shipping.</b> We confirm your destination and email you a quotation: product subtotal, shipping, any specified taxes or charges, the shipping method, an estimated delivery window and how long the quotation is valid.</li>
+      <li><b>You accept or decline.</b> Nothing is final until you accept. You get a secure link to your order page.</li>
+      <li><b>You pay the accepted amount.</b> We send payment instructions or a secure payment link for the outstanding amount only. We never ask you to pay twice.</li>
+      <li><b>We dispatch and send tracking.</b> Dispatch normally follows payment confirmation. Tracking appears on your order page and in your email.</li>
+    </ol>
+
+    <h2>Prices, taxes and customs</h2>
+    <p>International prices are in USD, exclude shipping, and exclude taxes unless your quotation says otherwise. Every quotation states whether it covers <i>products only</i>, <i>products plus shipping</i>, or <i>products, shipping and specified taxes</i>.</p>
+    <p>Customs duties, import VAT or GST, brokerage and other destination-country charges may be payable by you unless the quotation expressly says otherwise. Please check that the products may legally be imported into your country. Read the <a href="shipping-policy.html">Shipping and Delivery Policy</a>.</p>
+
+    <h2>Frequently asked questions</h2>
+    <details><summary>Do I need an Indian phone number or address?</summary><p>No. Use your own address and a phone number with your country code, for example +1 415 555 0100.</p></details>
+    <details><summary>Why isn't shipping shown at checkout?</summary><p>International shipping depends on your destination, package weight and size, quantity and the carrier service, so it is quoted for each order and confirmed with you first. We never add an estimated shipping fee without your approval.</p></details>
+    <details><summary>Which currency will I pay in?</summary><p>Prices are displayed in USD. The payment currency and any conversion are disclosed before you pay. Your bank or card issuer may add its own conversion or transaction fees.</p></details>
+    <details><summary>Can I order large quantities or custom products?</summary><p>Yes. Quantity prices apply to many products. For custom printing, branded stands or special requirements, send an enquiry below and we will quote.</p></details>
+    <details><summary>When do you dispatch?</summary><p>After you accept the quotation and the accepted amount is paid and verified, unless we have agreed another arrangement with you in writing. Production time for custom orders is stated in the quotation.</p></details>
+    <details><summary>What about returns and refunds?</summary><p>See the <a href="refund-policy.html">Returns, Refunds and Cancellation Policy</a>. International returns can be expensive, so please talk to us before sending anything back.</p></details>
+
+    <section id="enquiry" class="ix-card" aria-labelledby="enqH">
+      <h2 id="enqH" style="margin-top:0">International enquiry</h2>
+      <p>Bulk orders, custom products, or a shipping quotation for something specific: tell us what you need.</p>
+      <form id="icEnq" novalidate>
+        <div class="row2"><div><label for="eName">Name</label><input id="eName" autocomplete="name" required /><div class="err" id="err-name"></div></div>
+        <div><label for="eEmail">Email</label><input id="eEmail" type="email" autocomplete="email" required /><div class="err" id="err-email"></div></div></div>
+        <div class="row2"><div><label for="eCountry">Country</label><input id="eCountry" list="eCountries" autocomplete="country-name" required /><datalist id="eCountries"></datalist><div class="err" id="err-country"></div></div>
+        <div><label for="eCompany">Company <span class="opt">(optional)</span></label><input id="eCompany" autocomplete="organization" /></div></div>
+        <label for="eProduct">Product or product URL</label><input id="eProduct" placeholder="e.g. Black NFC 215 Card, or a link to the product page" />
+        <div class="row2"><div><label for="eQty">Quantity needed</label><input id="eQty" inputmode="numeric" placeholder="e.g. 1000" /></div>
+        <div><label for="eShip">Preferred shipping method <span class="opt">(optional)</span></label><input id="eShip" placeholder="e.g. DHL Express, sea freight" /></div></div>
+        <label for="eCustom">Customization details <span class="opt">(optional)</span></label><textarea id="eCustom" placeholder="Printing, artwork, encoding, packaging…"></textarea>
+        <label for="eMsg">Message</label><textarea id="eMsg"></textarea><div class="err" id="err-message"></div>
+        <div class="hp" aria-hidden="true"><label for="eWeb">Website</label><input id="eWeb" tabindex="-1" autocomplete="off" /></div>
+        <p class="fine">We use these details only to reply to your enquiry. See the <a href="privacy-policy.html">Privacy Policy</a>.</p>
+        <div class="actions"><button type="submit" class="btn-primary" id="eSend">Send enquiry</button></div>
+        <p class="err" id="eErr" role="alert"></p>
+        <div class="ok" id="eOk" role="status" hidden></div>
+      </form>
+    </section>
+
+    <p class="fine">Prefer email? Write to <a href="mailto:hello@ntagz.com">hello@ntagz.com</a> or message us on WhatsApp at +91 9960 160016. Policies: <a href="terms-and-conditions.html">Terms</a> · <a href="shipping-policy.html">Shipping</a> · <a href="refund-policy.html">Refunds</a> · <a href="privacy-policy.html">Privacy</a>.</p>
+  </main>
+  <div id="footer-placeholder"></div>
+  <script src="js/market.js?v=20261016" defer></script>
+  <script src="js/international.js?v=20261016" defer></script>
+</body>
+</html>

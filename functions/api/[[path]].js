@@ -1,5 +1,6 @@
 const PRICING = require("../lib/pricing.js");
 const LOYALTY = require("../lib/loyalty.js");
+const INTLAPI = require("../lib/intl-api.js");
 const POINTS = require("../lib/points.js"); // rewards wallet: points earned/redeemed, milestones
 const DISPATCH = require("../lib/dispatch.js"); // working-day dispatch promise (one source of truth)
 const DELIVERY = require("../lib/delivery.js"); // Pune-origin courier transit (calendar days; priority = express tier)
@@ -48,7 +49,7 @@ async function loadPricing(env) {
     return map;
   } catch (e) { console.error("loadPricing failed:", e && e.message); return null; }
 }
-const resetPricingCache = () => { campaignCache = { db: null, at: 0, rows: [] }; pricingCache = { db: null, at: 0, map: null }; settingsCache = { db: null, at: 0, v: null }; rewardsSchema = { db: null, at: 0, ok: false }; pointsSchema = { db: null, at: 0, ok: false }; procSchema = { db: null, at: 0, ok: false }; LOYALTY.resetTiersCache(); }; // tests flip config in place
+const resetPricingCache = () => { INTLAPI.resetIntlCache(); campaignCache = { db: null, at: 0, rows: [] }; pricingCache = { db: null, at: 0, map: null }; settingsCache = { db: null, at: 0, v: null }; rewardsSchema = { db: null, at: 0, ok: false }; pointsSchema = { db: null, at: 0, ok: false }; procSchema = { db: null, at: 0, ok: false }; LOYALTY.resetTiersCache(); }; // tests flip config in place
 
 // A few in-stock products that would close the gap to the next cart milestone: same category as something in the cart first, then the
 // smallest overshoot. Values are ex-GST estimates at each product's minimum order; the server prices the real cart.
@@ -1130,6 +1131,8 @@ async function trackOrder(url, env, origin) {
 // Server-to-server safety net for a customer who paid but whose browser never reached verify-payment (closed tab, lost connection). Trusted only
 // by its HMAC signature over the raw body (secret RAZORPAY_WEBHOOK_SECRET); the browser is not involved. Handles `order.paid` only, and funnels
 // into the same idempotent paths as the browser: activateMembership for membership orders, finalizeOrder for merchandise orders.
+const intlDeps = () => ({ json, getSession, stockStatements, loadPricing, unavailableReason, alertPayment });
+
 async function razorpayWebhook(request, env) {
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
   if (!env.RAZORPAY_WEBHOOK_SECRET || !env.DB) return json({ error: "Webhook not configured" }, 503);
@@ -1141,6 +1144,11 @@ async function razorpayWebhook(request, env) {
   if (!safeEqual(expected, request.headers.get("X-Razorpay-Signature"))) return json({ error: "Invalid signature" }, 400);
   let ev;
   try { ev = JSON.parse(raw); } catch { return json({ error: "Invalid body" }, 400); }
+  // International orders (reference INT-...) are handled by lib/intl-api.js: staged USD payments, refunds, failures. Everything else is unchanged.
+  if (await INTLAPI.isIntlEvent(ev, env)) {
+    try { return await INTLAPI.processIntlEvent(ev, request.headers.get("X-Razorpay-Event-Id") || expected, env, intlDeps()); }
+    catch (e) { console.error("intl webhook failed:", e && e.message); return json({ error: "Could not process" }, 500); }
+  }
   const o = ev && ev.event === "order.paid" && ev.payload && ev.payload.order && ev.payload.order.entity, pay = ev && ev.payload && ev.payload.payment && ev.payload.payment.entity;
   // Anything else, or an order not paid in full, is acknowledged and ignored (a 4xx/5xx would only make Razorpay retry it).
   if (!o || !pay || typeof o.id !== "string" || typeof pay.id !== "string" || !Number.isSafeInteger(o.amount) || o.amount_paid !== o.amount) return json({ ok: true, ignored: true });
@@ -1167,6 +1175,12 @@ async function onRequest({ request, env }) {
   if (request.method === "OPTIONS") return new Response(null, { headers: responseHeaders });
 
   if (url.pathname.endsWith("/razorpay/webhook")) return razorpayWebhook(request, env);
+
+  // International storefront (/api/intl/*). Dispatched first: several routes below match on a path suffix (/catalog, /quote ...).
+  if (url.pathname.includes("/intl/")) {
+    if (!["GET", "POST"].includes(request.method)) return json({ error: "Method not allowed" }, 405, origin);
+    return INTLAPI.handleIntl(url, request, env, origin, intlDeps());
+  }
 
   const crmRes = await CRMPUBLIC.handle(url, request, env, { getSession });
   if (crmRes) return crmRes;

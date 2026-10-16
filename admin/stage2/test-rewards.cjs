@@ -234,7 +234,7 @@ function harness(db, adminWorker) {
   sqlite.prepare("UPDATE products SET cost_paise=1950 WHERE id='nfc-coin'").run(); const wl = (await A("/api/campaigns")).d.campaigns.find((c) => c.name === "5% off from ₹300"); assert.ok(wl.warnings.length === 1 && /minimum margin/.test(wl.warnings[0])); ok("percentage rewards warn the admin when they would cut below the minimum margin");
 
   // ── legacy data and an un-migrated database ──
-  const old = makeDb({ exclude: ["0012_rewards.sql", "0015_tier_points.sql"] }); const OH = harness(old, admin);
+  const old = makeDb({ exclude: ["0012_rewards.sql", "0015_tier_points.sql", "0019_international.sql"] }); const OH = harness(old, admin);
   old.sqlite.exec("UPDATE products SET track_stock=0");
   const lu = OH.user("legacy@example.test");
   // checkout still works (rewards schema absent) and records the order the old way

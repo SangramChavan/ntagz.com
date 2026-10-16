@@ -148,21 +148,40 @@
   <!-- ══════════════════════════════════════════
        SHIPPING POLICY — policy / trust page
   ══════════════════════════════════════════ -->
-  <url>
-    <loc>https://www.ntagz.com/shipping.html</loc>
-    <lastmod>2026-06-02</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.4</priority>
-  </url>
 
   <!-- ══════════════════════════════════════════
        TERMS / RETURNS — policy page
   ══════════════════════════════════════════ -->
+
+
   <url>
-    <loc>https://www.ntagz.com/terms.html</loc>
-    <lastmod>2026-06-02</lastmod>
+    <loc>https://www.ntagz.com/shipping-policy.html</loc>
+    <lastmod>2026-10-16</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>
-
+  <url>
+    <loc>https://www.ntagz.com/refund-policy.html</loc>
+    <lastmod>2026-10-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.4</priority>
+  </url>
+  <url>
+    <loc>https://www.ntagz.com/terms-and-conditions.html</loc>
+    <lastmod>2026-10-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.4</priority>
+  </url>
+  <url>
+    <loc>https://www.ntagz.com/privacy-policy.html</loc>
+    <lastmod>2026-10-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.4</priority>
+  </url>
+  <url>
+    <loc>https://www.ntagz.com/international.html</loc>
+    <lastmod>2026-10-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.4</priority>
+  </url>
 </urlset>

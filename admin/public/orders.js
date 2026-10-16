@@ -27,6 +27,7 @@ function phoneLink(o) {
 const payPill = (o) => el("span", { class: "pill " + o.payment_status }, o.payment_status === "paid" ? "Paid" : "Unpaid");
 const fulPill = (o) => el("span", { class: "pill st-" + o.status }, STATUS_TXT[o.status] || o.status);
 const methodTxt = (o) => (o.payment_method || "—").toUpperCase();
+const orderMoney = (o, minor) => (window.intlMoney ? window.intlMoney(o, minor) : inr(minor)); // USD orders are cents, INR orders paise
 const orderRef = (o) => o.id.slice(0, 8);
 const dispatchLine = (o) => (o.is_preorder && o.expected_dispatch ? el("div", { class: "sub" }, "Dispatch: " + dayText(o.expected_dispatch)) : "");
 const priPill = (o) => (o.priority_build ? el("span", { class: "pill pri" }, "Priority") : "");
@@ -37,12 +38,12 @@ const buildSection = (o) => (o.processing_target_days == null ? [] : [el("h3", {
 function oparams() {
   const p = new URLSearchParams();
   if (O.view) p.set("view", O.view);
-  for (const id of ["q", "payment_method", "from", "to"]) if ($(id).value) p.set(id, $(id).value);
+  for (const id of ["q", "payment_method", "market", "country", "quote_status", "dispatch", "from", "to"]) if ($(id).value) p.set(id, $(id).value);
   p.set("page", O.page); p.set("sort", O.sort); p.set("dir", O.dir);
   return p;
 }
-function persistO() { try { sessionStorage.setItem(OKEY, JSON.stringify({ view: O.view, q: $("q").value, payment_method: $("payment_method").value, from: $("from").value, to: $("to").value })); } catch { /* ignore */ } }
-function restoreO() { try { const f = JSON.parse(sessionStorage.getItem(OKEY) || "{}"); O.view = f.view || ""; for (const id of ["q", "payment_method", "from", "to"]) if (f[id]) $(id).value = f[id]; } catch { /* ignore */ } }
+function persistO() { try { sessionStorage.setItem(OKEY, JSON.stringify({ view: O.view, q: $("q").value, payment_method: $("payment_method").value, market: $("market").value, country: $("country").value, quote_status: $("quote_status").value, dispatch: $("dispatch").value, from: $("from").value, to: $("to").value })); } catch { /* ignore */ } }
+function restoreO() { try { const f = JSON.parse(sessionStorage.getItem(OKEY) || "{}"); O.view = f.view || ""; for (const id of ["q", "payment_method", "market", "country", "quote_status", "dispatch", "from", "to"]) if (f[id]) $(id).value = f[id]; } catch { /* ignore */ } }
 
 function drawChips() {
   $("ochips").replaceChildren(...VIEW_CHIPS.map(([v, l]) => el("button", { class: "chip", type: "button", "aria-pressed": String(O.view === v), onclick: () => { O.view = v; O.page = 1; persistO(); drawChips(); load(); } }, l)));
@@ -58,21 +59,21 @@ async function load() {
     $("csv").href = "/api/orders.csv?" + oparams();
     if (!d.orders.length) { const e = el("div", { class: "empty" }, el("p", {}, O.view || $("q").value ? "No orders match this view or search." : "No orders yet."), O.view || $("q").value ? el("button", { class: "btn", type: "button", onclick: clearO }, "Clear filters") : ""); $("list").replaceChildren(e); $("rows").replaceChildren(el("tr", {}, el("td", { colspan: "8" }, e.cloneNode(true)))); return; }
     $("list").replaceChildren(...d.orders.map((o) => el("button", { class: "card ocard", type: "button", onclick: () => openOrder(o.id) },
-      el("div", { class: "row" }, el("span", { class: "id" }, o.name || "Guest"), el("b", {}, inr(o.total))),
+      el("div", { class: "row" }, el("span", { class: "id" }, o.name || "Guest"), el("b", {}, orderMoney(o, o.total))),
       el("div", { class: "sub" }, `${orderRef(o)} · ${when(o.created_at)}`),
-      el("div", {}, payPill(o), fulPill(o), priPill(o), o.is_preorder ? el("span", { class: "pill pre" }, "Pre-order") : ""),
+      el("div", {}, payPill(o), fulPill(o), priPill(o), o.is_preorder ? el("span", { class: "pill pre" }, "Pre-order") : "", window.intlPills ? window.intlPills(o) : ""),
       dispatchLine(o),
       buildLine(o),
       o.tracking_id ? el("div", { class: "sub" }, `${o.courier || ""} · ${o.tracking_id}`) : "")));
     $("rows").replaceChildren(...d.orders.map((o) => el("tr", { tabindex: "0", onclick: () => openOrder(o.id), onkeydown: (e) => { if (e.key === "Enter") openOrder(o.id); } },
       el("td", { class: "mono" }, orderRef(o)), el("td", {}, when(o.created_at)), el("td", {}, o.name || "Guest", el("div", { class: "sub" }, phoneLink(o))),
-      el("td", {}, payPill(o), el("div", { class: "sub" }, methodTxt(o))), el("td", {}, fulPill(o), priPill(o), o.is_preorder ? el("span", { class: "pill pre" }, "Pre-order") : "", dispatchLine(o), buildLine(o)),
-      el("td", {}, inr(o.total)), el("td", {}, o.courier || "—"), el("td", { class: "mono" }, o.tracking_id || "—"))));
+      el("td", {}, payPill(o), el("div", { class: "sub" }, methodTxt(o))), el("td", {}, fulPill(o), priPill(o), window.intlPills ? window.intlPills(o) : "", o.is_preorder ? el("span", { class: "pill pre" }, "Pre-order") : "", dispatchLine(o), buildLine(o)),
+      el("td", {}, orderMoney(o, o.total)), el("td", {}, o.courier || "—"), el("td", { class: "mono" }, o.tracking_id || "—"))));
   } catch (e) {
     $("list").replaceChildren(el("p", { class: "msg" }, "Could not load orders: " + e.message, " ", el("button", { class: "btn small", type: "button", onclick: load }, "Retry")));
   }
 }
-function clearO() { O.view = ""; for (const id of ["q", "payment_method", "from", "to"]) $(id).value = ""; O.page = 1; persistO(); drawChips(); load(); }
+function clearO() { O.view = ""; for (const id of ["q", "payment_method", "market", "country", "quote_status", "dispatch", "from", "to"]) $(id).value = ""; O.page = 1; persistO(); drawChips(); load(); }
 
 // ── generic action dialog ────────────────────────────────────────────
 function actionDialog(title, bodyNodes, okLabel, { danger, onSubmit }) {
@@ -132,8 +133,11 @@ function shipFields(s, o) {
 function shipDialog(o) {
   const f = shipFields(null, o), k = key(), pub = el("textarea", { id: "apub", rows: "2", maxlength: "300", placeholder: "Message the customer will see (optional)" });
   const extra = ["shipped", "out_for_delivery"].includes(o.status);
-  actionDialog(extra ? "Add another shipment" : "Ship order", [el("p", { class: "sub" }, `${o.name || "Order"} · ${orderRef(o)}`), ...f.nodes, labeled("apub", "Note for the customer", pub)], extra ? "Save shipment" : "Save & mark as shipped", {
-    onSubmit: async () => { const d = await postForm(`/api/orders/${o.id}/ship`, { ...f.values(), public_note: pub.value, idempotency_key: k }); toast("Shipment saved"); $("adlg").close(); await openOrder(o.id, d); load(); },
+  // International orders ship only when the quotation is accepted and fully paid; anything else needs a written, recorded override.
+  const needsOv = o.market === "INTL" && (o.payment_status !== "paid" || o.quote_status !== "accepted");
+  const ov = el("textarea", { id: "ovr", rows: "2", maxlength: "300", placeholder: "Why is this being shipped before payment or approval? (required, kept on the order)" });
+  actionDialog(extra ? "Add another shipment" : "Ship order", [el("p", { class: "sub" }, `${o.name || "Order"} · ${orderRef(o)}`), ...(needsOv ? [el("p", { class: "msg" }, "This international order is not accepted and fully paid yet."), labeled("ovr", "Override reason", ov, "Only for an arrangement agreed in writing. It is recorded and audited.")] : []), ...f.nodes, labeled("apub", "Note for the customer", pub)], extra ? "Save shipment" : "Save & mark as shipped", {
+    onSubmit: async () => { const d = await postForm(`/api/orders/${o.id}/ship`, { ...f.values(), public_note: pub.value, idempotency_key: k, ...(needsOv ? { override_reason: ov.value } : {}) }); toast("Shipment saved"); $("adlg").close(); await openOrder(o.id, d); load(); },
   });
 }
 function editShipmentDialog(o, s) {
@@ -194,6 +198,7 @@ async function openOrder(id, preloaded) {
       o.track_url ? el("button", { class: "btn small", type: "button", onclick: async () => { try { await navigator.clipboard.writeText(o.track_url); toast("Tracking link copied"); } catch { toast("Copy failed", true); } } }, "Copy customer tracking link") : "",
       el("div", { class: "next" }, primary ? actionBtn(primary, true) : el("span", { class: "sub" }, o.actions.length ? "" : `This order is ${o.status_label.toLowerCase()}.`), ...others.map((a) => actionBtn(a, false))),
       manualPay ? el("button", { class: "btn", type: "button", onclick: () => paymentDialog(o) }, ["cash", "cod"].includes(o.payment_method) ? "Mark cash as received" : "Record payment received") : "",
+      ...(window.intlOrderSection ? window.intlOrderSection(o) : []),
       ...preorderSection(o),
       ...buildSection(o),
       el("h3", { class: "sec" }, "Shipments"), ...(shipCards.length ? shipCards : [el("p", { class: "sub" }, "Nothing shipped yet.")]),
@@ -202,8 +207,8 @@ async function openOrder(id, preloaded) {
       ...(o.notifications.length ? o.notifications.map((n) => el("div", { class: "sub" }, `${when(n.created_at)} · ${n.subject || n.event} · ${n.status}${n.detail ? " (" + n.detail + ")" : ""}`)) : [el("p", { class: "sub" }, o.email ? "Nothing sent yet. Emails go out when the order is confirmed, packed, shipped, out for delivery or delivered." : "No customer email on this order, so no emails are sent.")]),
       el("h3", { class: "sec" }, "Customer"), el("dl", {}, ...row("Name", o.name || "—"), ...row("Phone", o.phone ? phoneLink(o) : "—"), ...row("Email", o.email || "—"), ...row("Ship to", [o.address, o.state, o.pincode].filter(Boolean).join(", ") || "—"), ...row("GSTIN", o.gstin || "—")),
       el("h3", { class: "sec" }, "Items & payment"), el("table", { class: "items" }, el("tbody", {}, items)),
-      el("dl", {}, ...row("Subtotal", inr(o.subtotal)), ...row("GST", inr(o.gst)), ...row("Total", inr(o.total)), ...row("Paid", inr(o.paid_paise)), ...row("Outstanding", inr(o.outstanding_paise)), ...row("Method", methodTxt(o)), ...row("Order ID", o.id), ...row("Transaction", o.txn_id || "—"), ...row("Placed", when(o.created_at))),
-      o.payments.length ? el("p", { class: "sub" }, o.payments.map((p) => `${inr(p.amount_paise)} ${p.method}${p.reference ? " (" + p.reference + ")" : ""} · ${p.recorded_by}`).join(" · ")) : "")
+      el("dl", {}, ...row("Subtotal", orderMoney(o, o.subtotal)), ...row(o.market === "INTL" ? "Taxes" : "GST", orderMoney(o, o.gst)), ...row("Total", orderMoney(o, o.total)), ...row("Paid", orderMoney(o, o.paid_paise)), ...row("Outstanding", orderMoney(o, o.outstanding_paise)), ...row("Method", methodTxt(o)), ...row("Order ID", o.id), ...row("Transaction", o.txn_id || "—"), ...row("Placed", when(o.created_at))),
+      o.payments.length ? el("p", { class: "sub" }, o.payments.map((p) => `${orderMoney(o, p.amount_paise)} ${p.method}${p.reference ? " (" + p.reference + ")" : ""} · ${p.recorded_by}`).join(" · ")) : "")
   );
   if (!$("opanel").open) $("opanel").showModal();
 }

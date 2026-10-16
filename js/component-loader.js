@@ -111,6 +111,15 @@
     document.head.appendChild(s);
   })();
 
+  // International visitors (a destination chosen outside India) get the market module: USD prices, the international cart and the
+  // country selector. Indian visitors load nothing extra. The selector itself lives on /international.html for first-time visitors.
+  try {
+    var mk = JSON.parse(localStorage.getItem('ntagz.market') || 'null');
+    if (mk && mk.country && mk.country !== 'IN') {
+      var ms = document.createElement('script'); ms.src = getBasePath() + 'js/market.js?v=20261016'; ms.defer = true; document.head.appendChild(ms);
+    }
+  } catch (e) { /* storage unavailable: India experience */ }
+
   // Load components when DOM is ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', loadComponents);

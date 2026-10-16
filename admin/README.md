@@ -103,3 +103,33 @@ Paid ₹999/year membership + a points wallet and spending milestones for member
 **Policies.** Cancel/return reverses earned points and restores spent points (`pts_restore_on_cancel`). Partial refunds reverse the matching share of earned points; points spent are not restored. A milestone pays once per membership term from delivered eligible spend; editing a milestone never rewrites past awards; with `pts_clawback` on, a refund that drops spend under a milestone takes that bonus back (never below zero). A renewal bought within `renew_window_days` of expiry starts when the current term ends. Expiry emails (`renew_notice_days`, default 30,7) are one per membership per threshold, via the existing Resend setup (service notices, not marketing).
 **Not built.** Referrals (no rules were specified), coupons (checkout has none), points on UPI/bank/WhatsApp orders, automatic recurring renewal. Contribution/profit is shown only when every product sold has a cost price, and always before shipping/payment fees.
 **Deploy order (needs go-ahead).** `wrangler d1 time-travel info ntagz-db` → `d1 migrations apply ntagz-db --remote` (0014) → deploy admin Worker → deploy payments Worker → publish static site → Admin → Membership: review settings and warnings, then switch rewards ON. Rollback: switch OFF (instant); `wrangler rollback`.
+
+## International customers, USD pricing & shipping quotes — migration 0019
+
+**Ships OFF** (`membership_config.intl_enabled = '0'`). Deploying changes nothing for Indian customers; the INR flow, GST,
+rewards and membership are untouched. Turn it on in `#/international` → Settings only after the approvals below.
+
+### Flow
+Cart (USD) → checkout details + policy acknowledgement (terms version recorded) → order saved **unpaid / "Shipping quote required"**
+→ admin approves destination → admin sends shipping quotation (customer gets a secret link to accept/decline) → on accept, payment of
+the outstanding amount only (payment link or recorded verified payment) → ship (blocked until quote accepted + paid, unless an admin
+records an override with a reason) → tracking email. No shipping price is ever invented; products and shipping are labelled separately.
+
+### Deploy order (needs go-ahead; nothing here has been deployed)
+1. `wrangler d1 time-travel info ntagz-db` (note the restore bookmark).
+2. `wrangler d1 migrations list ntagz-db --remote`, then `wrangler d1 migrations apply ntagz-db --remote` (applies 0019 and any other pending).
+3. Deploy admin Worker (`admin/`), then the payments Worker (root). Feature detection keeps the storefront working if the order is reversed.
+4. Push the static site. International stays hidden until `intl_enabled` is switched on in the admin.
+Rollback: redeploy previous Workers; the migration is additive (restore via Time Travel only if data must be discarded).
+
+### Payment provider (Razorpay, existing webhook `/api/razorpay/webhook`)
+- Secrets (names only): `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`; admin: `ADMIN_EMAILS`, `RESEND_API_KEY`.
+- Subscribe the webhook to `payment.captured`, `payment_link.paid`, `payment.failed`, `refund.processed`.
+- Create links/orders in **USD** with note `order_ref` = the `INT-…` order number. Razorpay must have international payments enabled on the account.
+- Paid status comes only from a signature-verified webhook (idempotent by event id and payment reference). Mismatched amount/currency, unknown order, or payment before quote acceptance → `payment_alerts`, never marked paid. Redirects are never trusted.
+- Payment links are accepted only from the domains listed in Settings.
+
+### Needs owner / professional approval before switching on
+- Legal: shipping-policy, terms, refund-policy and privacy-policy are drafts for review by a qualified adviser; governing law/jurisdiction, liability caps, the move away from "all sales final", change-of-mind returns and data-retention periods are decisions, not defaults. No legal entity, address or registration details were invented — fill them in.
+- Tax: international orders carry **no Indian GST** by default; export treatment (zero-rated / LUT), destination VAT/duties and per-product treatment must be confirmed with an accountant. Copy never claims "tax-free".
+- Destinations and export controls (the enabled-country list), payment-provider international enablement, domestic-order policy acknowledgement (not recorded today).

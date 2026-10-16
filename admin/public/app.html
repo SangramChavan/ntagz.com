@@ -3,7 +3,7 @@
 <meta name="robots" content="noindex,nofollow"><title>NTAGZ Admin — Orders</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/crm.css"></head>
 <body>
 <header><b>NTAGZ <span>Admin</span></b>
-<nav aria-label="Sections"><a href="#/orders" id="nav-orders">Orders</a><a href="#/products" id="nav-products">Products</a><a href="#/pricing" id="nav-pricing">Pricing</a><a href="#/rewards" id="nav-rewards">Rewards</a><a href="#/customers" id="nav-customers">Customers</a><a href="#/membership" id="nav-membership">Membership</a></nav><span><span id="who" class="sub"></span> <button class="btn" id="out" type="button">Sign out</button></span></header>
+<nav aria-label="Sections"><a href="#/orders" id="nav-orders">Orders</a><a href="#/products" id="nav-products">Products</a><a href="#/pricing" id="nav-pricing">Pricing</a><a href="#/rewards" id="nav-rewards">Rewards</a><a href="#/customers" id="nav-customers">Customers</a><a href="#/membership" id="nav-membership">Membership</a><a href="#/international" id="nav-international">International</a></nav><span><span id="who" class="sub"></span> <button class="btn" id="out" type="button">Sign out</button></span></header>
 <main id="view-orders">
   <div class="pv-head">
     <div><h1 class="pv-title">Orders</h1><p class="sub">Follow every order from payment to delivery.</p></div>
@@ -13,6 +13,10 @@
   <form class="ofilters" id="filters" role="search">
     <input id="q" type="search" placeholder="Search order ID, name, phone or AWB" aria-label="Search orders" autocomplete="off">
     <select id="payment_method" aria-label="Payment method"><option value="">Any payment method</option><option>razorpay</option><option>payu</option><option>cash</option><option>cod</option><option>upi</option><option>bank</option><option>whatsapp</option></select>
+    <select id="market" aria-label="Market"><option value="">India + international</option><option value="IN">India only</option><option value="INTL">International only</option></select>
+    <input id="country" maxlength="2" placeholder="Country (e.g. US)" aria-label="Destination country code" autocomplete="off">
+    <select id="quote_status" aria-label="Shipping quotation"><option value="">Any quotation status</option><option value="required">Quote required</option><option value="sent">Quote sent</option><option value="accepted">Quote accepted</option><option value="declined">Quote declined</option><option value="expired">Quote expired</option></select>
+    <select id="dispatch" aria-label="Dispatch"><option value="">Dispatched or not</option><option value="not_dispatched">Not dispatched</option><option value="dispatched">Dispatched</option></select>
     <input id="from" type="date" aria-label="From date"><input id="to" type="date" aria-label="To date">
     <button class="btn link" id="oclear" type="button">Clear</button>
   </form>
@@ -45,6 +49,12 @@
   </div>
   <div id="pricing" aria-live="polite"><p class="sub">Loading…</p></div>
 </main>
+<main id="view-international" hidden>
+  <div class="pv-head">
+    <div><h1 class="pv-title">International</h1><p class="sub">USD price list, destinations, payment workflow and enquiries. International orders appear in Orders (filter: International).</p></div>
+  </div>
+  <div id="intl" aria-live="polite"><p class="sub">Loading…</p></div>
+</main>
 <main id="view-rewards" hidden>
   <div class="pv-head">
     <div><h1 class="pv-title">Rewards</h1><p class="sub">Spending tiers, cart milestones and customers. Discounts are calculated on the server and checked again at checkout.</p></div>
@@ -62,4 +72,4 @@
 <dialog id="kdlg" aria-labelledby="kdtitle"></dialog>
 <dialog id="opanel" class="panel" aria-labelledby="optitle"></dialog>
 <dialog id="adlg" aria-labelledby="adtitle"></dialog>
-<script src="/app.js"></script><script src="/orders.js"></script><script src="/products.js"></script><script src="/pricing.js"></script><script src="/rewards.js"></script><script src="/customers.js"></script><script src="/crm-analytics.js"></script><script src="/crm-campaigns.js"></script><script src="/membership.js"></script></body></html>
+<script src="/app.js"></script><script src="/orders.js"></script><script src="/products.js"></script><script src="/pricing.js"></script><script src="/rewards.js"></script><script src="/intl.js"></script><script src="/customers.js"></script><script src="/crm-analytics.js"></script><script src="/crm-campaigns.js"></script><script src="/membership.js"></script></body></html>

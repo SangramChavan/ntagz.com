@@ -69,6 +69,8 @@
     var ids = Object.keys(cart);
     var body = document.getElementById('cartDrawerBody');
     var foot = document.getElementById('cartDrawerFoot');
+    /* International visitors: USD lines priced by the server and a shipping-quote request (js/market.js). */
+    if (window.NTAGZ_MARKET && window.NTAGZ_MARKET.isIntl() && window.NTAGZ_MARKET.renderDrawer(cart, body, foot)) return;
 
     if (!ids.length) {
       body.innerHTML = '<div class="cart-empty">Your cart is empty.<br>Add a product to get a bulk quote.</div>';
