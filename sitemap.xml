@@ -8,12 +8,12 @@
        HOME PAGE — highest priority, weekly check
   ══════════════════════════════════════════ -->
   <url>
-    <loc>https://www.ntagz.com/</loc>
-    <lastmod>2026-06-02</lastmod>
+    <loc>https://ntagz.com/</loc>
+    <lastmod>2026-10-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
     <image:image>
-      <image:loc>https://www.ntagz.com/images/white-nfc-card.jpeg</image:loc>
+      <image:loc>https://ntagz.com/images/white-nfc-card.jpeg</image:loc>
       <image:title>ntagz NFC Cards and RFID Tags India</image:title>
       <image:caption>NFC &amp; RFID products for Indian businesses — smart business cards, tags, coins and labels</image:caption>
     </image:image>
@@ -23,8 +23,8 @@
        ORDER / QUOTE — high commercial intent
   ══════════════════════════════════════════ -->
   <url>
-    <loc>https://www.ntagz.com/order.html</loc>
-    <lastmod>2026-06-02</lastmod>
+    <loc>https://ntagz.com/order.html</loc>
+    <lastmod>2026-10-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
@@ -33,73 +33,73 @@
        PRODUCT LANDING PAGES — high commercial intent
   ══════════════════════════════════════════ -->
   <url>
-    <loc>https://www.ntagz.com/product/black-nfc-card/</loc>
+    <loc>https://ntagz.com/product/black-nfc-card/</loc>
     <lastmod>2026-08-14</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://www.ntagz.com/product/white-nfc-card/</loc>
+    <loc>https://ntagz.com/product/white-nfc-card/</loc>
     <lastmod>2026-08-14</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://www.ntagz.com/product/white-inkjet-nfc-card/</loc>
+    <loc>https://ntagz.com/product/white-inkjet-nfc-card/</loc>
     <lastmod>2026-08-14</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.85</priority>
   </url>
   <url>
-    <loc>https://www.ntagz.com/product/anti-metal-tag/</loc>
+    <loc>https://ntagz.com/product/anti-metal-tag/</loc>
     <lastmod>2026-08-14</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://www.ntagz.com/product/google-review-nfc-card/</loc>
+    <loc>https://ntagz.com/product/google-review-nfc-card/</loc>
     <lastmod>2026-09-04</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.85</priority>
   </url>
   <url>
-    <loc>https://www.ntagz.com/product/google-review-nfc-stand/</loc>
+    <loc>https://ntagz.com/product/google-review-nfc-stand/</loc>
     <lastmod>2026-09-07</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.85</priority>
   </url>
   <url>
-    <loc>https://www.ntagz.com/product/ntag216-adhesive-tag/</loc>
+    <loc>https://ntagz.com/product/ntag216-adhesive-tag/</loc>
     <lastmod>2026-08-14</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.85</priority>
   </url>
   <url>
-    <loc>https://www.ntagz.com/product/uhf-rfid-label/</loc>
+    <loc>https://ntagz.com/product/uhf-rfid-label/</loc>
     <lastmod>2026-08-14</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.85</priority>
   </url>
   <url>
-    <loc>https://www.ntagz.com/product/nfc-coin/</loc>
+    <loc>https://ntagz.com/product/nfc-coin/</loc>
     <lastmod>2026-08-14</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.85</priority>
   </url>
   <url>
-    <loc>https://www.ntagz.com/product/mini-nfc-tag/</loc>
+    <loc>https://ntagz.com/product/mini-nfc-tag/</loc>
     <lastmod>2026-08-14</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.ntagz.com/product/micro-flex-fpc/</loc>
+    <loc>https://ntagz.com/product/micro-flex-fpc/</loc>
     <lastmod>2026-08-14</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.ntagz.com/product/sample-kit/</loc>
+    <loc>https://ntagz.com/product/sample-kit/</loc>
     <lastmod>2026-08-14</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.85</priority>
@@ -109,8 +109,8 @@
        NFC PROGRAMMER TOOL — high utility page
   ══════════════════════════════════════════ -->
   <url>
-    <loc>https://www.ntagz.com/programmer.html</loc>
-    <lastmod>2026-06-02</lastmod>
+    <loc>https://ntagz.com/programmer.html</loc>
+    <lastmod>2026-10-18</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -119,8 +119,8 @@
        NFC CHECK TOOL — high utility / SEO traffic
   ══════════════════════════════════════════ -->
   <url>
-    <loc>https://www.ntagz.com/nfc-check.html</loc>
-    <lastmod>2026-06-02</lastmod>
+    <loc>https://ntagz.com/nfc-check.html</loc>
+    <lastmod>2026-10-18</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -129,8 +129,8 @@
        ABOUT — brand / trust page
   ══════════════════════════════════════════ -->
   <url>
-    <loc>https://www.ntagz.com/about.html</loc>
-    <lastmod>2026-06-02</lastmod>
+    <loc>https://ntagz.com/about.html</loc>
+    <lastmod>2026-10-18</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -139,8 +139,8 @@
        TRACK ORDER — support utility
   ══════════════════════════════════════════ -->
   <url>
-    <loc>https://www.ntagz.com/track.html</loc>
-    <lastmod>2026-06-02</lastmod>
+    <loc>https://ntagz.com/track.html</loc>
+    <lastmod>2026-10-18</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
@@ -155,31 +155,31 @@
 
 
   <url>
-    <loc>https://www.ntagz.com/shipping-policy.html</loc>
+    <loc>https://ntagz.com/shipping-policy.html</loc>
     <lastmod>2026-10-16</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>
   <url>
-    <loc>https://www.ntagz.com/refund-policy.html</loc>
+    <loc>https://ntagz.com/refund-policy.html</loc>
     <lastmod>2026-10-16</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>
   <url>
-    <loc>https://www.ntagz.com/terms-and-conditions.html</loc>
+    <loc>https://ntagz.com/terms-and-conditions.html</loc>
     <lastmod>2026-10-16</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>
   <url>
-    <loc>https://www.ntagz.com/privacy-policy.html</loc>
+    <loc>https://ntagz.com/privacy-policy.html</loc>
     <lastmod>2026-10-16</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>
   <url>
-    <loc>https://www.ntagz.com/international.html</loc>
+    <loc>https://ntagz.com/international.html</loc>
     <lastmod>2026-10-16</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>

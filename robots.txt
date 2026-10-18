@@ -17,4 +17,4 @@ Disallow: /cdn-cgi/
 Crawl-delay: 1
 
 # Sitemap location
-Sitemap: https://www.ntagz.com/sitemap.xml
+Sitemap: https://ntagz.com/sitemap.xml

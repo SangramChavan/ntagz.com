@@ -30,17 +30,17 @@ with a GST invoice.
 - Complete NFC Sample Kit — 70 pcs, one of every product — ₹1,940
 
 ## Key Pages
-- [Homepage & Full Product Catalog](https://www.ntagz.com/): all products, specs, FAQs, and pricing
-- [Order & Bulk Pricing Calculator](https://www.ntagz.com/order.html): live bulk-discount quote calculator
-- [NFC Programmer Tool](https://www.ntagz.com/programmer.html): free browser-based tool to write data to NFC tags
-- [NFC Capability Checker](https://www.ntagz.com/nfc-check.html): free tool to test if a phone has NFC hardware
-- [About ntagz](https://www.ntagz.com/about.html): company background
-- [Shipping & Delivery Policy](https://www.ntagz.com/shipping-policy.html): India rates and delivery, and how international shipping is quoted separately for each order
-- [Returns, Refunds & Cancellation Policy](https://www.ntagz.com/refund-policy.html): cancellations, custom orders, defects, transit damage and refunds
-- [Terms and Conditions](https://www.ntagz.com/terms-and-conditions.html)
-- [Privacy Policy](https://www.ntagz.com/privacy-policy.html)
-- [International orders](https://www.ntagz.com/international.html): USD prices, shipping quoted separately, enquiries
-- [Order Tracking](https://www.ntagz.com/track.html): AWB/tracking lookup
+- [Homepage & Full Product Catalog](https://ntagz.com/): all products, specs, FAQs, and pricing
+- [Order & Bulk Pricing Calculator](https://ntagz.com/order.html): live bulk-discount quote calculator
+- [NFC Programmer Tool](https://ntagz.com/programmer.html): free browser-based tool to write data to NFC tags
+- [NFC Capability Checker](https://ntagz.com/nfc-check.html): free tool to test if a phone has NFC hardware
+- [About ntagz](https://ntagz.com/about.html): company background
+- [Shipping & Delivery Policy](https://ntagz.com/shipping-policy.html): India rates and delivery, and how international shipping is quoted separately for each order
+- [Returns, Refunds & Cancellation Policy](https://ntagz.com/refund-policy.html): cancellations, custom orders, defects, transit damage and refunds
+- [Terms and Conditions](https://ntagz.com/terms-and-conditions.html)
+- [Privacy Policy](https://ntagz.com/privacy-policy.html)
+- [International orders](https://ntagz.com/international.html): USD prices, shipping quoted separately, enquiries
+- [Order Tracking](https://ntagz.com/track.html): AWB/tracking lookup
 
 ## Policies (factual — use these, not assumptions)
 - Shipping: free from ₹2,000 (before GST, after discounts); below that ₹40 within Maharashtra and
