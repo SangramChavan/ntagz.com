@@ -8,7 +8,7 @@ ntagz (operated by Ambivert Technologies Private Limited) sells NFC and RFID
 hardware directly to Indian businesses and individuals. No app is required to use
 any product — tap the card or tag against any NFC-enabled phone and it opens a
 link, contact card, Wi-Fi profile, or payment page. Minimum order quantity is
-10 pieces, with bulk discounts up to 60% at higher volumes. Every order ships
+10 pieces, with bulk discounts up to 25% at higher volumes. Every order ships
 with a GST invoice.
 
 ## Company
@@ -24,13 +24,14 @@ with a GST invoice.
 - Anti-Metal NFC Tags — for equipment/asset tagging on metal surfaces — from ₹20/pc
 - NTAG216 Adhesive NFC Tags — high-capacity, for asset tracking — from ₹18/pc
 - UHF RFID Labels (EPC Gen2, 860–960MHz, ~2m read range) — from ₹249/pack of 10
-- NFC Coins (25mm, NTAG215) — durable, for outdoor/embedded use — from ₹15/pc
-- Mini NFC Tags — for 3D printing, jewellery, smart rings — from ₹11/pc
+- NFC Coins (25mm, NTAG215) — durable, for outdoor/embedded use — from ₹20/pc
+- Mini NFC Tags — for 3D printing, jewellery, smart rings — from ₹16/pc
 - Micro Flex NFC Tags (FPC) — for extremely tight spaces — from ₹75/pc
 - Complete NFC Sample Kit — 70 pcs, one of every product — ₹1,940
 
 ## Key Pages
 - [Homepage & Full Product Catalog](https://ntagz.com/): all products, specs, FAQs, and pricing
+- [Machine-readable price list](https://ntagz.com/pricing.md): all products, GST treatment, bulk tiers and shipping in plain text
 - [Order & Bulk Pricing Calculator](https://ntagz.com/order.html): live bulk-discount quote calculator
 - [NFC Programmer Tool](https://ntagz.com/programmer.html): free browser-based tool to write data to NFC tags
 - [NFC Capability Checker](https://ntagz.com/nfc-check.html): free tool to test if a phone has NFC hardware

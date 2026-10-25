@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 rm -rf dist && mkdir dist
-cp *.html robots.txt sitemap.xml site.webmanifest browserconfig.xml llms.txt dist/
+cp *.html robots.txt pricing.md sitemap.xml site.webmanifest browserconfig.xml llms.txt dist/
 cp -R css js images assets components account order membership product dist/
 if find dist \( -name '.dev.vars*' -o -name '*.sql' -o -name 'wrangler*' -o -path '*/admin/*' \) | grep -q .; then
   echo "refusing: private file in dist/" >&2; exit 1

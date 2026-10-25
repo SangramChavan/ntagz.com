@@ -9,7 +9,12 @@
     "start": "node server.js",
     "test:stage2": "for t in admin/stage2/test-*.cjs; do node $t || exit 1; done",
     "build:static": "bash scripts/build-static.sh",
-    "test:cutline": "node scripts/test-cutline.js"
+    "test:cutline": "node scripts/test-cutline.js",
+    "test:seo": "node scripts/seo-check.js",
+    "test:links": "node scripts/test-links.js",
+    "test:pricing": "node scripts/test-pricing-consistency.js",
+    "test:schema": "node scripts/test-schema.js",
+    "build:pricing": "node scripts/build-pricing-md.js"
   },
   "repository": {
     "type": "git",
