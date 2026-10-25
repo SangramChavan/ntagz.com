@@ -1,4 +1,4 @@
-/* ntagz /membership/ — the free spending tiers. Tier list: GET /api/rewards/tiers (public). A signed-in customer's own standing:
+/* ntagz /membership/ — a signed-in customer's own spending-tier standing (the public tier picker lives in js/membership.js, fed by /api/membership/pricing). Standing:
    GET /api/rewards/me (derived on the server from their paid orders). Nothing here is trusted for pricing; checkout re-derives it all. */
 (function () {
   'use strict';
@@ -11,43 +11,10 @@
 
   var tiers = [], me = null, live = false, baseRate = 0, ptsLive = false;
 
-  function renderLede() {
-    var lede = $('tiersLede'); if (!lede) return;
-    if (!ptsLive || !tiers.length) { lede.textContent = 'Your qualifying spend sets your spending tier. Tier discounts, when we run them, apply to eligible products only.'; return; }
-    var rates = tiers.map(function (t) { return t.pointsPer100; }).filter(function (n) { return n != null; }).concat(baseRate);
-    var lo = Math.min.apply(null, rates), hi = Math.max.apply(null, rates);
-    lede.textContent = 'Your qualifying spend sets your spending tier, and your tier sets how fast your rewards build — ' +
-      (lo === hi ? nf.format(lo) : nf.format(lo) + ' to ' + nf.format(hi)) + ' points per ₹100. It is free and automatic: a paid membership turns your tier into points you can spend.';
-  }
-
-  function renderTiers() {
-    renderLede();
-    var host = $('rwTiers'); host.textContent = '';
-    if (!tiers.length) { host.appendChild(el('p', 'm-fine', 'Tiers are not available right now. Please check back shortly.')); return; }
-    tiers.forEach(function (t) {
-      var card = el('article', 'm-tier' + (me && me.tier && me.tier.id === t.id ? ' current' : ''));
-      if (me && me.tier && me.tier.id === t.id) card.appendChild(el('span', 't-you', 'Your tier'));
-      card.appendChild(el('h3', null, t.name));
-      card.appendChild(el('div', 't-spend', t.minSpendPaise === 0 ? 'Everyone starts here' : 'From ' + rupee(t.minSpendPaise) + ' qualifying spend'));
-      var hasPts = t.pointsPer100 != null && t.pointsPer100 > 0;
-      var shown = hasPts ? t.pointsPer100 : (ptsLive && baseRate > 0 && !(t.discountPct > 0) ? baseRate : null);   // a no-rate tier still earns the flat rate
-      var off;
-      if (t.discountPct > 0) { off = el('div', 't-off', pct(t.discountPct) + ' '); off.appendChild(el('small', null, 'off eligible products')); }
-      else if (shown > 0) { off = el('div', 't-off', nf.format(shown) + ' '); off.appendChild(el('small', null, 'points per ₹100')); }
-      else off = el('div', 't-off', 'Standard pricing');
-      card.appendChild(off);
-      var head = t.discountPct > 0 ? pct(t.discountPct) + '% off eligible products' : shown > 0 ? nf.format(shown) + ' points per ₹100' : 'Standard pricing';
-      var dup = t.perks === 'Standard pricing' || t.perks === head || (shown != null && t.perks === nf.format(shown) + ' points per ₹100');  // don't repeat what the headline already says
-      if (t.perks && !dup) card.appendChild(el('p', 't-perk', t.perks));
-      if (me && me.next && me.tier && t.id === me.next.id) card.appendChild(el('p', 't-perk', rupee(me.next.remainingPaise) + ' to go'));
-      host.appendChild(card);
-    });
-  }
-
   function stat(label, value) { var d = el('div', 'm-stat'); d.appendChild(el('span', null, label)); d.appendChild(el('b', null, value)); return d; }
 
   function renderMine() {
-    var sec = $('rwMineWrap'), host = $('rwMine'); if (!me) { sec.hidden = true; return; }
+    var sec = $('tiers'), host = $('rwMine'); if (!me) { sec.hidden = true; return; }
     sec.hidden = false; host.textContent = '';
     var a = el('div', 'card');
     a.appendChild(el('h3', null, (me.tier ? me.tier.name : 'Free') + ' tier'));
@@ -94,18 +61,8 @@
 
   /* Runs only when the membership page reports (via js/membership.js) that spending tiers are live: no extra requests otherwise. */
   function start() {
-    fetch('/api/rewards/tiers', { credentials: 'omit' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
-      if (d) {
-        tiers = d.tiers || []; live = !!d.live;
-        // The notice is about tier PRICE discounts, so tie it to whether any tier actually offers one — not to the programme switch.
-        $('rwOff').hidden = tiers.some(function (t) { return Number(t.discountPct) > 0; });
-        var c = $('rwCombine'); if (c && d.combine === 'stack') c.textContent = 'If you have both, the two discounts can combine on a product, up to a combined limit.';
-      }
-      renderTiers();
-    }).catch(function () { renderTiers(); });
-
     fetch('/api/rewards/me', { credentials: 'include' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
-      me = d; renderTiers(); renderMine();
+      me = d; renderMine(); document.dispatchEvent(new CustomEvent('ntagz:rewards-me', { detail: d }));
     }).catch(function () { });
   }
   var started = false;

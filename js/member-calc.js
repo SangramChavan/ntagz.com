@@ -1,5 +1,6 @@
 /* ntagz membership savings estimate. Pure (no DOM), shared by /membership/ and the tests, which compare it with the real pricing engine
    (functions/lib/pricing.js) and the points rules (functions/lib/points.js). Inputs/outputs are rupees; points are whole numbers.
+   i.start (optional, rupees) = qualifying spend already counted, so a customer who already sits in a higher tier earns at that tier's rate.
    c = { pct, fee, pts: { earnPer100, value, maxRedeemPct, minOrder, tiers: [{ minSpend, pointsPer100 }] ascending } | null }
    Points accrue at the flat rate until qualifying spend reaches the first tier, then at each tier's rate (qualifying spend counts from the
    first order, so a returning customer already sits higher; this estimate starts from zero and is therefore cautious). */
@@ -23,7 +24,8 @@
     var perOrder = V - V * share / 100 * c.pct / 100;                       // what an order costs at member prices (basis for points)
     var r = { annual: annual, eligible: eligible, savings: savings, earned: 0, used: 0, usedValue: 0, unused: 0, fee: c.fee, rate: null, perRupee: share / 100 * c.pct / 100 };
     if (c.pts && perOrder > 0 && perOrder >= c.pts.minOrder) {
-      var e = earnedRaw(perOrder * N, c.pts);
+      var S = cl(i.start, 0, 1e9), e = earnedRaw(S + perOrder * N, c.pts), e0 = S > 0 ? earnedRaw(S, c.pts) : { points: 0 };
+      e = { points: e.points - e0.points, topRate: e.topRate };
       r.earned = Math.floor(e.points); r.rate = e.topRate;
       var cap = Math.floor(perOrder * N * c.pts.maxRedeemPct / 100 / c.pts.value);   // per-order redemption ceiling, summed over the year
       r.used = Math.min(Math.floor(r.earned * use / 100), cap);

@@ -20,7 +20,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="../css/base.css" />
   <link rel="stylesheet" href="../css/membership-dashboard.css?v=20261018" />
-  <link rel="stylesheet" href="../css/membership.css?v=20261019" />
+  <link rel="stylesheet" href="../css/membership.css?v=20261026" />
 </head>
 <body>
   <div id="header-placeholder"></div>
@@ -30,18 +30,17 @@
     <!-- Hero -->
     <header class="m-hero" id="top">
       <div class="m-wrap">
-        <h1>Ntagz Rewards Membership</h1>
-        <p class="m-sub" id="mTag">Buy smarter. Save on member prices. Earn rewards every time you shop.</p>
+        <p class="m-eyebrow">Ntagz Rewards Membership</p>
+        <h1>Make Every Purchase More Rewarding.</h1>
+        <p class="m-sub" id="mTag">Unlock exclusive member benefits, earn rewards on eligible purchases, and get more value every time you shop with Ntagz.</p>
         <p class="m-price" id="mPrice">Annual membership</p>
         <ul class="m-chips" id="mChips" aria-label="Membership benefits"></ul>
         <div class="m-cta">
-          <a class="m-btn m-btn-primary" id="mHeroCta" href="/account/login.html?next=%2Fmembership%2F%3Fjoin%3D1">Join Membership</a>
-          <a class="m-btn m-btn-ghost" id="mHeroGhost" href="#how">See how it works</a>
+          <a class="m-btn m-btn-primary" id="mHeroCta" href="#plans">Explore Memberships</a>
+          <a class="m-btn m-btn-ghost" id="mHeroGhost" href="#calculator">Calculate My Savings</a>
         </div>
-        <p class="m-status" id="mHeroStatus" role="status"></p>
-        <div class="m-done" id="mDone" role="status" tabindex="-1" hidden></div>
         <p class="m-note" id="mHeroNote"></p>
-        <p class="m-honest" id="mHonest">Member prices lower what you pay on eligible products. Rewards points are extra credit you earn on orders and spend on later ones. What you save depends on what you buy and how often, so check the estimate below before you join.</p>
+        <p class="m-honest" id="mHonest"></p>
         <noscript><p class="m-banner">Turn on JavaScript to see today’s fee, member prices and rewards figures. They are loaded live so they are always current.</p></noscript>
       </div>
     </header>
@@ -53,6 +52,37 @@
           <p class="m-eyebrow">Your membership</p>
           <h2 class="m-h2" id="myH">Your rewards.</h2>
           <div id="mDash" class="m-dash"></div>
+        </div>
+      </section>
+
+      <!-- Plans -->
+      <section id="plans" aria-labelledby="plansH">
+        <div class="m-wrap">
+          <p class="m-eyebrow">Membership</p>
+          <h2 class="m-h2" id="plansH">One membership. Rewards that grow with you.</h2>
+          <p class="m-lede">Membership is a single paid plan. Your spending tier is free and automatic, and sets how fast your reward points build.</p>
+          <div class="m-plans">
+            <article class="m-plan m-plan-main" id="mPlan" aria-labelledby="mPlanH">
+              <span class="m-badge">Recommended</span>
+              <h3 id="mPlanH">Rewards Membership</h3>
+              <p class="m-plan-price" id="mPlanPrice"></p>
+              <ul class="m-plan-list" id="mPlanList"></ul>
+              <p class="m-best" id="mPlanBest"></p>
+              <details class="m-more" id="mPlanMore"><summary>Eligibility and terms</summary><ul id="mPlanTerms"></ul></details>
+              <a class="m-btn m-btn-primary m-btn-block" id="mPlanCta" href="/account/login.html?next=%2Fmembership%2F%3Fjoin%3D1">Join Membership</a>
+              <p class="m-status" id="mPlanStatus" role="status"></p>
+              <div class="m-done" id="mDone" role="status" tabindex="-1" hidden></div>
+              <a class="m-btn m-btn-ghost m-btn-block" id="mCartLink" href="../order.html" hidden>Return to your cart →</a>
+            </article>
+            <div class="m-plan m-plan-tiers" id="mTierBox" hidden>
+              <span class="m-badge m-badge-soft">Free · automatic</span>
+              <h3>Spending tiers</h3>
+              <p class="m-fine m-tight">Pick a tier to see what it earns. Your real tier comes from your paid orders.</p>
+              <div class="m-tierpick" id="mTierPick" role="radiogroup" aria-label="Spending tier"></div>
+              <div class="m-tierpanel" id="mTierPanel" aria-live="polite"></div>
+              <p class="m-fine">Qualifying spend is the value of your paid orders after discounts, without GST or shipping. Cancelled and returned orders do not count, and refunds reduce it in proportion.</p>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -77,15 +107,27 @@
       <!-- Comparison -->
       <section id="compare" aria-labelledby="cmpH" hidden>
         <div class="m-wrap">
-          <p class="m-eyebrow">Member or not</p>
-          <h2 class="m-h2" id="cmpH">What changes when you join.</h2>
-          <div class="m-table-wrap">
+          <p class="m-eyebrow">Compare</p>
+          <h2 class="m-h2" id="cmpH">See what changes.</h2>
+          <div class="m-seg" id="cmpSeg" role="group" aria-label="Choose a comparison">
+            <button type="button" class="on" id="cmpBtnM" aria-pressed="true">Member or not</button>
+            <button type="button" id="cmpBtnT" aria-pressed="false" hidden>Spending tiers</button>
+          </div>
+          <div class="m-table-wrap" id="cmpM" tabindex="0" role="region" aria-label="Member or not comparison">
             <table class="m-table">
               <caption class="m-sr">Comparison of shopping with and without membership</caption>
               <thead><tr><th scope="col"><span class="m-sr">Feature</span></th><th scope="col">Without</th><th scope="col">Member</th></tr></thead>
               <tbody id="mCompare"></tbody>
             </table>
           </div>
+          <div class="m-table-wrap m-scroll" id="cmpT" tabindex="0" role="region" aria-label="Spending tier comparison" hidden>
+            <table class="m-table m-table-tiers">
+              <caption class="m-sr">Comparison of spending tiers</caption>
+              <thead id="mCmpTHead"></thead>
+              <tbody id="mCmpTBody"></tbody>
+            </table>
+          </div>
+          <p class="m-fine" id="cmpNote"></p>
         </div>
       </section>
 
@@ -97,10 +139,11 @@
           <p class="m-lede">Change the numbers to match how you shop. Everything below is an <b>estimate</b>, not a promise.</p>
           <div class="m-calc">
             <div class="m-fields">
-              <div class="m-field"><label for="cOrder">Average order value (₹, before GST)</label><input id="cOrder" type="number" inputmode="numeric" min="100" max="10000000" step="100" value="5000" /></div>
-              <div class="m-field"><label for="cCount">Orders per year</label><input id="cCount" type="number" inputmode="numeric" min="1" max="365" step="1" value="6" /></div>
+              <div class="m-field"><label for="cMonth">Monthly spending on Ntagz (₹, before GST)</label><input id="cMonth" type="number" inputmode="numeric" min="0" max="800000" step="500" value="3000" /></div>
+              <div class="m-field"><label for="cOrder">Average order value (₹)</label><input id="cOrder" type="number" inputmode="numeric" min="100" max="10000000" step="100" value="5000" /></div>
               <div class="m-field"><label for="cShare">Share of spend on member-price products (%)</label><input id="cShare" type="number" inputmode="numeric" min="0" max="100" step="5" value="60" /></div>
               <div class="m-field" id="cUseWrap"><label for="cUse">Share of earned points you expect to use (%)</label><input id="cUse" type="number" inputmode="numeric" min="0" max="100" step="5" value="50" /></div>
+              <div class="m-field" id="cTierWrap" hidden><label for="cTier">Your spending tier today</label><select id="cTier"></select></div>
             </div>
             <div class="m-result" id="cOut" aria-live="polite"></div>
           </div>
@@ -129,19 +172,12 @@
         </div>
       </section>
 
-      <!-- Free spending tiers (secondary, separate programme) -->
+      <!-- Where you stand (signed-in only) -->
       <section id="tiers" class="m-soft" aria-labelledby="tiersH" hidden>
         <div class="m-wrap">
-          <p class="m-eyebrow">Free · every account has a tier</p>
-          <h2 class="m-h2" id="tiersH">The more you shop, the more you earn.</h2>
-          <p class="m-lede" id="tiersLede">Your qualifying spend sets your spending tier, and your tier sets how fast your rewards build.</p>
-          <p class="m-banner" id="rwOff" hidden>Tier price discounts are not running right now. Your tier still sets your rewards rate, and your qualifying spend is still counted from your paid orders.</p>
-          <div class="m-tiers" id="rwTiers" aria-live="polite"><p class="m-fine">Loading tiers…</p></div>
-          <p class="m-fine">Qualifying spend is the value of your paid orders after discounts, without GST or shipping. Cancelled and returned orders do not count, and refunds reduce it in proportion. <span id="rwCombine">Tier discounts, when we run them, apply to eligible products only and do not combine with other offers unless stated.</span></p>
-          <div id="rwMineWrap" hidden>
-            <h3 class="m-h3">Where you stand</h3>
-            <div class="m-my" id="rwMine" aria-live="polite"></div>
-          </div>
+          <p class="m-eyebrow">Your spending tier</p>
+          <h2 class="m-h2" id="tiersH">Where you stand.</h2>
+          <div class="m-my" id="rwMine" aria-live="polite"></div>
         </div>
       </section>
 
@@ -151,6 +187,7 @@
           <p class="m-eyebrow">Questions</p>
           <h2 class="m-h2" id="faqH">Good to know.</h2>
           <div class="m-faq" id="mFaq"><p class="m-fine">Loading…</p></div>
+          <p class="m-help">Still unsure? Read the <a href="../terms-and-conditions.html">Terms &amp; Conditions</a> and <a href="../privacy-policy.html">Privacy Policy</a>, or <a href="mailto:hello@ntagz.com">email hello@ntagz.com</a> or <a href="https://wa.me/919960160016" rel="noopener noreferrer">chat on WhatsApp</a>.</p>
         </div>
       </section>
 
@@ -165,7 +202,6 @@
               <a class="m-btn m-btn-primary" id="mFinalCta" href="/account/login.html?next=%2Fmembership%2F%3Fjoin%3D1">Join Membership</a>
             </div>
             <p class="m-status" id="mFinalStatus" role="status"></p>
-            <a class="m-btn m-btn-ghost" id="mCartLink" href="../order.html" hidden>Return to your cart →</a>
             <p class="m-fine">Refund and cancellation terms for the membership fee are not published yet. If you need them confirmed before paying, email hello@ntagz.com. Product orders follow our <a href="../refund-policy.html">Returns &amp; Refunds Policy</a>.</p>
           </div>
         </div>
@@ -173,11 +209,16 @@
     </main>
   </div>
 
+  <div class="m-sticky" id="mSticky" hidden>
+    <span class="m-sticky-t" id="mStickyT"></span>
+    <a class="m-btn m-btn-primary" id="mStickyCta" href="/account/login.html?next=%2Fmembership%2F%3Fjoin%3D1">Join Membership</a>
+  </div>
+
   <div id="footer-placeholder"></div>
 
-  <script src="../js/member-calc.js?v=20261013" defer></script>
+  <script src="../js/member-calc.js?v=20261026" defer></script>
   <script src="../js/membership-dashboard.js?v=20261016" defer></script>
-  <script src="../js/membership.js?v=20261019" defer></script>
-  <script src="../js/rewards-page.js?v=20261016" defer></script>
+  <script src="../js/membership.js?v=20261026" defer></script>
+  <script src="../js/rewards-page.js?v=20261026" defer></script>
 </body>
 </html>
