@@ -15,7 +15,7 @@ with a GST invoice.
 - Legal name: Ambivert Technologies Private Limited
 - Brand: ntagz
 - Location: Excellaa Plazzo, A107, near Bharat Petrol Pump, Ambegaon Budruk, Pune, Maharashtra 411046, India
-- GSTIN: 27AAPCA8177N1ZQ
+- GSTIN: 27AXIPY8272H1ZO
 - Support: WhatsApp +91 9960 160016 (9 AM–8 PM IST, Mon–Sat)
 - Founded: 2022
 
