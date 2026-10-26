@@ -1256,7 +1256,7 @@ async function saveCampaign(body, actor, env) {
 }
 
 // ── Router ────────────────────────────────────────────────────────────
-const PUBLIC_ASSETS = { "/style.css": "/style.css", "/login.js": "/login.js" };
+const PUBLIC_ASSETS = { "/style.css": "/style.css", "/login.js": "/login.js", "/theme.js": "/theme.js" }; // theme.js: the sign-in page needs it too
 const CRM_ASSETS = new Set(["/customers.js", "/crm-analytics.js", "/crm-campaigns.js", "/crm.css", "/membership.js"]); // served only to signed-in admins
 
 export default {
