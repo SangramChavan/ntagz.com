@@ -23,13 +23,13 @@ const mShort = (ym) => `${MON[Number(ym.slice(5, 7)) - 1]} ${ym.slice(2, 4)}`;
 const NS = "http://www.w3.org/2000/svg";
 const sv = (tag, a = {}, ...kids) => {
   const n = document.createElementNS(NS, tag);
-  for (const [k, v] of Object.entries(a)) { if (k.startsWith("on")) n.addEventListener(k.slice(2), v); else n.setAttribute(k, v); }
+  for (const [k, v] of Object.entries(a)) { if (k.startsWith("on")) n.addEventListener(k.slice(2), v); else if ((k === "fill" || k === "stroke") && String(v).startsWith("var(")) n.style.setProperty(k, v); else n.setAttribute(k, v); } // theme colors: SVG attributes cannot read CSS variables
   for (const c of kids.flat()) n.append(c instanceof Node ? c : document.createTextNode(c ?? ""));
   return n;
 };
-const C1 = "#1d4ed8", C2 = "#b45309", GRID = "#e5e5ea", INK2 = "#6e6e73"; // blue / dark amber / grid / grey: each >= 3:1 on white
+const C1 = "var(--chart1)", C2 = "var(--chart2)", GRID = "var(--grid)", INK2 = "var(--ink2)", INK = "var(--ink)", CARD = "var(--card)"; // theme tokens (style.css): >= 3:1 on the card in both themes
 let uid = 0;
-const stripes = (id) => sv("pattern", { id, width: 6, height: 6, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, sv("rect", { width: 6, height: 6, fill: "#fff" }), sv("rect", { width: 3, height: 6, fill: C2 }));
+const stripes = (id) => sv("pattern", { id, width: 6, height: 6, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, sv("rect", { width: 6, height: 6, fill: CARD }), sv("rect", { width: 3, height: 6, fill: C2 }));
 function niceTicks(max, count = 4, whole = false) {
   if (!(max > 0)) return { top: 1, t: [0, 1] };
   const raw = max / count, mag = 10 ** Math.floor(Math.log10(raw)), f = raw / mag, step = Math.max(whole ? 1 : 0, (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * mag), top = Math.ceil(max / step - 1e-9) * step, t = [];
@@ -61,8 +61,8 @@ function hbars(W, rows, fill, label) {
   rows.forEach((r, i) => {
     const y0 = i * RH, w = Math.max(r.v > 0 ? 3 : 0, (r.v / max) * bwMax);
     const g = sv("g", r.drill ? { class: "ca-hit", onclick: () => go(r.drill) } : {}, sv("rect", { x: 0, y: y0, width: W, height: RH - 4, fill: "transparent" }),
-      text(0, y0 + 13, r.label, { fill: "#1d1d1f", "font-size": 12 }), sv("rect", { x: 0, y: y0 + 19, width: w, height: 14, rx: 3, fill }),
-      text(Math.min(w + 6, W - 4), y0 + 31, r.text, { "font-size": 12, fill: "#1d1d1f", ...(w + 6 > W - 70 ? { "text-anchor": "end" } : {}) }), sv("title", {}, `${r.label}: ${r.text}${r.drill ? " (click to open customers)" : ""}`));
+      text(0, y0 + 13, r.label, { fill: INK, "font-size": 12 }), sv("rect", { x: 0, y: y0 + 19, width: w, height: 14, rx: 3, fill }),
+      text(Math.min(w + 6, W - 4), y0 + 31, r.text, { "font-size": 12, fill: INK, ...(w + 6 > W - 70 ? { "text-anchor": "end" } : {}) }), sv("title", {}, `${r.label}: ${r.text}${r.drill ? " (click to open customers)" : ""}`));
     svg.append(g);
   });
   return svg;
@@ -78,10 +78,10 @@ function line(W, pts, fmt, label) { // pts: [{label, v|null}], v is a fraction
   flush();
   const every = Math.max(1, Math.ceil(pts.length / Math.max(1, Math.floor(pw / 46))));
   pts.forEach((p, i) => {
-    if (p.v != null) svg.append(sv("circle", { cx: x(i), cy: y(p.v), r: 3.5, fill: "#fff", stroke: C1, "stroke-width": 2 }, sv("title", {}, `${p.label}: ${fmt(p.v)}`)));
+    if (p.v != null) svg.append(sv("circle", { cx: x(i), cy: y(p.v), r: 3.5, fill: CARD, stroke: C1, "stroke-width": 2 }, sv("title", {}, `${p.label}: ${fmt(p.v)}`)));
     if (i % every === 0 || i === pts.length - 1) svg.append(text(x(i), H - 8, p.short || p.label, { "text-anchor": "middle" }));
   });
-  const lp = [...pts].reverse().find((p) => p.v != null); if (lp) { const i = pts.indexOf(lp); svg.append(text(Math.min(x(i), W - 24), y(lp.v) - 8, fmt(lp.v), { "text-anchor": "middle", fill: "#1d1d1f", "font-size": 12 })); }
+  const lp = [...pts].reverse().find((p) => p.v != null); if (lp) { const i = pts.indexOf(lp); svg.append(text(Math.min(x(i), W - 24), y(lp.v) - 8, fmt(lp.v), { "text-anchor": "middle", fill: INK, "font-size": 12 })); }
   return svg;
 }
 
