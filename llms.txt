@@ -36,6 +36,7 @@ with a GST invoice.
 - [NFC Programmer Tool](https://ntagz.com/programmer.html): free browser-based tool to write data to NFC tags
 - [NFC Capability Checker](https://ntagz.com/nfc-check.html): free tool to test if a phone has NFC hardware
 - [About ntagz](https://ntagz.com/about.html): company background
+- [Ntagz × TapInHere](https://ntagz.com/tapinhere.html): how Ntagz NFC/QR products connect to TapInHere digital profiles
 - [Shipping & Delivery Policy](https://ntagz.com/shipping-policy.html): India rates and delivery, and how international shipping is quoted separately for each order
 - [Returns, Refunds & Cancellation Policy](https://ntagz.com/refund-policy.html): cancellations, custom orders, defects, transit damage and refunds
 - [Terms and Conditions](https://ntagz.com/terms-and-conditions.html)
