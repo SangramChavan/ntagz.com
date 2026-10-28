@@ -1,9 +1,5 @@
 /* ntagz — PRODUCT PAGE LIVE PRICE
-   A product page's ₹ figure is written into its HTML as a fallback. The admin's catalogue (via
-   NTAGZ_LIVE from js/catalog-live.js) is the source of truth, because the server charges that price.
-   .prod-price is keyed by the page's product id (its folder name); pages showing several products
-   (size pickers) mark each price with data-price-for="<product id>". If the live request fails,
-   the static numbers stay. */
+   Uses the current public catalogue for standalone product pages and size-specific prices. */
 (function () {
   'use strict';
 
