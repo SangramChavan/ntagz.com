@@ -12,7 +12,8 @@
     "test:links": "node scripts/test-links.js",
     "test:pricing": "node scripts/test-pricing-consistency.js",
     "test:schema": "node scripts/test-schema.js",
-    "build:pricing": "node scripts/build-pricing-md.js"
+    "build:pricing": "node scripts/build-pricing-md.js",
+    "test:live-price": "node scripts/test-product-live-price.js"
   },
   "repository": {
     "type": "git",
