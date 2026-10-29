@@ -23,13 +23,13 @@ const mShort = (ym) => `${MON[Number(ym.slice(5, 7)) - 1]} ${ym.slice(2, 4)}`;
 const NS = "http://www.w3.org/2000/svg";
 const sv = (tag, a = {}, ...kids) => {
   const n = document.createElementNS(NS, tag);
-  for (const [k, v] of Object.entries(a)) { if (k.startsWith("on")) n.addEventListener(k.slice(2), v); else if ((k === "fill" || k === "stroke") && String(v).startsWith("var(")) n.style.setProperty(k, v); else n.setAttribute(k, v); } // theme colors: SVG attributes cannot read CSS variables
+  for (const [k, v] of Object.entries(a)) { if (k.startsWith("on")) n.addEventListener(k.slice(2), v); else n.setAttribute(k, v); }
   for (const c of kids.flat()) n.append(c instanceof Node ? c : document.createTextNode(c ?? ""));
   return n;
 };
-const C1 = "var(--chart1)", C2 = "var(--chart2)", GRID = "var(--grid)", INK2 = "var(--ink2)", INK = "var(--ink)", CARD = "var(--card)"; // theme tokens (style.css): >= 3:1 on the card in both themes
+const C1 = "#60a5fa", C2 = "#fbbf24", GRID = "#36363c", INK2 = "#b0b0ba", CARD = "#161618", INK = "#f2f2f4"; // contrast-safe chart tokens
 let uid = 0;
-const stripes = (id) => sv("pattern", { id, width: 6, height: 6, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, sv("rect", { width: 6, height: 6, fill: CARD }), sv("rect", { width: 3, height: 6, fill: C2 }));
+  const stripes = (id) => sv("pattern", { id, width: 6, height: 6, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, sv("rect", { width: 6, height: 6, fill: CARD }), sv("rect", { width: 3, height: 6, fill: C2 }));
 function niceTicks(max, count = 4, whole = false) {
   if (!(max > 0)) return { top: 1, t: [0, 1] };
   const raw = max / count, mag = 10 ** Math.floor(Math.log10(raw)), f = raw / mag, step = Math.max(whole ? 1 : 0, (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * mag), top = Math.ceil(max / step - 1e-9) * step, t = [];
