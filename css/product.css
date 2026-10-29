@@ -102,12 +102,12 @@
 
     /* Highlights & Cards */
     .highlight-box {
-      background: #fff;
-      border: 1px solid var(--paper);
+      background: var(--surface);
+      border: 1px solid transparent;
       border-radius: var(--r);
       padding: 24px;
       margin: 24px 0;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+      box-shadow: var(--surface-raised);
     }
 
     .grid-metrics {
@@ -176,9 +176,10 @@
       .prod-hero { grid-template-columns: 1fr 1fr; align-items: center; }
     }
     .prod-media {
-      background: var(--warm);
-      border: 1px solid var(--paper);
+      background: var(--surface);
+      border: 1px solid transparent;
       border-radius: var(--r-lg);
+      box-shadow: var(--surface-raised);
       aspect-ratio: 4/3;
       display: flex;
       align-items: center;
@@ -203,7 +204,8 @@
     }
     .prod-tagline { font-size: 17px; color: var(--ink-2); margin-bottom: 24px; line-height: 1.6; }
     .prod-price-box {
-      background: #fff; border: 1px solid var(--paper); border-radius: var(--r);
+      background: var(--surface); border: 1px solid transparent; border-radius: var(--r);
+      box-shadow: var(--surface-raised);
       padding: 20px 24px; margin-bottom: 24px; display: flex; align-items: center;
       justify-content: space-between; flex-wrap: wrap; gap: 16px;
     }
@@ -234,10 +236,11 @@
     .related-row { display: grid; grid-template-columns: 1fr; gap: 14px; margin-top: 16px; }
     @media (min-width: 640px) { .related-row { grid-template-columns: repeat(3, 1fr); } }
     .related-card {
-      background: #fff; border: 1px solid var(--paper); border-radius: var(--r);
+      background: var(--surface); border: 1px solid transparent; border-radius: var(--r);
+      box-shadow: var(--surface-raised);
       padding: 16px; transition: all 0.2s var(--ease);
     }
-    .related-card:hover { border-color: var(--tagz); transform: translateY(-2px); }
+    .related-card:hover { box-shadow: var(--surface-raised-hover); transform: translateY(-2px); }
     .related-card .rn { font-family: var(--ff-head); font-weight: 700; font-size: 14px; margin-bottom: 4px; }
     .related-card .rp { font-size: 13px; color: var(--tagz); font-weight: 600; }
 
@@ -245,7 +248,8 @@
     .size-pick { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
     .size-opt {
       display: flex; align-items: center; justify-content: space-between; gap: 12px;
-      background: #fff; border: 1px solid var(--paper); border-radius: var(--r);
+      background: var(--surface); border: 1px solid transparent; border-radius: var(--r);
+      box-shadow: var(--surface-raised);
       padding: 14px 18px; flex-wrap: wrap;
     }
     .size-opt .so-thumb { width: 52px; height: 52px; border-radius: 8px; object-fit: cover; flex-shrink: 0; border: 1px solid var(--paper); }
