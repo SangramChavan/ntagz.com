@@ -1,0 +1,73 @@
+/* Site-wide soft UI layer. Included after each page stylesheet so it unifies
+   existing page layouts without changing content or interactions. */
+:where(.policy-content, .product-content, .product-details, .bulk-content,
+  .membership-content, .order-content, .intl-content, .account-content,
+  .track-content, .nfc-content, .programmer-content) {
+  color: var(--ink);
+}
+
+:where(.policy-content, .product-content, .product-details, .bulk-content,
+  .membership-content, .order-content, .intl-content, .account-content,
+  .track-content, .nfc-content, .programmer-content) :where(p, li, dd, figcaption) {
+  color: var(--ink-2);
+}
+
+:where(.policy-content, .product-content, .product-details, .bulk-content,
+  .membership-content, .order-content, .intl-content, .account-content,
+  .track-content, .nfc-content, .programmer-content) :where(h1, h2, h3, h4, strong, b, label) {
+  color: var(--ink);
+}
+
+:where(.btn-tagz, .add-btn, .btn-primary, .btn-submit, .checkout-btn, .cta-button) {
+  color: #1A1714;
+}
+
+:where(.btn, .add-btn, .btn-primary, .btn-submit, .checkout-btn, .cta-button):focus-visible {
+  outline-color: var(--ink);
+}
+
+body {
+  background-color: var(--cream);
+  background-image: radial-gradient(ellipse at 12% 0%, rgba(0, 122, 107, .035), transparent 38%);
+  background-attachment: fixed;
+}
+
+/* Several standalone pages set a surface on their body element. Flatten only
+   that canvas declaration so the shared neumorphic palette is actually visible. */
+body:has(.prod-hero), body:has(.tk-main), body:has(.ix), body:has(.m), body:has(.order-main) {
+  background-color: var(--cream) !important;
+  color: var(--ink) !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) body {
+    background-image: radial-gradient(ellipse at 12% 0%, rgba(0, 160, 130, .055), transparent 38%);
+  }
+}
+
+:root[data-theme="dark"] body {
+  background-image: radial-gradient(ellipse at 12% 0%, rgba(0, 160, 130, .055), transparent 38%);
+}
+
+:where(.prod-price, .prod-price strong, .product-price, .price-value, .so-price) {
+  color: var(--ink) !important;
+}
+
+:where(.prod-price span, .prod-price small, .prod-price-box span, .prod-price-box small, .so-price span) {
+  color: var(--ink-2) !important;
+}
+
+:where(.prod-price-box, .prod-media, .related-card, .size-opt, .metric-card, .use-card) {
+  background-color: var(--surface) !important;
+  border-color: transparent !important;
+  box-shadow: var(--surface-raised) !important;
+}
+
+@media (prefers-contrast: more) {
+  :where(.card, .product-card, .prod-price-box, .prod-media, .related-card,
+    .size-opt, .use-card, .highlight-box, .metric-card, .tk-card, .ov-card,
+    .form-card, .quote-card, .membership-card, .plan-card, .benefit-card,
+    .faq-card, .tool-card, .intl-card, .checkout-card, .account-card) {
+    border: 2px solid var(--ink-2);
+  }
+}

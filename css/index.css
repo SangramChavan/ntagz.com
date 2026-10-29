@@ -729,8 +729,9 @@
       display: flex;
       align-items: center;
       gap: 10px;
-      background: #fff;
-      border: 1.5px solid var(--paper);
+      background: var(--surface);
+      border: 1px solid transparent;
+      box-shadow: var(--surface-raised);
       border-radius: var(--r-lg);
       padding: 14px 24px;
       transition: all 0.3s var(--ease);
@@ -739,9 +740,8 @@
     }
 
     .mp-badge:hover {
-      border-color: rgba(255, 69, 0, 0.3);
       transform: translateY(-3px);
-      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.06);
+      box-shadow: var(--surface-raised-hover);
     }
 
     .mp-badge-name {
@@ -856,8 +856,9 @@
       font-family: var(--ff-head);
       font-size: 13px;
       font-weight: 700;
-      border: 1.5px solid var(--paper);
-      background: transparent;
+      border: 1px solid transparent;
+      background: var(--surface);
+      box-shadow: var(--surface-raised);
       color: var(--ink-2);
       cursor: pointer;
       transition: all 0.3s var(--ease);
@@ -871,10 +872,10 @@
     }
 
     .ftab.active {
-      background: var(--dark);
+      background: var(--tagz);
       color: #fff;
-      border-color: var(--ink);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      border-color: transparent;
+      box-shadow: var(--surface-inset);
     }
 
     /* Product Grid */
@@ -886,13 +887,19 @@
 
     .product-card {
       background: var(--surface);
-      border: 1px solid var(--paper);
-      border-radius: var(--r-xl);
+      border: 1px solid transparent;
+      border-radius: var(--r-lg);
+      box-shadow: var(--surface-raised);
       overflow: hidden;
       transition: all 0.4s var(--ease);
       position: relative;
       display: flex;
       flex-direction: column;
+    }
+
+    .product-card:hover {
+      box-shadow: var(--surface-raised-hover);
+      transform: translateY(-3px);
     }
 
     .product-badge {
@@ -1279,12 +1286,13 @@
       display: inline-block;
       padding: 14px;
       border-radius: var(--r);
-      background: var(--tagz-lt);
-      color: var(--tagz);
+      background: var(--tagz);
+      color: #1A1714;
       font-family: var(--ff-head);
       font-size: 14px;
       font-weight: 800;
-      border: 1.5px solid rgba(255, 69, 0, 0.2);
+      border: 1px solid transparent;
+      box-shadow: var(--surface-raised);
       transition: all 0.3s var(--ease-bounce);
       text-align: center;
       text-decoration: none;
@@ -1292,11 +1300,11 @@
     }
 
     .add-btn:hover {
-      background: var(--tagz);
+      background: var(--tagz-dk);
       color: #fff;
-      border-color: var(--tagz);
+      border-color: transparent;
       transform: translateY(-3px);
-      box-shadow: 0 8px 20px rgba(255, 69, 0, 0.25);
+      box-shadow: var(--surface-raised-hover);
     }
 
     .add-btn:active {
@@ -1308,7 +1316,7 @@
       padding: 14px;
       border-radius: var(--r);
       background: rgba(37, 211, 102, 0.1);
-      color: #1EB85A;
+      color: #087A34;
       font-family: var(--ff-head);
       font-size: 14px;
       font-weight: 800;
@@ -1321,7 +1329,7 @@
 
     .add-btn-wa:hover {
       background: #25D366;
-      color: #fff;
+      color: #082E18;
       border-color: #25D366;
       transform: translateY(-3px);
       box-shadow: 0 8px 20px rgba(37, 211, 102, 0.3);
