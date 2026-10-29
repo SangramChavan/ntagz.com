@@ -18,6 +18,7 @@
 html {
   scroll-behavior: smooth;
   overflow-x: hidden;
+  background: var(--cream);
 }
 
 body {
@@ -28,6 +29,53 @@ body {
   line-height: 1.6;
   overflow-x: hidden;
   max-width: 100vw;
+}
+
+/* Shared soft-surface language. Keep shadows on components, not text or controls
+   that need crisp edges; high contrast stays in the semantic foreground tokens. */
+:where(.card, .product-card, .prod-price-box, .prod-media, .related-card,
+  .size-opt, .use-card, .highlight-box, .metric-card, .tk-card, .ov-card,
+  .form-card, .quote-card, .membership-card, .plan-card, .benefit-card,
+  .faq-card, .tool-card, .intl-card, .checkout-card, .account-card) {
+  background-color: var(--surface);
+  border: 1px solid transparent;
+  box-shadow: var(--surface-raised);
+}
+
+:where(input:not([type="checkbox"]):not([type="radio"]), select, textarea, .form-control) {
+  background-color: var(--cream);
+  color: var(--ink);
+  border-color: transparent;
+  box-shadow: var(--surface-inset);
+}
+
+:where(input, select, textarea, button, a, [tabindex]):focus-visible {
+  outline: 3px solid var(--teal);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --ink-2: #303846;
+    --ink-3: #454F5F;
+    --paper: #AEB6C2;
+    --surface-raised: 0 0 0 2px currentColor;
+  }
+  :root[data-theme="dark"] {
+    --ink-2: #E0E5ED;
+    --ink-3: #D0D8E3;
+    --paper: #7D8796;
+  }
 }
 
 a {
@@ -60,7 +108,8 @@ nav {
   z-index: 800;
   background: var(--nav-bg);
   backdrop-filter: blur(20px);
-  border-bottom: 1px solid var(--paper);
+  border-bottom: 1px solid transparent;
+  box-shadow: 0 5px 16px rgba(92, 101, 116, .12);
 }
 
 .nav-inner {
@@ -187,15 +236,15 @@ nav {
 
 .btn-tagz {
   background: var(--tagz);
-  color: #1F1C20;
-  box-shadow: 0 4px 12px rgba(255, 69, 0, 0.2);
+  color: #1A1714;
+  box-shadow: 4px 4px 10px rgba(140, 47, 18, .20), -3px -3px 9px rgba(255, 255, 255, .64);
 }
 
 .btn-tagz:hover {
   /* lighten, don't darken: dark text keeps AA on a lighter orange */
   filter: brightness(1.08);
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(255, 69, 0, 0.35);
+  box-shadow: var(--surface-raised-hover);
 }
 
 .btn-wa {
@@ -221,6 +270,9 @@ footer {
   padding: 48px 0 24px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
+
+/* Neumorphic depth is meaningful on the site canvas; preserve the dark footer's
+   established contrast rather than applying light-surface shadow rules there. */
 
 .footer-bottom {
   padding-top: 20px;
@@ -421,16 +473,17 @@ button.add-btn.is-added {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  border: 1.5px solid var(--paper);
-  background: #fff;
+  border: 1px solid transparent;
+  background: var(--surface);
+  box-shadow: var(--surface-raised);
   color: var(--ink-2);
   cursor: pointer;
-  transition: border-color .2s, color .2s, transform .2s var(--ease-bounce);
+  transition: color .2s, transform .2s var(--ease-bounce), box-shadow .2s;
   flex-shrink: 0;
 }
 
 .cart-btn:hover {
-  border-color: var(--tagz);
+  box-shadow: var(--surface-raised-hover);
   color: var(--tagz);
   transform: translateY(-1px);
 }
@@ -525,7 +578,8 @@ body.cart-open-lock {
   height: 44px;
   border-radius: 50%;
   border: none;
-  background: var(--warm);
+  background: var(--surface);
+  box-shadow: var(--surface-raised);
   color: var(--ink-2);
   display: flex;
   align-items: center;
@@ -700,8 +754,9 @@ body.cart-open-lock {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  border: 1.5px solid var(--paper);
-  background: #fff;
+  border: 1px solid transparent;
+  background: var(--surface);
+  box-shadow: var(--surface-raised);
   color: var(--ink-2);
   cursor: pointer;
   flex-shrink: 0;
@@ -709,7 +764,7 @@ body.cart-open-lock {
 }
 
 .menu-toggle:hover {
-  border-color: var(--tagz);
+  box-shadow: var(--surface-raised-hover);
   color: var(--tagz);
 }
 
@@ -768,12 +823,14 @@ body.cart-open-lock {
 /* The nav CTA is a button, not a nav link: the generic link colour above
    was overriding .btn-tagz and leaving greige-on-orange (~1.7:1). */
 .mobile-nav-panel a.btn {
-  color: #1F1C20;
+  color: #1A1714;
+  background: var(--tagz);
+  box-shadow: var(--surface-raised);
   border-bottom: 0;
 }
 .mobile-nav-panel a.btn:active,
 .mobile-nav-panel a.btn:hover {
-  color: #1F1C20;
+  color: #1A1714;
   background: var(--tagz);
 }
 
