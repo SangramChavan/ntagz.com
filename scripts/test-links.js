@@ -2,7 +2,7 @@
 const fs = require('fs'), path = require('path');
 const root = path.join(__dirname, '..');
 const ids = new Set(require('vm').runInNewContext('(function(){var window={};' + fs.readFileSync(path.join(root, 'js/catalog.js'), 'utf8') + ';return window.NTAGZ_CATALOG.products.map(p=>p.id)})()'));
-const pages = ['index.html', 'order.html', 'about.html', 'track.html', 'membership/index.html', ...fs.readdirSync(path.join(root, 'product'), { withFileTypes: true }).filter(d => d.isDirectory()).map(d => `product/${d.name}/index.html`), 'product/index.html'];
+const pages = ['index.html', 'order.html', 'about.html', 'track.html', 'tapinhere.html', 'membership/index.html', ...fs.readdirSync(path.join(root, 'product'), { withFileTypes: true }).filter(d => d.isDirectory()).map(d => `product/${d.name}/index.html`), 'product/index.html'];
 const errs = [], wa = new Set();
 for (const f of pages) {
   const h = fs.readFileSync(path.join(root, f), 'utf8');

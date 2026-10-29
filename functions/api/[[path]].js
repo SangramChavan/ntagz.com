@@ -510,6 +510,7 @@ async function handleMembership(url, request, env, allowedOrigin) {
     const u = await getSession(request, env);
     if (!u) return jsonAuth({ error: "Not authenticated" }, 401, allowedOrigin);
     if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) return jsonAuth({ error: "Payment not configured" }, 503, allowedOrigin);
+    if (await throttled(env, request, "membership", 10, 600)) return jsonAuth({ error: TOO_MANY }, 429, allowedOrigin);
     // Renewal: allowed once the current term is within the renewal window, and only one renewal can be queued behind it.
     const existing = await env.DB.prepare(
       `SELECT count(*) n, max(expires_at) e FROM memberships WHERE user_id=? AND status='active' AND expires_at > unixepoch()`
@@ -1127,6 +1128,80 @@ async function trackOrder(url, env, origin) {
   } catch { return json({ error: "Tracking unavailable" }, 503, origin); }
 }
 
+// Asks PayU's own verify API whether this transaction really succeeded for this amount. A signed hash alone only proves PayU sent the
+// message; this is what lets a payment become an order. Throws on network trouble (callers treat that as "not confirmed").
+async function payuConfirmed(env, body) {
+  const verificationHash = await sha512(`${env.PAYU_KEY}|verify_payment|${body.txnid}|${env.PAYU_SALT}`);
+  const verification = await fetch(env.PAYU_ENV === "test"
+    ? "https://test.payu.in/merchant/postservice.php?form=2"
+    : "https://info.payu.in/merchant/postservice.php?form=2", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ key: env.PAYU_KEY, command: "verify_payment", var1: body.txnid, hash: verificationHash }),
+  });
+  if (!verification.ok) throw new Error("PayU payment verification failed");
+  const result = await verification.json();
+  const transaction = result.transaction_details?.[body.txnid];
+  return result.status === 1 && transaction?.status === "success" &&
+    safeEqual(String(transaction?.amount || ""), body.amount) && transaction?.txnid === body.txnid;
+}
+
+// ── PayU webhook: POST /api/payu/webhook ───────────────────────────────────────
+// The PayU twin of the Razorpay webhook: PayU's servers report a successful payment even if the customer never came back to /payu/success
+// (closed tab, lost connection). Same trust chain as the browser return: PayU's signed hash, our merchant key, then PayU's verify API.
+// It records through the same idempotent finalizeOrder, so the return page and the webhook can never create two orders.
+// Configure in the PayU dashboard: Webhooks -> Payment Success -> https://ntagz.com/api/payu/webhook
+async function payuWebhook(request, env) {
+  if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
+  if (!env.PAYU_KEY || !env.PAYU_SALT || !env.DB) return json({ error: "Webhook not configured" }, 503);
+  if (Number(request.headers.get("Content-Length")) > 20000) return json({ error: "Request too large" }, 413);
+  const raw = await request.text();
+  if (raw.length > 20000) return json({ error: "Request too large" }, 413);
+  let body;
+  try { body = (request.headers.get("Content-Type") || "").includes("json") ? JSON.parse(raw) : Object.fromEntries(new URLSearchParams(raw)); }
+  catch { return json({ error: "Invalid body" }, 400); }
+  if (!body || typeof body !== "object" || !(await verifyPayuResponse(body, env.PAYU_SALT)) || body.key !== env.PAYU_KEY) return json({ error: "Invalid signature" }, 400);
+  // Failures, pending and anything else are acknowledged and ignored (an error would only make PayU retry).
+  if (body.status !== "success") return json({ ok: true, ignored: true });
+  try {
+    if (!(await payuConfirmed(env, body))) {
+      await alertPayment(env, body.txnid, "payu", String(body.mihpayid || ""), Math.round(parseFloat(body.amount) * 100), "webhook: PayU verify API did not confirm the payment");
+      return json({ ok: true, ignored: true });
+    }
+    const r = await finalizeOrder(env, body.txnid, String(body.mihpayid || "").slice(0, 128), Math.round(parseFloat(body.amount) * 100), "payu");
+    return r === "failed" ? json({ error: "Could not record the order" }, 500) : json({ ok: true });
+  } catch (e) { console.error("payu webhook failed:", e && e.message); return json({ error: "Could not process" }, 500); }
+}
+
+// ── Rate limits ────────────────────────────────────────────────────────────────
+// Per client IP (stored hashed). `throttled` is for routes that call a payment gateway and write to D1, so a script cannot flood Razorpay/PayU
+// order creation or the database; it counts in D1, so it holds across Worker instances. Requests without CF-Connecting-IP never reach
+// production through Cloudflare (local runs and tests only) and are not limited.
+async function throttled(env, request, bucket, max, windowSec) {
+  const ip = request.headers.get("CF-Connecting-IP");
+  if (!ip || !env.DB) return false;
+  try {
+    const ipHash = await sha256Hex(`ntagz:${bucket}:${ip}`);
+    const r = await env.DB.prepare("SELECT count(*) c FROM order_attempts WHERE ip_hash=? AND created_at>unixepoch()-?").bind(ipHash, windowSec).first();
+    if (r && r.c >= max) return true;
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO order_attempts (ip_hash) VALUES (?)").bind(ipHash),
+      ...(Math.random() < 0.02 ? [env.DB.prepare("DELETE FROM order_attempts WHERE created_at < unixepoch() - 86400")] : []),
+    ]);
+    return false;
+  } catch (e) { console.error("rate limit check failed:", e && e.message); return false; } // never block a sale on a limiter fault
+}
+// Cheap per-instance limit for read-only routes (no D1 writes per request). Resets when an instance recycles; that is acceptable here.
+const quickHits = new Map();
+function quickLimited(request, bucket, max, windowMs) {
+  const ip = request.headers.get("CF-Connecting-IP");
+  if (!ip) return false;
+  const key = bucket + ":" + ip, t = Date.now(), h = quickHits.get(key);
+  if (!h || t - h.at > windowMs) { if (quickHits.size > 5000) quickHits.clear(); quickHits.set(key, { at: t, n: 1 }); return false; }
+  return ++h.n > max;
+}
+const TOO_MANY = "Too many attempts from this connection. Please wait a few minutes and try again, or contact us on WhatsApp.";
+
 // ── Razorpay webhook: POST /api/razorpay/webhook ───────────────────────────────
 // Server-to-server safety net for a customer who paid but whose browser never reached verify-payment (closed tab, lost connection). Trusted only
 // by its HMAC signature over the raw body (secret RAZORPAY_WEBHOOK_SECRET); the browser is not involved. Handles `order.paid` only, and funnels
@@ -1175,6 +1250,7 @@ async function onRequest({ request, env }) {
   if (request.method === "OPTIONS") return new Response(null, { headers: responseHeaders });
 
   if (url.pathname.endsWith("/razorpay/webhook")) return razorpayWebhook(request, env);
+  if (url.pathname.endsWith("/payu/webhook")) return payuWebhook(request, env);
 
   // International storefront (/api/intl/*). Dispatched first: several routes below match on a path suffix (/catalog, /quote ...).
   if (url.pathname.includes("/intl/")) {
@@ -1240,6 +1316,7 @@ async function onRequest({ request, env }) {
   if (url.pathname.endsWith("/quote") && !url.pathname.includes("/accounts/")) {
     if (request.method !== "POST") return json({ error: "Method not allowed" }, 405, origin);
     if (origin && !["https://www.ntagz.com", "https://ntagz.com"].includes(origin)) return json({ error: "Origin not allowed" }, 403, origin);
+    if (quickLimited(request, "quote", 120, 60000)) return json({ error: TOO_MANY }, 429, origin); // the order page debounces; 2/s is generous
     let qb;
     try {
       if (Number(request.headers.get("Content-Length")) > 10000) return json({ error: "Request too large" }, 413, origin);
@@ -1326,26 +1403,7 @@ async function onRequest({ request, env }) {
       if (!env.PAYU_KEY || !env.PAYU_SALT) return json({ error: "PayU is not configured" }, 503, origin);
       if (!await verifyPayuResponse(body, env.PAYU_SALT)) throw new Error("Invalid PayU payment signature");
       if (body.key !== env.PAYU_KEY) throw new Error("Invalid PayU payment response");
-      let transaction;
-      if (body.status === "success") {
-        const verificationHash = await sha512(`${env.PAYU_KEY}|verify_payment|${body.txnid}|${env.PAYU_SALT}`);
-        const verification = await fetch(env.PAYU_ENV === "test"
-          ? "https://test.payu.in/merchant/postservice.php?form=2"
-          : "https://info.payu.in/merchant/postservice.php?form=2", {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({ key: env.PAYU_KEY, command: "verify_payment", var1: body.txnid, hash: verificationHash }),
-        });
-        if (!verification.ok) throw new Error("PayU payment verification failed");
-        const result = await verification.json();
-        transaction = result.transaction_details?.[body.txnid];
-        if (result.status !== 1 || transaction?.status !== "success" ||
-            !safeEqual(String(transaction?.amount || ""), body.amount) || transaction?.txnid !== body.txnid) {
-          throw new Error("PayU could not confirm this payment");
-        }
-      } else {
-        transaction = { status: body.status };
-      }
+      if (body.status === "success" && !(await payuConfirmed(env, body))) throw new Error("PayU could not confirm this payment");
       const isSuccess = body.status === "success";
       const recorded = isSuccess ? await finalizeOrder(env, body.txnid, String(body.mihpayid || "").slice(0, 128), Math.round(parseFloat(body.amount) * 100), "payu") : null;
       const confirmParams = new URLSearchParams({
@@ -1364,6 +1422,7 @@ async function onRequest({ request, env }) {
 
   try {
     if (url.pathname.endsWith("/create-order")) {
+      if (await throttled(env, request, "checkout", 20, 600)) return json({ error: TOO_MANY }, 429, origin);
       const pricing = await loadPricing(env);
       const blocked = unavailableReason(body.items, pricing);
       if (blocked) return json({ error: blocked }, 409, origin);
@@ -1398,6 +1457,7 @@ async function onRequest({ request, env }) {
 
     if (url.pathname.endsWith("/payu/checkout")) {
       if (!env.PAYU_KEY || !env.PAYU_SALT) return json({ error: "PayU is not configured" }, 503, origin);
+      if (await throttled(env, request, "checkout", 20, 600)) return json({ error: TOO_MANY }, 429, origin);
       const pricing = await loadPricing(env);
       const blocked = unavailableReason(body.items, pricing);
       if (blocked) return json({ error: blocked }, 409, origin);

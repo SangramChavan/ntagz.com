@@ -124,10 +124,21 @@ Rollback: redeploy previous Workers; the migration is additive (restore via Time
 
 ### Payment provider (Razorpay, existing webhook `/api/razorpay/webhook`)
 - Secrets (names only): `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`; admin: `ADMIN_EMAILS`, `RESEND_API_KEY`.
-- Subscribe the webhook to `payment.captured`, `payment_link.paid`, `payment.failed`, `refund.processed`.
+- Subscribe the webhook to `order.paid` (domestic checkout and membership safety net: records the order if the customer's browser never
+  reports back), plus `payment.captured`, `payment_link.paid`, `payment.failed`, `refund.processed` (international).
 - Create links/orders in **USD** with note `order_ref` = the `INT-…` order number. Razorpay must have international payments enabled on the account.
 - Paid status comes only from a signature-verified webhook (idempotent by event id and payment reference). Mismatched amount/currency, unknown order, or payment before quote acceptance → `payment_alerts`, never marked paid. Redirects are never trusted.
 - Payment links are accepted only from the domains listed in Settings.
+
+### PayU webhook (`/api/payu/webhook`)
+- PayU dashboard → Webhooks → **Payment Success** → `https://ntagz.com/api/payu/webhook`. No extra secret: it is authenticated like the return
+  page (PayU's hash with `PAYU_SALT`, our `PAYU_KEY`) and every success is re-confirmed with PayU's verify API before an order is recorded.
+- Records the order if the customer paid but never came back to the site; same idempotent path as the return page, so never two orders.
+  A verified payment with no matching checkout goes to `payment_alerts` and returns 500 so PayU retries.
+
+### Rate limits (payments Worker)
+Per client IP (stored hashed in `order_attempts`): Razorpay + PayU checkout 20 per 10 min (shared), membership checkout 10 per 10 min,
+offline orders 5 per 10 min, quotes 120 per min (in-memory per instance). Limited requests get 429 and never reach the gateway.
 
 ### Needs owner / professional approval before switching on
 - Legal: shipping-policy, terms, refund-policy and privacy-policy are drafts for review by a qualified adviser; governing law/jurisdiction, liability caps, the move away from "all sales final", change-of-mind returns and data-retention periods are decisions, not defaults. No legal entity, address or registration details were invented — fill them in.

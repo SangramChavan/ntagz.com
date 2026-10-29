@@ -4,7 +4,6 @@ exclude:
   - db
   - functions
   - scripts
-  - server.js
   - payment-worker.mjs
   - wrangler.toml
   - wrangler.payment.toml
