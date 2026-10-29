@@ -49,6 +49,11 @@ async function run(pathname, sizeIds) {
   if (!stand.includes('data-price-for="google-review-nfc-qr-stand-custom-10x10"')) errs.push('custom stand price is not wired to the live catalogue');
   if (!stand.includes('js/product-live-price.js')) errs.push('stand page does not load the live-price script');
 
+  const listing = fs.readFileSync(path.join(root, 'product/index.html'), 'utf8');
+  if (!listing.includes('catalog-live.js')) errs.push('product listing does not load the live catalogue');
+  if (!listing.includes('livePrices[p.id]')) errs.push('product listing does not render the admin price override');
+  if (!listing.includes('window.NTAGZ_LIVE.ready')) errs.push('product listing does not refresh when live prices load');
+
   errs.forEach((e) => console.log('ERROR', e));
   console.log(`${errs.length} errors`);
   process.exit(errs.length ? 1 : 0);

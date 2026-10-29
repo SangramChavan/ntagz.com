@@ -170,11 +170,14 @@
     </div>
   </main>
 
-  <script src="../js/catalog.js"></script>
+  <script src="../js/catalog.js?v=20261030"></script>
+  <script src="../js/catalog-live.js?v=20261030"></script>
   <script>
     const grid = document.getElementById('catalogGrid');
     const filters = document.querySelectorAll('.filter-btn');
     let activeFilter = 'all';
+    const money = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    let livePrices = {};
 
     function renderGrid() {
       const catalog = window.NTAGZ_CATALOG;
@@ -192,9 +195,10 @@
           ? `<img alt="${p.name}" loading="lazy" src="../${p.image}" />`
           : `<svg class="img-placeholder" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="48" height="48" rx="8" fill="currentColor"/><path d="M24 12C24 12 15 17.5 15 24C15 30.5 24 36 24 36M24 12C24 12 33 17.5 33 24C33 30.5 24 36 24 36M24 18C24 18 19.5 20.5 19.5 24C19.5 27.5 24 30 24 30M24 18C24 18 28.5 20.5 28.5 24C28.5 27.5 24 30 24 30" stroke="white" stroke-width="2" stroke-linecap="round"/></svg>`;
 
+        const price = livePrices[p.id] === undefined ? p.price : livePrices[p.id];
         const priceLabel = p.allInclusive
-          ? `₹${p.price} <span>all-inclusive</span>`
-          : `₹${p.price} <span>/ ${p.unit || 'pc'} ex-GST</span>`;
+          ? `₹${money.format(price)} <span>all-inclusive</span>`
+          : `₹${money.format(price)} <span>/ ${p.unit || 'pc'} ex-GST</span>`;
 
         const moqLabel = p.moq ? `MOQ ${p.moq} pcs` : (p.fixed ? '' : 'MOQ 10 pcs');
 
@@ -222,6 +226,15 @@
     });
 
     renderGrid();
+    if (window.NTAGZ_LIVE) window.NTAGZ_LIVE.ready.then(data => {
+      if (!Array.isArray(data)) return;
+      data.forEach(row => {
+        if (row && typeof row.id === 'string' && typeof row.price === 'number' && Number.isFinite(row.price) && row.price >= 0) {
+          livePrices[row.id] = row.price;
+        }
+      });
+      renderGrid();
+    });
   </script>
 </body>
 </html>
