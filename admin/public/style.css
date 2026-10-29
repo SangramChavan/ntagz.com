@@ -1,9 +1,13 @@
-:root { --bg:#0b0b0d; --card:#161618; --soft:#232327; --line:#2f2f34; --ink:#f2f2f4; --ink2:#a1a1aa; --accent:#ff5a1f; --ok:#4ade80; --warn:#fbbf24; --bad:#f87171; color-scheme: dark; }
+:root { --bg:#0b0b0d; --card:#161618; --card2:#1d1d20; --soft:#232327; --hover:#2b2b30; --line:#36363c; --line-strong:#55555f; --ink:#f2f2f4; --ink2:#b0b0ba; --accent:#ff6a32; --accent-soft:rgba(255,106,50,.16); --ok:#4ade80; --warn:#fbbf24; --bad:#f87171; --bad-soft:rgba(248,113,113,.14); --shadow:rgba(0,0,0,.58); color-scheme:dark; }
+:root[data-theme="light"] { --bg:#f5f5f7; --card:#fff; --card2:#f9f9fb; --soft:#eeeef2; --hover:#e6e6eb; --line:#dedee5; --line-strong:#b8b8c2; --ink:#1c1c20; --ink2:#62626e; --accent:#e84f18; --accent-soft:rgba(232,79,24,.12); --ok:#167a3d; --warn:#8a5b00; --bad:#b42318; --bad-soft:rgba(180,35,24,.1); --shadow:rgba(0,0,0,.16); color-scheme:light; }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) { --bg:#f5f5f7; --card:#fff; --card2:#f9f9fb; --soft:#eeeef2; --hover:#e6e6eb; --line:#dedee5; --line-strong:#b8b8c2; --ink:#1c1c20; --ink2:#62626e; --accent:#e84f18; --accent-soft:rgba(232,79,24,.12); --ok:#167a3d; --warn:#8a5b00; --bad:#b42318; --bad-soft:rgba(180,35,24,.1); --shadow:rgba(0,0,0,.16); color-scheme:light; }
+}
 * { box-sizing: border-box; }
 body { margin:0; font:15px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--ink); }
 button, input, select { font:inherit; }
 :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
-header { position:sticky; top:0; z-index:5; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; background:rgba(22,22,24,.9); backdrop-filter:blur(14px); border-bottom:1px solid var(--line); }
+header { position:sticky; top:0; z-index:5; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; background:color-mix(in srgb, var(--card) 90%, transparent); backdrop-filter:blur(14px); border-bottom:1px solid var(--line); }
 header b { font-size:17px; letter-spacing:-.02em; } header b span { color:var(--accent); }
 main { max-width:1200px; margin:0 auto; padding:16px; }
 .btn { min-height:44px; padding:0 18px; border:1px solid var(--line); border-radius:12px; background:var(--card); color:var(--ink); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; text-decoration:none; }
