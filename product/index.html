@@ -182,7 +182,7 @@
     function renderGrid() {
       const catalog = window.NTAGZ_CATALOG;
       const items = catalog
-        ? catalog.products.filter(p => p.detail && (activeFilter === 'all' || p.category === activeFilter))
+        ? catalog.products.filter(p => (p.detail || p.home) && (activeFilter === 'all' || p.category === activeFilter))
         : [];
 
       if (!items.length) {
@@ -204,7 +204,7 @@
 
         const badgeHtml = p.badge ? `<span class="prod-card-badge">${p.badge}</span>` : '';
 
-        return `<a class="prod-card" href="../${p.detail}" role="listitem">
+        return `<a class="prod-card" href="${p.detail ? '../' + p.detail : '../order.html?add=' + encodeURIComponent(p.id)}" role="listitem">
           <div class="prod-card-img">${imgHtml}</div>
           <div class="prod-card-body">
             ${badgeHtml}

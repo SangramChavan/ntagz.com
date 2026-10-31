@@ -31,6 +31,7 @@ const PRODUCTS = {
   "mini-nfc-tag":                 { price: 16 },
   "micro-flex-fpc":               { price: 75 },
   "nfc-wristband":                { price: 80 },
+  "nfc-ring":                     { price: 399 },
   "uhf-rfid-label":               { price: 249, packSize: 10, moq: 1 },
   "rfid-card-custom-printing":    { price: 75 },
 };

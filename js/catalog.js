@@ -315,6 +315,20 @@
       desc: 'Reusable silicone wristband with an embedded NFC inlay — event check-in, cashless stalls and gym access.',
       home: true
     },
+    {
+      id: 'nfc-ring',
+      sku: 'NR-723',
+      name: 'NFC Ring',
+      price: 399,
+      unit: 'pc',
+      image: null,
+      detail: null,
+      category: 'nfc',
+      homeCategory: 'tag',
+      tags: ['NFC', 'Sizes 9 & 10'],
+      desc: 'NFC ring available in sizes 9 and 10.',
+      home: true
+    },
 
     /* ── RFID ───────────────────────────────────────────────── */
     {
