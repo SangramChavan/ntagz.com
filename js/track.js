@@ -93,10 +93,16 @@ document.getElementById("carrier").addEventListener("change", (e) => {
     if (text != null) e.textContent = text;
     return e;
   };
-  const when = (secs) => new Date(secs * 1000).toLocaleString("en-IN",
-    { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true });
-  const day = (secs) => new Date(secs * 1000).toLocaleDateString("en-IN",
-    { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric" });
+  const dateValue = (value) => {
+    if (typeof value === "number" && Number.isFinite(value)) return new Date(value * 1000);
+    if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return new Date(value + "T00:00:00+05:30");
+    if (typeof value === "string" && value.trim()) return new Date(value);
+    return null;
+  };
+  const when = (value) => { const d = dateValue(value); return d && !isNaN(d) ? d.toLocaleString("en-IN",
+    { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true }) : ""; };
+  const day = (value) => { const d = dateValue(value); return d && !isNaN(d) ? d.toLocaleDateString("en-IN",
+    { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric" }) : ""; };
   const inr = (p) => "₹" + (p / 100).toLocaleString("en-IN", { minimumFractionDigits: p % 100 ? 2 : 0, maximumFractionDigits: 2 });
   const row = (k, v) => { const r = el("div", "ov-row"); r.append(el("span", "ov-k", k), el("span", "ov-v", v)); return r; };
   const card = (title) => { const c = el("div", "ov-card"); if (title) c.append(el("h2", null, title)); return c; };
@@ -222,8 +228,10 @@ document.getElementById("carrier").addEventListener("change", (e) => {
       const c = card("Shipment · " + s.courier);
       const a = el("div", "ov-awb");
       a.append(el("span", "ov-k", "AWB"), el("code", null, s.awb), copyBtn(s.awb));
-      c.append(a, row("Shipped on", day(s.shipped_on)));
-      if (s.est_delivery) c.append(row("Estimated delivery", day(s.est_delivery)));
+      c.append(a);
+      const shippedOn = day(s.shipped_on), estimatedDelivery = day(s.est_delivery);
+      if (shippedOn) c.append(row("Shipped on", shippedOn));
+      if (estimatedDelivery) c.append(row("Estimated delivery", estimatedDelivery));
       if (typeof s.tracking_url === "string" && /^https:\/\//i.test(s.tracking_url)) {
         const l = el("a", "btn btn-tagz btn-block", "Track shipment");
         l.href = s.tracking_url; l.target = "_blank"; l.rel = "noopener noreferrer";
