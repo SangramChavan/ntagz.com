@@ -184,7 +184,36 @@ nav {
   align-items: center;
 }
 
+.acct-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1.5px solid var(--ink-3);
+  border-radius: var(--r);
+  font-family: var(--ff-head);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-2);
+  white-space: nowrap;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.acct-btn:hover {
+  border-color: var(--tagz);
+  color: var(--tagz);
+}
+
+.acct-long { display: none; }
+
+@media (min-width: 520px) {
+  .acct-long { display: inline; }
+}
+
 @media (max-width: 380px) {
+  .acct-btn { padding: 0 10px; }
+
   .nav-inner {
     gap: 8px;
     padding-inline: 12px;
@@ -198,11 +227,6 @@ nav {
     padding: 10px 12px;
     font-size: 13px;
     white-space: nowrap;
-  }
-
-  .acct-icon-btn {
-    width: 36px !important;
-    flex-shrink: 0;
   }
 
   .menu-toggle {

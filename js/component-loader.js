@@ -68,6 +68,19 @@
     });
   }
 
+  // Signed-in visitors see "My account" instead of Login / Register.
+  // Any failure (offline, no API on static hosting) leaves the login button.
+  function markSignedIn(scope, basePath) {
+    fetch('/api/accounts/me', { credentials: 'include' }).then(function (r) {
+      if (!r.ok) return;
+      scope.querySelectorAll('[data-acct-btn]').forEach(function (a) {
+        a.href = basePath + 'account/';
+        var label = a.querySelector('[data-acct-label]');
+        if (label) label.textContent = 'My account'; else a.textContent = 'My account';
+      });
+    }).catch(function () {});
+  }
+
   // Load and inject components
   async function loadComponents() {
     const basePath = getBasePath();
@@ -84,6 +97,7 @@
         if (headerPlaceholder) {
           headerPlaceholder.innerHTML = headerHtml;
           wireMobileMenu(headerPlaceholder);
+          markSignedIn(headerPlaceholder, basePath);
           document.dispatchEvent(new CustomEvent('ntagz:header-loaded'));
         }
       }
