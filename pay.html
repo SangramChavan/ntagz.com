@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Pay for your order | ntagz</title>
+<meta name="description" content="Secure payment for your ntagz order.">
+<link rel="canonical" href="https://ntagz.com/pay.html">
+<style>
+body{margin:0;min-height:100vh;display:grid;place-items:center;font:16px/1.5 system-ui,sans-serif;background:#f5f5f7;color:#1d1d1f}
+main{max-width:360px;margin:16px;padding:24px;background:#fff;border-radius:16px;text-align:center}
+button{width:100%;padding:14px;border:0;border-radius:12px;background:#0071e3;color:#fff;font:inherit;font-weight:600;cursor:pointer}
+p{color:#6e6e73}#err{color:#c00}
+</style>
+</head>
+<body>
+<main>
+<h1>Pay for your order</h1>
+<p>Secure payment by Razorpay (UPI, cards, netbanking).</p>
+<button id="pay" type="button">Pay now</button>
+<p id="err" role="alert"></p>
+</main>
+<script>
+(function () {
+  var q = new URLSearchParams(location.search), o = q.get("o") || "", k = q.get("k") || "";
+  var err = document.getElementById("err"), btn = document.getElementById("pay");
+  if (!/^order_\w{6,40}$/.test(o) || !/^rzp_(live|test)_\w{6,40}$/.test(k)) {
+    btn.hidden = true; err.textContent = "This payment link is not valid."; return;
+  }
+  function done(ok, id) {
+    // confirm.html reads this order.html snapshot (invoice, account link); a leftover one would belong to a different order.
+    if (ok) try { localStorage.removeItem("ntagz_pending_order"); } catch (e) {}
+    location.href = "/order/confirm.html?" + new URLSearchParams(ok ? { status: "success", gateway: "razorpay", orderId: id } : { status: "failed", gateway: "razorpay" });
+  }
+  btn.addEventListener("click", function () {
+    err.textContent = "";
+    var s = document.createElement("script");
+    s.src = "https://checkout.razorpay.com/v1/checkout.js";
+    s.onerror = function () { err.textContent = "Could not load the payment window. Allow checkout.razorpay.com and try again."; };
+    s.onload = function () {
+      new Razorpay({
+        key: k, order_id: o, name: "nTagz",
+        handler: function (r) {
+          fetch("/api/verify-payment", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+            razorpay_order_id: r.razorpay_order_id, razorpay_payment_id: r.razorpay_payment_id, razorpay_signature: r.razorpay_signature }) })
+            .then(function (x) { done(x.ok, r.razorpay_payment_id); }, function () { done(false); });
+        }
+      }).open();
+    };
+    document.head.appendChild(s);
+  });
+})();
+</script>
+</body>
+</html>

@@ -1310,6 +1310,43 @@ async function onRequest({ request, env }) {
     catch (e) { console.error("offline order failed:", e && e.message); return json({ error: "Could not record order" }, 500, origin); }
   }
 
+  // ── Agent checkout: POST /api/agent/checkout — an AI chat creates a Razorpay order for a cart and gets back a hosted pay link ──
+  // The customer pays on ntagz.com/pay.html (Razorpay window), so the agent never sees card/UPI details. Same pricing, intent and
+  // order.paid webhook as the normal checkout; no membership/points/coupons here (guest price only).
+  if (url.pathname.endsWith("/agent/checkout")) {
+    if (request.method !== "POST") return json({ error: "Method not allowed" }, 405, origin);
+    if (origin && !["https://www.ntagz.com", "https://ntagz.com"].includes(origin)) return json({ error: "Origin not allowed" }, 403, origin);
+    if (!env.DB || !env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) return json({ error: "Online payment is not available right now" }, 503, origin);
+    if (await throttled(env, request, "agent-checkout", 10, 600)) return json({ error: TOO_MANY }, 429, origin);
+    let ab;
+    try {
+      if (Number(request.headers.get("Content-Length")) > 10000) return json({ error: "Request too large" }, 413, origin);
+      ab = await request.json();
+    } catch { return json({ error: "Invalid JSON" }, 400, origin); }
+    try {
+      const d = cleanDetails(ab || {});
+      if (!d.name || /[|<>]/.test(d.name) || d.phone.length !== 10 || d.address.length < 10 || !d.pincode || !d.state) {
+        return json({ error: "Required: name, 10-digit phone, address, 6-digit pincode and state" }, 400, origin);
+      }
+      const body = { items: ab.items, state: d.state, pincode: d.pincode, name: d.name, phone: d.phone, email: d.email, address: d.address, gstin: d.gstin };
+      const pricing = await loadPricing(env);
+      const blocked = unavailableReason(body.items, pricing);
+      if (blocked) return json({ error: blocked }, 409, origin);
+      const pc = await pricedCheckout(env, request, body, pricing);
+      if (pc.error) return json({ error: pc.error, code: pc.code }, pc.status, origin);
+      const total = pc.total;
+      const order = await razorpayRequest("/orders", env, {
+        amount: total.amount * 100, currency: "INR",
+        receipt: `ntagz_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`,
+        notes: { pieces: String(total.pieces), membership: "0", source: "agent" },
+      });
+      await recordIntent(env, request, order.id, "razorpay", body, total);
+      const saved = await env.DB.prepare("SELECT 1 x FROM checkout_intents WHERE txn_id=?").bind(order.id).first();
+      if (!saved) return json({ error: "Could not prepare the order, please try again" }, 503, origin);
+      return json({ payUrl: `https://ntagz.com/pay.html?o=${order.id}&k=${env.RAZORPAY_KEY_ID}`, amountInr: total.amount, currency: "INR" }, 200, origin);
+    } catch (e) { console.error("agent checkout failed:", e && e.message); return json({ error: "Could not create the payment link" }, 502, origin); }
+  }
+
   // ── Price quote: POST /api/quote {items, state, compare?} — the checkout engine's numbers, for display only ──
   // Prices for the caller (member prices only with a verified active membership). compare:true also returns guest and member
   // prices for the same cart (the membership calculator). Nothing is stored; checkout re-prices on its own.
