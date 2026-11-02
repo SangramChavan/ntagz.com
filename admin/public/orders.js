@@ -7,6 +7,8 @@ const COURIERS = ["Delhivery", "Blue Dart", "DTDC", "India Post", "Ekart Logisti
 const todayIST = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 const dayText = (d) => (d ? new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—");
 const OKEY = "ntagz.admin.ofilters";
+// What the customer ordered, e.g. "10 × NTAG 215 Coin 25mm, 50 × Black NFC Card" (long carts are cut with a count).
+const itemsText = (o) => { const a = (o.items || []).map((i) => `${i.qty ?? 1} × ${i.name || i.id || "Item"}`); return a.length > 3 ? a.slice(0, 3).join(", ") + ` +${a.length - 3} more` : a.join(", ") || "—"; };
 
 // WhatsApp follow-up link for an order. Indian mobiles (10 digits, or with a leading 0 / 91) get +91; anything that is not a plausible
 // number stays plain text. The message is only pre-filled: the admin reads and sends it themselves. Opens in a new tab.
@@ -57,16 +59,18 @@ async function load() {
     $("pageInfo").textContent = `Page ${d.page} of ${d.pages} · ${d.total} orders`;
     $("prev").disabled = d.page <= 1; $("next").disabled = d.page >= d.pages;
     $("csv").href = "/api/orders.csv?" + oparams();
-    if (!d.orders.length) { const e = el("div", { class: "empty" }, el("p", {}, O.view || $("q").value ? "No orders match this view or search." : "No orders yet."), O.view || $("q").value ? el("button", { class: "btn", type: "button", onclick: clearO }, "Clear filters") : ""); $("list").replaceChildren(e); $("rows").replaceChildren(el("tr", {}, el("td", { colspan: "8" }, e.cloneNode(true)))); return; }
+    if (!d.orders.length) { const e = el("div", { class: "empty" }, el("p", {}, O.view || $("q").value ? "No orders match this view or search." : "No orders yet."), O.view || $("q").value ? el("button", { class: "btn", type: "button", onclick: clearO }, "Clear filters") : ""); $("list").replaceChildren(e); $("rows").replaceChildren(el("tr", {}, el("td", { colspan: "9" }, e.cloneNode(true)))); return; }
     $("list").replaceChildren(...d.orders.map((o) => el("button", { class: "card ocard", type: "button", onclick: () => openOrder(o.id) },
       el("div", { class: "row" }, el("span", { class: "id" }, o.name || "Guest"), el("b", {}, orderMoney(o, o.total))),
       el("div", { class: "sub" }, `${orderRef(o)} · ${when(o.created_at)}`),
+      el("div", { class: "oitems" }, itemsText(o)),
       el("div", {}, payPill(o), fulPill(o), priPill(o), o.is_preorder ? el("span", { class: "pill pre" }, "Pre-order") : "", window.intlPills ? window.intlPills(o) : ""),
       dispatchLine(o),
       buildLine(o),
       o.tracking_id ? el("div", { class: "sub" }, `${o.courier || ""} · ${o.tracking_id}`) : "")));
     $("rows").replaceChildren(...d.orders.map((o) => el("tr", { tabindex: "0", onclick: () => openOrder(o.id), onkeydown: (e) => { if (e.key === "Enter") openOrder(o.id); } },
       el("td", { class: "mono" }, orderRef(o)), el("td", {}, when(o.created_at)), el("td", {}, o.name || "Guest", el("div", { class: "sub" }, phoneLink(o))),
+      el("td", { class: "oitems" }, itemsText(o)),
       el("td", {}, payPill(o), el("div", { class: "sub" }, methodTxt(o))), el("td", {}, fulPill(o), priPill(o), window.intlPills ? window.intlPills(o) : "", o.is_preorder ? el("span", { class: "pill pre" }, "Pre-order") : "", dispatchLine(o), buildLine(o)),
       el("td", {}, orderMoney(o, o.total)), el("td", {}, o.courier || "—"), el("td", { class: "mono" }, o.tracking_id || "—"))));
   } catch (e) {

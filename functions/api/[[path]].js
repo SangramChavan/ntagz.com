@@ -6,6 +6,7 @@ const DISPATCH = require("../lib/dispatch.js"); // working-day dispatch promise 
 const DELIVERY = require("../lib/delivery.js"); // Pune-origin courier transit (calendar days; priority = express tier)
 const CRMPUBLIC = require("../lib/crm-public.js"); // tracking / unsubscribe / campaign clicks / marketing opt-in
 const PAYLINKS = require("../lib/paylinks.js"); // payment links: token/expiry/status rules and the nudge engine
+const ASSIST = require("../lib/assistant.js"); // shopping assistants: product + quantity from free text, and the reply block
 
 // Product structure (pack size, MOQ, fixed kits, all-inclusive) lives with the pricing engine so the admin preview uses it too.
 const PRODUCTS = PRICING.PRODUCTS;
@@ -1350,6 +1351,88 @@ async function payLinkApi(url, request, env, origin) {
   } catch (e) { console.error("pay link failed:", e && e.message); return json({ error: "Could not process this payment link" }, 502, origin); }
 }
 
+// ── Shopping assistants: GET /api/assistant/offer?q=<what the customer asked for>&qty=<n>&state=<Indian state> ────────────────────────────
+// For AI assistants (ChatGPT, Gemini, Claude ...) answering "ntagz.com I need 10 coin nfc". One read-only GET (many assistants can fetch a URL but not
+// POST) finds the product in the LIVE catalogue and returns its real price, stock, minimum order, GST, shipping and total, a purchase link that opens
+// the order page with the product and quantity already selected, and the reply block with that link as its last line. Nothing is created or stored;
+// every number comes from loadPricing + the checkout's own pricedCheckout, so it cannot differ from what checkout charges. Public data only, so it
+// is readable from any origin (no cookies, no credentials). Guests only: member prices apply at checkout when the customer is signed in.
+const SITE = "https://ntagz.com";
+const round2 = (n) => Math.round(n * 100) / 100;
+async function assistantOffer(url, request, env, origin) {
+  const out = (data, status = 200) => { const r = json(data, status, origin); r.headers.set("Access-Control-Allow-Origin", "*"); r.headers.delete("Access-Control-Allow-Credentials"); return r; };
+  if (request.method !== "GET") return out({ error: "Method not allowed" }, 405);
+  if (quickLimited(request, "assistant", 60, 60000)) return out({ status: "error", error: TOO_MANY }, 429);
+  if (!env.DB) return out({ status: "error", error: "The catalogue is unavailable right now. Send the customer to " + SITE + "/order.html" }, 503);
+  const sp = url.searchParams, q = String(sp.get("q") || "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, 200);
+  if (!q) return out({ status: "error", error: "Pass q=<what the customer asked for>, for example q=nfc coin" }, 400);
+  let explicitQty = null;
+  if (sp.get("qty") !== null && sp.get("qty") !== "") {
+    if (!/^\d{1,6}$/.test(sp.get("qty")) || Number(sp.get("qty")) < 1 || Number(sp.get("qty")) > PAYLINKS.MAX_QTY) return out({ status: "error", error: "qty must be a whole number from 1 to " + PAYLINKS.MAX_QTY }, 400);
+    explicitQty = Number(sp.get("qty"));
+  }
+  const state = ASSIST.normaliseState(sp.get("state"));
+  const pricing = await loadPricing(env);
+  if (!pricing) return out({ status: "error", error: "The catalogue is unavailable right now. Send the customer to " + SITE + "/order.html" }, 503);
+
+  // Only products that are active and sold through checkout can be recommended.
+  const live = Object.keys(PRODUCTS).filter((id) => pricing[id] && pricing[id].active).map((id) => ({ id, name: pricing[id].name || id }));
+  const read = ASSIST.readQuantity(q), m = ASSIST.matchProducts(read.rest, live);
+  const minOf = (id) => (PRODUCTS[id].fixed ? 1 : PRODUCTS[id].moq || 10);
+  const pageOf = (id) => (ASSIST.CAT[id] && ASSIST.CAT[id].page ? SITE + ASSIST.CAT[id].page : null);
+  const cand = (p) => ({ name: p.name, unitPrice: round2(pricing[p.id].price_paise / 100), minQty: minOf(p.id), productUrl: pageOf(p.id), offerUrl: `${SITE}/api/assistant/offer?q=${encodeURIComponent(p.name)}` });
+
+  if (m.status === "none") return out({ status: "not_found", message: "No product in the ntagz catalogue matches that. Ask the customer which product they mean. The full list with prices is at " + SITE + "/pricing.md.", catalogueUrl: SITE + "/pricing.md" });
+  if (m.status === "choose") return out({ status: "choose", message: "More than one product could match. Ask the customer which one they want (show these options), then call again with that product's name as q.", candidates: m.candidates.map(cand) });
+
+  const id = m.best.id, def = PRODUCTS[id], row = pricing[id], name = row.name || id, moq = minOf(id), notes = [];
+  let qty = explicitQty ?? read.qty;
+  if (def.fixed) { if (qty && qty !== 1) notes.push(`${name} is sold as a single kit, so the order is for 1.`); qty = 1; }
+  else if (qty == null) { qty = moq; notes.push(`No quantity was given, so this is the minimum order of ${moq}. Tell me how many you need.`); }
+  else if (qty < moq) { notes.push(`The minimum order for this product is ${moq}, so the order is for ${moq}.`); qty = moq; }
+
+  // Stock, by the same rules checkout enforces: tracked stock plus any pre-order room.
+  let availability = "In stock";
+  const unavailable = (why) => out({ status: "unavailable", product: { name, url: pageOf(id) }, message: why, notes,
+    markdown: `**${name}** is not available right now: ${why}` + (pageOf(id) ? `\n\n[View the product page](${pageOf(id)})` : `\n\n[See the ntagz catalogue](${SITE}/order.html)`) });
+  if (row.track_stock) {
+    const ready = row.stock_qty, room = row.preorder_enabled ? (row.preorder_max == null ? Infinity : Math.max(row.preorder_max - row.preordered_qty, 0)) : 0;
+    if (qty > ready + room) {
+      if (ready < moq) return unavailable(ready > 0 ? `only ${ready} left, below the minimum order of ${moq}.` : "out of stock.");
+      notes.push(`Only ${ready} are in stock right now, so the order is for ${ready}.`); qty = ready;
+    }
+    availability = qty > ready ? `Pre-order: ${ready > 0 ? ready + " ready to ship, " : ""}${qty - ready} on pre-order${row.preorder_dispatch ? " (" + row.preorder_dispatch + ")" : ""}` : ready <= row.low_stock_threshold ? `Low stock (${ready} left)` : "In stock";
+  }
+  const items = [{ id, qty }], blocked = unavailableReason(items, pricing);
+  if (blocked) return unavailable(blocked + ".");
+
+  const priced = await pricedCheckout(env, request, { items, state: state || "" }, pricing);
+  if (priced.error) return out({ status: "error", error: "Could not price this order. Send the customer to " + SITE + "/order.html" }, 502);
+  const t = priced.total, line = t.lines[0], inclusive = !!def.allInclusive, S = PRICING.SHIPPING;
+  let shipping; // {amount: number|null, text}
+  if (inclusive) shipping = { amount: 0, text: "Included in the price" };
+  else if (state) shipping = t.shipping > 0 ? { amount: t.shipping, text: `${ASSIST.inr(t.shipping)} to ${state}` } : { amount: 0, text: "Free" };
+  else { // no state yet: shipping is only certain when the order is already above the free-shipping line
+    const probe = calculateTotal(items, S.homeState, priced.member, pricing, await campaignsFor(request, env, priced.member));
+    shipping = probe && probe.shipping === 0 ? { amount: 0, text: "Free" }
+      : { amount: null, text: `${ASSIST.inr(S.home)} within ${S.homeState}, ${ASSIST.inr(S.rest)} elsewhere in India (free from ${ASSIST.inr(S.freeAbove)} before GST). Confirmed at checkout once the delivery pincode is entered.` };
+  }
+  const beforeShipping = t.amount - (t.shipping || 0), total = shipping.amount === null ? null : t.amount;
+  const unit = round2(line.net / line.qty), subtotal = round2(line.net), discountPct = line.bulkPct || 0;
+  const cta = { label: "🛒 Buy Now · Proceed to Payment", url: `${SITE}/order.html?add=${encodeURIComponent(id)}&qty=${qty}`, kind: "checkout_link" };
+  const markdown = ASSIST.buildMarkdown({ name, qty, unit, discountPct, subtotal, gst: t.gst, gstIncluded: inclusive, shipping, total, totalBeforeShipping: beforeShipping, availability, notes, cta });
+  return out({
+    status: "ok", product: { name, url: pageOf(id), minQty: moq, availability }, quantity: qty,
+    pricing: { currency: "INR", unitPrice: unit, listUnitPrice: line.unitPrice, quantityDiscountPct: discountPct, subtotal, gst: inclusive ? null : t.gst, gstIncluded: inclusive, shipping: shipping.amount, shippingNote: shipping.text, totalBeforeShipping: beforeShipping, total,
+      totalNote: total === null ? "Confirmed at checkout: the delivery state decides the shipping charge." : null },
+    notes, cta,
+    payment: { note: "cta.url is a checkout link: it opens the ntagz order page with this product and quantity already selected, and the customer pays there (UPI, cards, netbanking). It is not a payment link.",
+      paymentLink: { available: true, how: `POST ${SITE}/api/agent/checkout with the customer's name, 10-digit phone, full address, 6-digit pincode and state returns a real, expiring payment link (payUrl). Only use it after the customer has given those details.` } },
+    markdown,
+    assistantInstructions: "Show `markdown` as the final block of your reply, unchanged. Its last line is the purchase link and must stay the last line. Do not change prices, quantities or the link, and do not say a payment link was created.",
+  });
+}
+
 async function onRequest({ request, env }) {
   const url = new URL(request.url);
   const origin = request.headers.get("Origin");
@@ -1360,6 +1443,7 @@ async function onRequest({ request, env }) {
   if (url.pathname.endsWith("/razorpay/webhook")) return razorpayWebhook(request, env);
   if (url.pathname.endsWith("/payu/webhook")) return payuWebhook(request, env);
   if (/\/pay\/[0-9a-f]{32}(\/start|\/adjust)?$/.test(url.pathname)) return payLinkApi(url, request, env, origin);
+  if (url.pathname.endsWith("/assistant/offer")) return assistantOffer(url, request, env, origin);
 
   // International storefront (/api/intl/*). Dispatched first: several routes below match on a path suffix (/catalog, /quote ...).
   if (url.pathname.includes("/intl/")) {
@@ -1444,6 +1528,22 @@ async function onRequest({ request, env }) {
       const pc = await pricedCheckout(env, request, body, pricing);
       if (pc.error) return json({ error: pc.error, code: pc.code }, pc.status, origin);
       const total = pc.total;
+      // The same customer asking again for the same cart (a retry, a double tap, a chat re-run) gets the SAME open link, not a second
+      // gateway order. Only an unpaid, uncancelled, unexpired agent link made in the last 30 minutes with identical details and cart is reused.
+      try {
+        const norm0 = PAYLINKS.normaliseItems(ab.items);
+        if (norm0) {
+          const nowS = Math.floor(Date.now() / 1000), key = JSON.stringify(norm0);
+          const { results: same } = await env.DB.prepare(`SELECT id,expires_at,txn_ids FROM pay_links WHERE source='agent' AND status='active' AND phone=?1 AND name=?2 AND address=?3 AND pincode=?4 AND state=?5 AND coalesce(gstin,'')=?6 AND coalesce(email,'')=?7 AND items_json=?8 AND created_at>?9 AND expires_at>?10 ORDER BY created_at DESC LIMIT 3`)
+            .bind(d.phone, d.name, d.address, d.pincode, d.state, d.gstin || "", d.email || "", key, nowS - 1800, nowS).all();
+          for (const r of same || []) {
+            let ids = []; try { ids = JSON.parse(r.txn_ids || "[]"); } catch { /* ignore */ }
+            let paid = false;
+            for (const tid of ids) { if (await env.DB.prepare("SELECT 1 x FROM orders WHERE txn_id=? AND payment_status='paid'").bind(tid).first()) { paid = true; break; } }
+            if (!paid) return json({ payUrl: `https://ntagz.com/pay.html?t=${r.id}`, amountInr: total.amount, currency: "INR", expiresAt: r.expires_at, reused: true }, 200, origin);
+          }
+        }
+      } catch (e) { console.error("agent link reuse skipped:", e && e.message); }
       const order = await razorpayRequest("/orders", env, {
         amount: total.amount * 100, currency: "INR",
         receipt: `ntagz_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`,
