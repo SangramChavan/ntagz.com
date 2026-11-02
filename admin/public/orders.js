@@ -198,6 +198,7 @@ async function openOrder(id, preloaded) {
       o.track_url ? el("button", { class: "btn small", type: "button", onclick: async () => { try { await navigator.clipboard.writeText(o.track_url); toast("Tracking link copied"); } catch { toast("Copy failed", true); } } }, "Copy customer tracking link") : "",
       el("div", { class: "next" }, primary ? actionBtn(primary, true) : el("span", { class: "sub" }, o.actions.length ? "" : `This order is ${o.status_label.toLowerCase()}.`), ...others.map((a) => actionBtn(a, false))),
       manualPay ? el("button", { class: "btn", type: "button", onclick: () => paymentDialog(o) }, ["cash", "cod"].includes(o.payment_method) ? "Mark cash as received" : "Record payment received") : "",
+      manualPay && ["upi", "bank", "whatsapp"].includes(o.payment_method) && o.market !== "INTL" && window.openPayLinkFor ? el("button", { class: "btn", type: "button", onclick: () => { $("opanel").close(); window.openPayLinkFor(o.id); } }, "Send payment link") : "",
       ...(window.intlOrderSection ? window.intlOrderSection(o) : []),
       ...preorderSection(o),
       ...buildSection(o),

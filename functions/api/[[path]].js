@@ -5,6 +5,7 @@ const POINTS = require("../lib/points.js"); // rewards wallet: points earned/red
 const DISPATCH = require("../lib/dispatch.js"); // working-day dispatch promise (one source of truth)
 const DELIVERY = require("../lib/delivery.js"); // Pune-origin courier transit (calendar days; priority = express tier)
 const CRMPUBLIC = require("../lib/crm-public.js"); // tracking / unsubscribe / campaign clicks / marketing opt-in
+const PAYLINKS = require("../lib/paylinks.js"); // payment links: token/expiry/status rules and the nudge engine
 
 // Product structure (pack size, MOQ, fixed kits, all-inclusive) lives with the pricing engine so the admin preview uses it too.
 const PRODUCTS = PRICING.PRODUCTS;
@@ -1242,6 +1243,113 @@ async function razorpayWebhook(request, env) {
   } catch (e) { console.error("razorpay webhook failed:", e && e.message); return json({ error: "Could not process" }, 500); }
 }
 
+// ── Payment links: GET /api/pay/<token>, POST /api/pay/<token>/start, POST /api/pay/<token>/adjust ─────────────────────────────
+// A link is a stored cart + customer details (table pay_links, migration 0020). The token is the only secret. NOTHING stored is a price:
+// every view and every payment re-prices the cart with the checkout's own entry point (pricedCheckout), so a price, stock or member change
+// is picked up and shown before the customer pays. The Razorpay order is only created when the customer taps Pay, for the amount they saw.
+const WA_NUMBER = "919960160016";
+const LINK_STATUS_TEXT = { paid: "This order is already paid. Thank you!", cancelled: "This payment link was cancelled.", expired: "This payment link has expired." };
+
+async function payLinkRow(env, token) {
+  try { return { row: await env.DB.prepare("SELECT * FROM pay_links WHERE id=?").bind(token).first() }; }
+  catch { return { missing: true }; } // table not created yet
+}
+async function payLinkPaid(env, row) {
+  try { return !!(await env.DB.prepare("SELECT 1 x FROM orders WHERE payment_status='paid' AND txn_id IN (SELECT value FROM json_each(?)) LIMIT 1").bind(row.txn_ids || "[]").first()); }
+  catch { return false; }
+}
+const parseJson = (s, d) => { try { return JSON.parse(s); } catch { return d; } };
+
+// Prices the link's cart as checkout would for whoever is holding the link now (a signed-in member gets member prices).
+async function priceLink(env, request, row, items, pricing) {
+  const blocked = unavailableReason(items, pricing);
+  if (blocked) return { error: blocked, status: 409, unavailable: true };
+  const body = { items, state: row.state, pincode: row.pincode, name: row.name, phone: row.phone, email: row.email || "", address: row.address, gstin: row.gstin || "" };
+  const pc = await pricedCheckout(env, request, body, pricing);
+  if (pc.error) return pc;
+  return { pc, body };
+}
+
+// What the customer sees: lines, discounts, GST, shipping, total, deadline and up to two suggestions. Numbers only: the page writes the words.
+async function payLinkView(env, request, row, items, priced, pricing) {
+  const t = priced.pc.total, orig = Object.fromEntries(parseJson(row.orig_items_json, []).map((i) => [i.id, i.qty]));
+  const nameOf = (id) => (pricing && pricing[id] && pricing[id].name) || id;
+  const campaigns = await campaignsFor(request, env, priced.pc.member);
+  const nudges = PAYLINKS.nudgesFor(items, (its) => calculateTotal(its, row.state, priced.pc.member, pricing, campaigns), PRODUCTS, { state: row.state })
+    .map((n) => ({ ...n, name: nameOf(n.id) }));
+  return {
+    status: "active", expiresAt: row.expires_at, name: String(row.name).trim().split(/\s+/)[0], deliverTo: { pincode: row.pincode, state: row.state },
+    lines: t.lines.map((l) => ({ id: l.id, name: nameOf(l.id), qty: l.qty, origQty: orig[l.id] ?? l.qty, listUnit: l.unitPrice, unit: Math.round((l.net / l.qty) * 100) / 100, total: Math.round(l.net * 100) / 100, inclusive: l.allInclusive })),
+    totals: { listTotal: t.subtotal, bulkDiscount: t.bulkDiscount, memberDiscount: t.memberDiscount, offer: t.campaign ? { name: t.campaign.name, discount: (t.campaignDiscountPaise || 0) / 100 } : null, gst: t.gst, shipping: t.shipping, amount: t.amount },
+    memberPricing: !!t.member, dispatchDays: Number.isInteger(t.processingTargetDays) ? t.processingTargetDays : null,
+    priceChanged: row.quoted_paise != null && row.quoted_paise !== t.amount * 100 ? { was: row.quoted_paise / 100, now: t.amount } : null,
+    nudges, adjusted: JSON.stringify(items) !== row.orig_items_json,
+  };
+}
+
+async function payLinkApi(url, request, env, origin) {
+  const m = url.pathname.match(/\/pay\/([0-9a-f]{32})(\/start|\/adjust)?$/);
+  const action = m && m[2];
+  if (!m) return json({ error: "Not found" }, 404, origin);
+  if (action ? request.method !== "POST" : request.method !== "GET") return json({ error: "Method not allowed" }, 405, origin);
+  if (origin && !["https://www.ntagz.com", "https://ntagz.com"].includes(origin)) return json({ error: "Origin not allowed" }, 403, origin);
+  if (!env.DB) return json({ error: "Payment links are not available right now" }, 503, origin);
+  if (quickLimited(request, "paylink", 90, 60000)) return json({ error: TOO_MANY }, 429, origin);
+  const token = m[1], nowSec = Math.floor(Date.now() / 1000);
+  const { row, missing } = await payLinkRow(env, token);
+  if (missing) return json({ error: "Payment links are not available yet" }, 503, origin);
+  if (!row) return json({ error: "This payment link is not valid" }, 404, origin);
+  const status = PAYLINKS.statusOf(row, await payLinkPaid(env, row), nowSec);
+  if (status === "paid" || status === "cancelled" || status === "expired") {
+    return action ? json({ error: LINK_STATUS_TEXT[status], status }, 409, origin) : json({ status, message: LINK_STATUS_TEXT[status], whatsapp: WA_NUMBER, expiresAt: row.expires_at }, 200, origin);
+  }
+  try {
+    const items = parseJson(row.items_json, []), pricing = await loadPricing(env);
+
+    if (!action) { // GET: record the open (at most once per 30 s so reloads and link scanners do not inflate it), then show today's price
+      await env.DB.prepare("UPDATE pay_links SET first_opened_at=COALESCE(first_opened_at,?1), open_count=open_count+(CASE WHEN last_opened_at IS NULL OR last_opened_at<?1-30 THEN 1 ELSE 0 END), last_opened_at=?1 WHERE id=?2").bind(nowSec, token).run().catch(() => {});
+      const priced = await priceLink(env, request, row, items, pricing);
+      if (priced.error) return json({ status: priced.unavailable ? "unavailable" : "error", message: priced.error, whatsapp: WA_NUMBER, expiresAt: row.expires_at }, 200, origin);
+      return json(await payLinkView(env, request, row, items, priced, pricing), 200, origin);
+    }
+
+    if (action === "/adjust") { // the customer took a suggestion: raise one line's quantity (never below what the link was made with)
+      if (quickLimited(request, "paylink-adjust", 40, 60000)) return json({ error: TOO_MANY }, 429, origin);
+      let b;
+      try { if (Number(request.headers.get("Content-Length")) > 2000) return json({ error: "Request too large" }, 413, origin); b = await request.json(); } catch { return json({ error: "Invalid JSON" }, 400, origin); }
+      const idx = items.findIndex((i) => b && i.id === b.id), o = idx < 0 ? null : parseJson(row.orig_items_json, []).find((i) => i.id === b.id);
+      if (idx < 0 || !Number.isSafeInteger(b.qty) || b.qty < (o ? o.qty : items[idx].qty) || b.qty > PAYLINKS.MAX_QTY) return json({ error: "That quantity is not allowed for this link" }, 400, origin);
+      const next = items.map((x, i) => (i === idx ? { id: x.id, qty: b.qty } : x));
+      const priced = await priceLink(env, request, row, next, pricing);
+      if (priced.error) return json({ error: priced.error }, priced.status || 400, origin);
+      await env.DB.prepare("UPDATE pay_links SET items_json=?, adjust_count=adjust_count+1, last_adjusted_at=? WHERE id=?").bind(JSON.stringify(next), nowSec, token).run();
+      return json(await payLinkView(env, request, { ...row, items_json: JSON.stringify(next) }, next, priced, pricing), 200, origin);
+    }
+
+    // POST /start: re-price, then make (or reuse) the Razorpay order for exactly the amount shown
+    if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) return json({ error: "Online payment is not available right now" }, 503, origin);
+    const priced = await priceLink(env, request, row, items, pricing);
+    if (priced.error) return json({ error: priced.error }, priced.status || 400, origin);
+    const total = priced.pc.total, amountPaise = total.amount * 100;
+    let orderId = row.txn_id;
+    const reuse = orderId && row.started_amount_paise === amountPaise && await env.DB.prepare("SELECT 1 x FROM checkout_intents WHERE txn_id=?").bind(orderId).first();
+    if (reuse) {
+      await env.DB.prepare("UPDATE pay_links SET start_count=start_count+1 WHERE id=?").bind(token).run();
+    } else {
+      if (await throttled(env, request, "paylink-start", 12, 600)) return json({ error: TOO_MANY }, 429, origin);
+      const order = await razorpayRequest("/orders", env, {
+        amount: amountPaise, currency: "INR", receipt: `ntagz_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`,
+        notes: { pieces: String(total.pieces), membership: "0", source: "paylink", link: token.slice(0, 8) },
+      });
+      await recordIntent(env, request, order.id, "razorpay", priced.body, total);
+      if (!(await env.DB.prepare("SELECT 1 x FROM checkout_intents WHERE txn_id=?").bind(order.id).first())) return json({ error: "Could not prepare the order, please try again" }, 503, origin);
+      await env.DB.prepare("UPDATE pay_links SET txn_id=?1, txn_ids=json_insert(txn_ids,'$[#]',?1), started_amount_paise=?2, start_count=start_count+1 WHERE id=?3").bind(order.id, amountPaise, token).run();
+      orderId = order.id;
+    }
+    return json({ orderId, keyId: env.RAZORPAY_KEY_ID, amountPaise, prefill: { name: row.name, email: row.email || "", contact: row.phone } }, 200, origin);
+  } catch (e) { console.error("pay link failed:", e && e.message); return json({ error: "Could not process this payment link" }, 502, origin); }
+}
+
 async function onRequest({ request, env }) {
   const url = new URL(request.url);
   const origin = request.headers.get("Origin");
@@ -1251,6 +1359,7 @@ async function onRequest({ request, env }) {
 
   if (url.pathname.endsWith("/razorpay/webhook")) return razorpayWebhook(request, env);
   if (url.pathname.endsWith("/payu/webhook")) return payuWebhook(request, env);
+  if (/\/pay\/[0-9a-f]{32}(\/start|\/adjust)?$/.test(url.pathname)) return payLinkApi(url, request, env, origin);
 
   // International storefront (/api/intl/*). Dispatched first: several routes below match on a path suffix (/catalog, /quote ...).
   if (url.pathname.includes("/intl/")) {
@@ -1343,7 +1452,19 @@ async function onRequest({ request, env }) {
       await recordIntent(env, request, order.id, "razorpay", body, total);
       const saved = await env.DB.prepare("SELECT 1 x FROM checkout_intents WHERE txn_id=?").bind(order.id).first();
       if (!saved) return json({ error: "Could not prepare the order, please try again" }, 503, origin);
-      return json({ payUrl: `https://ntagz.com/pay.html?o=${order.id}&k=${env.RAZORPAY_KEY_ID}`, amountInr: total.amount, currency: "INR" }, 200, origin);
+      // A tracked link (expiry, order summary, nudges, admin visibility). Before migration 0020 exists this quietly keeps the old link format.
+      let payUrl = `https://ntagz.com/pay.html?o=${order.id}&k=${env.RAZORPAY_KEY_ID}`, expiresAt = null;
+      try {
+        const norm = PAYLINKS.normaliseItems(ab.items);
+        if (norm) {
+          const token = PAYLINKS.newToken(), t = Math.floor(Date.now() / 1000), json_ = JSON.stringify(norm);
+          await env.DB.prepare(`INSERT INTO pay_links (id,source,created_by,items_json,orig_items_json,name,phone,email,address,pincode,state,gstin,quoted_paise,created_at,expires_at,txn_id,txn_ids,started_amount_paise)
+            VALUES (?,'agent','agent',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+            .bind(token, json_, json_, d.name, d.phone, d.email || null, d.address, d.pincode, d.state, d.gstin || null, total.amount * 100, t, t + PAYLINKS.DEFAULT_EXPIRY_HOURS * 3600, order.id, JSON.stringify([order.id]), total.amount * 100).run();
+          payUrl = `https://ntagz.com/pay.html?t=${token}`; expiresAt = t + PAYLINKS.DEFAULT_EXPIRY_HOURS * 3600;
+        }
+      } catch (e) { console.error("pay link not stored (migration 0020 applied?):", e && e.message); }
+      return json({ payUrl, amountInr: total.amount, currency: "INR", ...(expiresAt ? { expiresAt } : {}) }, 200, origin);
     } catch (e) { console.error("agent checkout failed:", e && e.message); return json({ error: "Could not create the payment link" }, 502, origin); }
   }
 
