@@ -316,10 +316,26 @@
     if (clean.length === 6) { fetchLocationData(clean); return; }
     fetchedCity = ''; fetchedState = '';
     $('customerState').value = '';
+    hideStateFallback(); $('locationDisplay').hidden = false;
     resetLocation('Auto-filled from pincode');
     $('pincodeLoader').style.display = 'none';
     calculateQuote();
   }
+
+  /* If the pincode service is down the delivery state cannot be looked up, and shipping depends on it. Rather than block the order, a state
+     dropdown appears and the customer picks theirs. Hidden again as soon as the pincode changes or a lookup succeeds. */
+  function hideStateFallback() { var f = $('stateFallback'); if (f) { f.hidden = true; f.value = ''; } }
+  function showStateFallback() {
+    var f = $('stateFallback'); if (!f) return;
+    f.hidden = false; $('locationDisplay').hidden = true;
+  }
+  $('stateFallback').addEventListener('change', function () {
+    fetchedCity = ''; fetchedState = this.value;
+    $('customerState').value = this.value;
+    setFieldError('customerPincode', '');
+    var note = $('pincodeLoader'); note.className = 'field-note is-ok'; note.style.display = this.value ? 'block' : 'none'; note.textContent = this.value ? 'Delivering to ' + this.value : '';
+    calculateQuote();
+  });
 
   function resetLocation(text) {
     var locDisplay = $('locationDisplay');
@@ -344,6 +360,7 @@
           fetchedCity = po.District;
           fetchedState = po.State;
           $('customerState').value = fetchedState;
+          hideStateFallback(); $('locationDisplay').hidden = false;
 
           var locDisplay = $('locationDisplay');
           var locText = $('locationText');
@@ -366,8 +383,9 @@
       })
       .catch(function () {
         loader.className = 'field-note is-error';
-        loader.textContent = 'Could not reach the pincode service. Enter your city manually on WhatsApp.';
+        loader.textContent = 'We could not look up this pincode right now. Please choose your state.';
         resetLocation('Auto-filled from pincode');
+        showStateFallback();
         calculateQuote();
       });
   }
@@ -520,20 +538,7 @@
     var cGST = $('customerGST').value.trim().toUpperCase();
     var cState = $('customerState').value || '';
 
-    $('outCustomerName').textContent = cName;
-    $('outCustomerNumber').textContent = cNumber;
-    $('outCustomerAddress').textContent = cAddress;
-    $('outCustomerPincode').textContent = cPincode;
-    $('outCustomerState').textContent =
-      (fetchedCity && cState) ? fetchedCity + ', ' + cState : (cState || '—');
-
-    var gstNumRow = $('gstNumberRow');
-    if (includeGst && cGST.length >= 15) {
-      $('outCustomerGST').textContent = cGST;
-      gstNumRow.style.display = 'flex';
-    } else {
-      gstNumRow.style.display = 'none';
-    }
+    /* The customer's details are typed straight into the Bill To fields of this card, so there is nothing to copy across. */
 
     /* Line items. Products flagged `allInclusive` are priced with GST
        + shipping already absorbed — GST/shipping are only computed on
@@ -903,10 +908,44 @@
   var printBtn = $('printQuote');
   if (printBtn) printBtn.addEventListener('click', function () { window.print(); });
 
+  /* ── DETAILS CHECK ──────────────────────────────────────────
+     Every action that confirms an order (Razorpay, PayU, WhatsApp) needs to know who it is for and where it goes. The fields are in the order
+     summary right next to those buttons, so a miss is shown on the field itself and focus goes to the first one. Also makes sure a delivery
+     state is known: checkout charges shipping by state, so an order without one would be under-charged. Returns true when all is present. */
+  var GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+  function setFieldError(id, msg) {
+    var inp = $(id), err = $('err-' + id);
+    if (inp) { if (msg) inp.setAttribute('aria-invalid', 'true'); else inp.removeAttribute('aria-invalid'); }
+    if (err) { err.textContent = msg || ''; err.hidden = !msg; }
+  }
+  function requireDetails() {
+    var name = $('customerName').value.trim(), phone = $('customerNumber').value.replace(/\D/g, '').slice(-10), addr = $('customerAddress').value.trim();
+    var pin = $('customerPincode').value.trim(), gst = $('customerGST').value.trim().toUpperCase(), bad = [];
+    function check(id, isBad, msg) { setFieldError(id, isBad ? msg : ''); if (isBad) bad.push(id); }
+    check('customerName', name.length < 2, 'Enter your name');
+    check('customerNumber', phone.length !== 10, 'Enter a 10-digit mobile number');
+    check('customerAddress', addr.length < 10, 'Enter the full delivery address');
+    var pinOk = /^\d{6}$/.test(pin);
+    check('customerPincode', !pinOk || !$('customerState').value, !pinOk ? 'Enter the 6-digit pincode' : ($('stateFallback').hidden ? 'Check the pincode: we could not find a state for it' : 'Choose your state'));
+    check('customerGST', !!gst && !GSTIN_RE.test(gst), 'This GST number is not valid. Leave it blank if you have none');
+    if (bad.length) {
+      var first = bad[0] === 'customerPincode' && !$('stateFallback').hidden && pinOk ? $('stateFallback') : $(bad[0]);
+      first.focus({ preventScroll: true });
+      first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+    return bad.length === 0;
+  }
+  window.NTAGZ_REQUIRE_DETAILS = requireDetails; /* used by the Razorpay and PayU buttons in order.html */
+  ['customerName', 'customerNumber', 'customerAddress', 'customerPincode', 'customerGST'].forEach(function (id) {
+    $(id).addEventListener('input', function () { setFieldError(id, ''); });
+  });
+
   /* Order has been handed off to WhatsApp for confirmation — the
      cart's job is done, so clear it rather than leaving stale items
      waiting for the next visit. */
-  $('waLink').addEventListener('click', function () {
+  $('waLink').addEventListener('click', function (e) {
+    if (!selectedIds.length) { e.preventDefault(); return; }
+    if (!requireDetails()) { e.preventDefault(); return; } /* the order cannot be recorded or delivered without the details */
     recordOfflineOrder(); /* server prices + stores it as an UNPAID order; never blocks WA */
     if (CART && selectedIds.length) CART.clear();
   });

@@ -25,7 +25,7 @@ const ST = (nowSec) => `CASE WHEN paid_order_id IS NOT NULL THEN 'paid' WHEN sta
 const FILTERS = {
   awaiting: "st IN ('new','sent','opened')", opened: "st='opened'", paid: "st='paid'", closed: "st IN ('expired','cancelled')",
 };
-const BASE_SQL = `SELECT pl.*, (SELECT o.id FROM orders o WHERE o.payment_status='paid' AND o.txn_id IN (SELECT value FROM json_each(pl.txn_ids)) LIMIT 1) AS paid_order_id,
+const BASE_SQL = `SELECT pl.*, pl.rowid AS rid, (SELECT o.id FROM orders o WHERE o.payment_status='paid' AND o.txn_id IN (SELECT value FROM json_each(pl.txn_ids)) LIMIT 1) AS paid_order_id,
   (SELECT o.created_at FROM orders o WHERE o.payment_status='paid' AND o.txn_id IN (SELECT value FROM json_each(pl.txn_ids)) LIMIT 1) AS paid_at,
   (SELECT o.total FROM orders o WHERE o.payment_status='paid' AND o.txn_id IN (SELECT value FROM json_each(pl.txn_ids)) LIMIT 1) AS paid_total,
   so.payment_status AS src_pay, so.status AS src_status FROM pay_links pl LEFT JOIN orders so ON so.id = pl.source_order_id`;
@@ -63,7 +63,7 @@ async function list(ctx) {
   const inner = `SELECT *, ${ST(t)} AS st FROM (${BASE_SQL})`;
   const page = Math.max(1, parseInt(sp.get("page"), 10) || 1);
   const total = (await env.DB.prepare(`SELECT count(*) c FROM (${inner}) WHERE ${where}`).bind(...bind).first()).c;
-  const { results } = await env.DB.prepare(`SELECT * FROM (${inner}) WHERE ${where} ORDER BY created_at DESC, id LIMIT ${PAGE} OFFSET ${(page - 1) * PAGE}`).bind(...bind).all();
+  const { results } = await env.DB.prepare(`SELECT * FROM (${inner}) WHERE ${where} ORDER BY created_at DESC, rid DESC LIMIT ${PAGE} OFFSET ${(page - 1) * PAGE}`).bind(...bind).all();
   // Funnel for the last 30 days: how far links get, and what they bring in.
   const since = t - 30 * 86400;
   const s = await env.DB.prepare(`SELECT count(*) created, coalesce(sum(CASE WHEN open_count>0 THEN 1 ELSE 0 END),0) opened,
