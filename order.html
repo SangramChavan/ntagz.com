@@ -297,8 +297,10 @@
             <p class="pay-error" id="payError" role="alert" hidden></p>
             <!-- Payment method tabs -->
             <div class="pay-tabs" role="tablist" aria-label="Payment method">
-              <button type="button" class="pay-tab tab-upi active" id="tabUpi" data-paytab="upi" role="tab"
-                aria-selected="true" aria-controls="panelUpi">
+              <button type="button" class="pay-tab active" id="tabRazorpay" data-paytab="razorpay" role="tab"
+                aria-selected="true" aria-controls="panelRazorpay">Razorpay</button>
+              <button type="button" class="pay-tab tab-upi" id="tabUpi" data-paytab="upi" role="tab"
+                aria-selected="false" aria-controls="panelUpi">
                 <svg style="width:13px;height:13px;fill:currentColor;flex-shrink:0;" viewBox="0 0 24 24">
                   <path
                     d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14h-2v-2h2v2zm0-4h-2V7h2v5z" />
@@ -312,8 +314,6 @@
                 </svg>
                 Bank Transfer
               </button>
-              <button type="button" class="pay-tab" id="tabRazorpay" data-paytab="razorpay" role="tab"
-                aria-selected="false" aria-controls="panelRazorpay">Razorpay</button>
               <button type="button" class="pay-tab" id="tabPayu" data-paytab="payu" role="tab"
                 aria-selected="false" aria-controls="panelPayu">PayU</button>
             </div>
@@ -328,7 +328,7 @@
             </div>
 
 <!-- UPI Panel -->
-            <div class="pay-panel active" id="panelUpi" role="tabpanel" aria-labelledby="tabUpi">
+            <div class="pay-panel" id="panelUpi" role="tabpanel" aria-labelledby="tabUpi">
               <div class="upi-qr-wrapper">
                 <div id="qrcode"></div>
                 <p>Scan QR to instantly pay via any UPI App</p>
@@ -345,7 +345,7 @@
             </div>
 
             <!-- Razorpay Panel -->
-            <div class="pay-panel" id="panelRazorpay" role="tabpanel" aria-labelledby="tabRazorpay">
+            <div class="pay-panel active" id="panelRazorpay" role="tabpanel" aria-labelledby="tabRazorpay">
               <div class="quote-actions">
                 <button type="button" id="rzpPayNow" class="btn btn-razorpay btn-lg btn-block">
                   Pay via Razorpay
