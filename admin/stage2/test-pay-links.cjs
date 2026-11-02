@@ -222,6 +222,8 @@ function mkLink(o = {}) {
 
   const rep = (await A("/api/paylinks", { ...good, items: [{ id: "black-nfc-card", qty: 400 }], source_order_id: "22222222-aaaa-bbbb-cccc-000000000002" }, C)).body;
   assert.ok(rep.id); assert.equal((await A("/api/paylinks", { ...good, source_order_id: "11111111-aaaa-bbbb-cccc-000000000001" }, C)).status, 400); ok("only an open unpaid order can be replaced by a link (a paid order is refused)");
+  // The list shows 25 per page, newest first; links made in the same second sort by random id, so make this one newest to keep it on page 1.
+  await D1.prepare("UPDATE pay_links SET created_at=created_at+5 WHERE id=?").bind(rep.id).run();
   // the customer takes the suggestion (+100 to reach 500), pays through the link
   const sg = (await jget("/api/pay/" + rep.id)).body.nudges.find((x) => x.type === "tier");
   await jpost("/api/pay/" + rep.id + "/adjust", sg.action);
