@@ -201,3 +201,5 @@ header nav { min-width:0; overflow-x:auto; scrollbar-width:none; } header nav::-
 .pl-msg { white-space:pre-wrap; background:var(--soft); border-radius:10px; padding:10px 12px; font-size:14px; overflow-wrap:anywhere; }
 .pl-search { width:100%; min-height:42px; padding:0 12px; border:1px solid var(--line); border-radius:10px; background:var(--card); color:var(--ink); margin-bottom:10px; }
 @media (min-width:900px) { .pl-list { grid-template-columns:1fr 1fr; } }
+
+.oitems { font-size:13px; color:var(--ink); max-width:260px; overflow-wrap:anywhere; margin:2px 0 0; }
