@@ -527,6 +527,7 @@
     .catch(function () { });
 
   /* ── MAIN CALCULATION ─────────────────────────────────────── */
+  var waBase = '';
   function calculateQuote() {
     // GST is mandatory on every order — always applied.
     var includeGst = true;
@@ -803,10 +804,23 @@
       'Shipping:       ' + (hasAllInc ? 'Included' : (cState ? (shippingCharge === 0 ? 'FREE' : fmt(shippingCharge)) : 'TBD')) + '\n' +
       gstLine + '\n' +
       '---------------------\n' +
-      'Grand Total:    ' + fmt(grandTotal) + '\n\n' +
-      'Please share the next steps for confirmation and dispatch.';
+      'Grand Total:    ' + fmt(grandTotal) + '\n\n';
 
-    $('waLink').href = 'https://wa.me/919960160016?text=' + encodeURIComponent(waMsg);
+    waBase = waMsg;
+    setWaHref();
+  }
+
+  /* Payment status + next step for the WhatsApp message. Nothing is paid through this link, so the status is always PENDING
+     (staff confirm it once they see the payment); UPI also asks for the payment screenshot. Rebuilt on tab switch and click. */
+  function setWaHref() {
+    var tab = document.querySelector('.pay-tab.active');
+    var pay = tab && tab.getAttribute('data-paytab');
+    var msg = waBase + 'PAYMENT STATUS: PENDING\n' +
+      (pay === 'upi' ? 'Payment mode: UPI\nPlease share the UPI payment screenshot in this chat so we can confirm it.\n'
+        : pay === 'bank' ? 'Payment mode: Bank transfer\n' : '') +
+      '\nWebsite: https://ntagz.com\n\n' +
+      'Please share the next steps for confirmation and dispatch.';
+    $('waLink').href = 'https://wa.me/919960160016?text=' + encodeURIComponent(msg);
   }
 
   /* ── PAYMENT TABS ─────────────────────────────────────────── */
@@ -901,7 +915,7 @@
   Array.prototype.forEach.call(
     document.querySelectorAll('[data-paytab]'),
     function (btn) {
-      btn.addEventListener('click', function () { switchPayTab(btn.dataset.paytab); if (MQ.member) calculateQuote(); });
+      btn.addEventListener('click', function () { switchPayTab(btn.dataset.paytab); setWaHref(); if (MQ.member) calculateQuote(); });
     }
   );
 
@@ -946,6 +960,7 @@
   $('waLink').addEventListener('click', function (e) {
     if (!selectedIds.length) { e.preventDefault(); return; }
     if (!requireDetails()) { e.preventDefault(); return; } /* the order cannot be recorded or delivered without the details */
+    setWaHref();
     recordOfflineOrder(); /* server prices + stores it as an UNPAID order; never blocks WA */
     if (CART && selectedIds.length) CART.clear();
   });
