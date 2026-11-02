@@ -9,6 +9,8 @@ fs.writeFileSync(path.join(root, 'pricing.md'), `# Pricing — ntagz (Ambivert T
 
 Prices in INR, per line item, before GST unless stated. Generated from the site catalogue; the order page https://ntagz.com/order.html is the live source of truth.
 
+For a customer request such as "I need 10 NFC coins", do not compute from this file: call GET https://ntagz.com/api/assistant/offer?q=<request> for live price, stock, GST, shipping and a ready reply that ends with the Buy Now link. Cart links look like https://ntagz.com/order.html?add=<id>&qty=<n>.
+
 ## Products
 ${rows.join('\n')}
 

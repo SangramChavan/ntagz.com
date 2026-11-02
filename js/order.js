@@ -986,13 +986,25 @@
   }
 
   var seededFromCart = seedFromCart();
-  if (!seededFromCart) {
-    var deepLinkRaw = new URLSearchParams(location.search).get('add');
-    if (deepLinkRaw) {
-      deepLinkRaw.split(',').forEach(function (id) { addProduct(id.trim()); });
-      syncCart();
-    }
-  }
+  /* Shareable cart links: ?add=<id>[:<qty>][,<id>[:<qty>]] and, for one product, &qty=<n>
+     (what the shopping assistant sends). Without a quantity a link only seeds an EMPTY cart; with an
+     explicit quantity it also applies over a saved cart, so "buy 10 coins" always opens as 10 coins. */
+  (function applyDeepLink() {
+    var params = new URLSearchParams(location.search), raw = params.get('add');
+    if (!raw) return;
+    var single = params.get('qty'), parts = raw.split(',').map(function (s) { return s.trim(); }).filter(Boolean).slice(0, 20), changed = false;
+    parts.forEach(function (part) {
+      var bits = part.split(':'), id = bits[0], p = CATALOG.byId(id);
+      if (!p) return;
+      var rawQty = bits.length > 1 ? bits[1] : (parts.length === 1 ? single : null);
+      var explicit = rawQty != null && /^\d{1,6}$/.test(rawQty) && parseInt(rawQty, 10) > 0;
+      if (seededFromCart && !explicit) return;
+      addProduct(id);
+      if (explicit && !p.fixed) quantities[id] = Math.max(CATALOG.moqFor(p), clampQty(p, parseInt(rawQty, 10)));
+      changed = true;
+    });
+    if (changed) syncCart();
+  })();
 
   /* ── INIT ─────────────────────────────────────────────────── */
   renderGrid();
