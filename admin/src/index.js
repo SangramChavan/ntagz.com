@@ -11,6 +11,7 @@ import { notify, STATUS_EVENT } from "./notify.js";
 import * as INTLADM from "./intl-admin.js"; // international orders: quotations, destination review, payments, settings, enquiries
 import { membershipRoute, tick as membershipTick } from "./membership.js"; // Rewards Membership admin (/api/points, /api/members)
 import { crmRoute, crmScheduled, crmWebhook } from "./crm/index.js"; // Customers / CRM (all under /api/crm/)
+import { payLinkRoute } from "./paylinks.js"; // payment links: create, track, remind (under /api/paylinks)
 
 const SESSION_TTL = 12 * 3600;
 const OTP_TTL = 600;
@@ -1257,7 +1258,7 @@ async function saveCampaign(body, actor, env) {
 
 // ── Router ────────────────────────────────────────────────────────────
 const PUBLIC_ASSETS = { "/style.css": "/style.css", "/login.js": "/login.js", "/theme.js": "/theme.js" }; // theme.js: the sign-in page needs it too
-const CRM_ASSETS = new Set(["/customers.js", "/crm-analytics.js", "/crm-campaigns.js", "/crm.css", "/membership.js"]); // served only to signed-in admins
+const CRM_ASSETS = new Set(["/customers.js", "/crm-analytics.js", "/crm-campaigns.js", "/crm.css", "/membership.js", "/paylinks.js"]); // served only to signed-in admins
 
 export default {
   async scheduled(_event, env, ctx) { ctx.waitUntil(Promise.all([crmScheduled(env), membershipTick(env).catch((e) => console.error('membership tick failed:', e && e.message))])); },
@@ -1371,6 +1372,8 @@ export default {
       if (method === "POST" && path === "/api/pricing/preview") return await previewPricing(body, env);
       if (method === "POST" && path === "/api/pricing/publish") return await publishPricing(body, actor, env);
       if (method === "GET" && path === "/api/memberships") return await listMemberships(url.searchParams, env);
+      const pl = await payLinkRoute({ env, actor, url, method, body, json, fail });
+      if (pl) return pl;
       const crm = await crmRoute({ env, actor, request, url, method, body, json, fail, sec: SEC_HEADERS });
       if (crm) return crm;
       const mr = await membershipRoute({ env, actor, url, method, body, json, fail });

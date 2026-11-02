@@ -3,54 +3,47 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="strict-origin">
+<meta name="color-scheme" content="light dark">
 <title>Pay for your order | ntagz</title>
 <meta name="description" content="Secure payment for your ntagz order.">
 <link rel="canonical" href="https://ntagz.com/pay.html">
 <style>
-body{margin:0;min-height:100vh;display:grid;place-items:center;font:16px/1.5 system-ui,sans-serif;background:#f5f5f7;color:#1d1d1f}
-main{max-width:360px;margin:16px;padding:24px;background:#fff;border-radius:16px;text-align:center}
-button{width:100%;padding:14px;border:0;border-radius:12px;background:#0071e3;color:#fff;font:inherit;font-weight:600;cursor:pointer}
-p{color:#6e6e73}#err{color:#c00}
+:root{--bg:#f5f5f7;--card:#fff;--line:#e5e5ea;--ink:#1d1d1f;--ink2:#6e6e73;--brand:#e5470d;--on-brand:#fff;--ok:#1a7f37;--ok-bg:#e7f6ec;--warn:#8a5200;--warn-bg:#fff4e0;--bad:#c62828;--nudge-bg:#fff8f3;--nudge-line:#ffd9c7}
+@media (prefers-color-scheme:dark){:root{--bg:#0f0f11;--card:#1c1c1e;--line:#38383d;--ink:#f2f2f7;--ink2:#a1a1aa;--brand:#ff6a2b;--on-brand:#1c1c1e;--ok:#4cc26b;--ok-bg:rgba(76,194,107,.16);--warn:#f0b060;--warn-bg:rgba(240,176,96,.14);--bad:#ff6b6b;--nudge-bg:rgba(255,106,43,.10);--nudge-line:rgba(255,106,43,.35)}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+.wrap{max-width:520px;margin:0 auto;padding:16px 16px 40px}
+.brand{display:flex;align-items:center;justify-content:space-between;padding:8px 2px 14px;font-weight:700;letter-spacing:-.02em}
+.brand span{color:var(--brand)}.brand small{font-weight:500;color:var(--ink2);font-size:13px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:12px}
+h1{font-size:22px;letter-spacing:-.02em;margin:0 0 4px}h2{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink2);margin:0 0 10px}
+p{margin:0 0 8px}.sub{color:var(--ink2);font-size:14px}p a{color:var(--brand);font-weight:600}
+.line{display:grid;grid-template-columns:1fr auto;gap:2px 12px;padding:10px 0;border-bottom:1px solid var(--line)}.line:last-child{border-bottom:0}
+.line b{font-weight:600}.line .amt{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}.line .meta{color:var(--ink2);font-size:13px}
+.row{display:flex;justify-content:space-between;gap:12px;padding:4px 0;font-variant-numeric:tabular-nums}.row.off{color:var(--ok)}
+.total{display:flex;justify-content:space-between;align-items:baseline;border-top:1px solid var(--line);margin-top:8px;padding-top:12px;font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+.note{border-radius:12px;padding:10px 12px;font-size:14px;margin:0 0 12px;background:var(--warn-bg);color:var(--warn)}
+.nudge{border:1px solid var(--nudge-line);background:var(--nudge-bg);border-radius:14px;padding:12px 14px;margin-bottom:12px}
+.nudge b{display:block;margin-bottom:2px}.nudge p{font-size:14px;color:var(--ink2);margin:0 0 10px}
+button,.btn{font:inherit;cursor:pointer;border-radius:12px;min-height:48px;padding:0 18px;border:1px solid var(--line);background:var(--card);color:var(--ink);display:inline-flex;align-items:center;justify-content:center;text-decoration:none;font-weight:600}
+button.primary{width:100%;background:var(--brand);border-color:var(--brand);color:var(--on-brand);font-size:17px;min-height:54px}
+button.small{min-height:42px;padding:0 14px;font-size:14px}button.link{border:0;background:none;color:var(--ink2);text-decoration:underline;font-weight:500;min-height:40px;padding:0 6px}
+button:disabled{opacity:.55;cursor:not-allowed}:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
+#err{color:var(--bad);font-size:14px;min-height:1.4em;margin:8px 0 0}
+.trust{display:flex;flex-wrap:wrap;gap:6px 14px;justify-content:center;color:var(--ink2);font-size:13px;margin-top:10px}
+.state{text-align:center;padding:28px 18px}.state h1{margin-bottom:8px}.state .btn{margin-top:10px;background:var(--brand);border-color:var(--brand);color:var(--on-brand)}
+.sk{height:14px;border-radius:6px;background:var(--line);margin:12px 0;opacity:.7}
+@media (prefers-reduced-motion:no-preference){.sk{animation:p 1.2s ease-in-out infinite}@keyframes p{50%{opacity:.35}}}
 </style>
 </head>
 <body>
-<main>
-<h1>Pay for your order</h1>
-<p>Secure payment by Razorpay (UPI, cards, netbanking).</p>
-<button id="pay" type="button">Pay now</button>
-<p id="err" role="alert"></p>
-</main>
-<script>
-(function () {
-  var q = new URLSearchParams(location.search), o = q.get("o") || "", k = q.get("k") || "";
-  var err = document.getElementById("err"), btn = document.getElementById("pay");
-  if (!/^order_\w{6,40}$/.test(o) || !/^rzp_(live|test)_\w{6,40}$/.test(k)) {
-    btn.hidden = true; err.textContent = "This payment link is not valid."; return;
-  }
-  function done(ok, id) {
-    // confirm.html reads this order.html snapshot (invoice, account link); a leftover one would belong to a different order.
-    if (ok) try { localStorage.removeItem("ntagz_pending_order"); } catch (e) {}
-    location.href = "/order/confirm.html?" + new URLSearchParams(ok ? { status: "success", gateway: "razorpay", orderId: id } : { status: "failed", gateway: "razorpay" });
-  }
-  btn.addEventListener("click", function () {
-    err.textContent = "";
-    var s = document.createElement("script");
-    s.src = "https://checkout.razorpay.com/v1/checkout.js";
-    s.onerror = function () { err.textContent = "Could not load the payment window. Allow checkout.razorpay.com and try again."; };
-    s.onload = function () {
-      new Razorpay({
-        key: k, order_id: o, name: "nTagz",
-        handler: function (r) {
-          fetch("/api/verify-payment", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
-            razorpay_order_id: r.razorpay_order_id, razorpay_payment_id: r.razorpay_payment_id, razorpay_signature: r.razorpay_signature }) })
-            .then(function (x) { done(x.ok, r.razorpay_payment_id); }, function () { done(false); });
-        }
-      }).open();
-    };
-    document.head.appendChild(s);
-  });
-})();
-</script>
+<div class="wrap">
+  <div class="brand"><div>n<span>Tagz</span></div><small>Secure payment</small></div>
+  <div id="root" aria-live="polite"><div class="card" aria-label="Loading your order"><div class="sk" style="width:60%"></div><div class="sk"></div><div class="sk" style="width:80%"></div></div></div>
+  <noscript><div class="card state"><h1>JavaScript is needed</h1><p class="sub">Please turn on JavaScript to pay for your order, or contact us on WhatsApp.</p></div></noscript>
+</div>
+<script src="js/pay.js?v=20261103"></script>
 </body>
 </html>

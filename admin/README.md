@@ -144,3 +144,24 @@ offline orders 5 per 10 min, quotes 120 per min (in-memory per instance). Limite
 - Legal: shipping-policy, terms, refund-policy and privacy-policy are drafts for review by a qualified adviser; governing law/jurisdiction, liability caps, the move away from "all sales final", change-of-mind returns and data-retention periods are decisions, not defaults. No legal entity, address or registration details were invented — fill them in.
 - Tax: international orders carry **no Indian GST** by default; export treatment (zero-rated / LUT), destination VAT/duties and per-product treatment must be confirmed with an accountant. Copy never claims "tax-free".
 - Destinations and export controls (the enabled-country list), payment-provider international enablement, domestic-order policy acknowledgement (not recorded today).
+
+## Payment links (`#/paylinks`, migration 0020)
+A link is a stored cart + the customer's details behind an unguessable token (`pay_links`, 128-bit id). `https://ntagz.com/pay.html?t=<token>`
+shows the customer their order and the exact total, then opens Razorpay (UPI first). Staff make links in **Pay links** (or from an unpaid
+WhatsApp/UPI/bank order: "Send payment link"); AI agents get one from `POST /api/agent/checkout`.
+- **No stored price.** The cart is re-priced by the checkout's own entry point every time the link is opened or paid (guest price, or member price
+  if a signed-in member opens it). The admin's number is an estimate; the page shows the exact amount and says when it moved since the quote.
+  The Razorpay order is created when the customer taps Pay, for the amount shown (reused if unchanged, a new one if the price moved).
+- **Expiry 24 h by default** (6 h to 7 days); extend, cancel, or remind from the list. An expired/cancelled link cannot be paid.
+- **Suggestions on the page** (computed by asking the pricing engine, never by re-deriving rules): "add N to reach the next quantity tier" (only a near
+  miss: at most 30% more pieces, and only if every piece gets cheaper) and "add N for free shipping" (within ~₹1,000 of the free line). Taking one
+  raises that line's quantity (never below what the link was made with; Undo restores it). Paid links show whether the customer took a suggestion.
+- **Tracking:** opens (counted at most once per 30 s), taps on Pay, sends and reminders (WhatsApp click-to-chat from the admin; the admin presses send),
+  funnel for 30 days. Paid is read from `orders` via the link's gateway order ids, so nothing was added to the payment path; a payment on any order the
+  link made still records an order.
+- **Replacing an unpaid order:** a link made from an unpaid order warns after it is paid that the old order is still open; "Cancel order" uses the
+  normal cancel (stock goes back).
+- **Public view shows** first name and delivery pincode/state only. Limits per IP: 12 new Razorpay orders / 10 min, 90 views / min, 40 adjusts / min.
+- **Deploy order:** apply migration 0020, then deploy both Workers, then publish the site. Before the migration, agent checkout keeps returning the
+  old `?o=&k=` link, the pay page still honours old links, and the admin screen says to apply 0020.
+Tests: `node admin/stage2/test-pay-links.cjs` (both Workers on one database).

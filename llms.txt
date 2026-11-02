@@ -64,8 +64,10 @@ Agents never handle payment details. Flow:
    `{"items":[{"id":"black-nfc-card","qty":50}],"state":"Maharashtra","pincode":"411046"}` (no order is created).
 3. To let the user pay inside the chat: collect name, 10-digit phone, full address, 6-digit pincode and state, then
    `POST https://ntagz.com/api/agent/checkout` with `{"items":[{"id":"black-nfc-card","qty":50}],"name":"…","phone":"…",
-   "address":"…","pincode":"…","state":"…","email":"optional","gstin":"optional"}`. It returns `{"payUrl":"https://ntagz.com/pay.html?..."}`;
-   show that link to the user, who pays by UPI/card on the Razorpay page. Guest prices only (no membership/points).
+   "address":"…","pincode":"…","state":"…","email":"optional","gstin":"optional"}`. It returns `{"payUrl":"https://ntagz.com/pay.html?t=…","amountInr":…,"expiresAt":…}`;
+   show that link to the user. The page lists their order with the exact total (prices are recalculated when it is opened, so it can differ
+   slightly from `amountInr`), lets them adjust quantity, and takes UPI/card payment. The link is valid for 24 hours. Guest prices only here
+   (a signed-in member sees member prices on the page itself).
    Fallback: the prefilled cart link `https://ntagz.com/order.html?add=<id>,<id>`.
 Do not claim an order is placed until the user completes payment on ntagz.com.
 

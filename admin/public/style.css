@@ -179,3 +179,25 @@ dialog#sdlg { width:min(760px, calc(100vw - 24px)); }
 /* phone numbers that open WhatsApp */
 a.wa { color:var(--brand, #1a7f37); text-decoration:underline; text-underline-offset:2px; }
 .sub a.wa { font-size:inherit; }
+
+/* nav scrolls sideways on narrow screens instead of clipping the last sections */
+header nav { min-width:0; overflow-x:auto; scrollbar-width:none; } header nav::-webkit-scrollbar { display:none; } nav a { white-space:nowrap; flex:none; }
+
+/* ═══ Payment links ═══ */
+#view-paylinks { max-width:1000px; }
+.pl-list { display:grid; gap:10px; }
+.pl-card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px; display:grid; gap:8px; }
+.pl-top { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; } .pl-top b { font-size:16px; }
+.pl-amt { text-align:right; font-weight:700; font-variant-numeric:tabular-nums; } .pl-amt .sub { display:block; font-weight:400; font-size:12px; }
+.pl-items { font-size:14px; } .pl-meta { color:var(--ink2); font-size:13px; display:grid; gap:2px; }
+.pl-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:2px; } .pl-actions .btn { min-height:40px; }
+.pl-warn { background:var(--warn-bg); color:var(--note-warn); border-radius:10px; padding:8px 10px; font-size:13px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between; }
+.pl-known { border:1px solid var(--line); background:var(--card2); border-radius:12px; padding:10px 12px; display:grid; gap:8px; font-size:14px; }
+.pl-known .row { display:flex; justify-content:space-between; gap:8px; align-items:center; flex-wrap:wrap; }
+.pl-item { display:grid; grid-template-columns:1fr 92px auto; gap:6px; align-items:center; margin-bottom:6px; }
+.pl-item select, .pl-item input { width:100%; min-height:44px; padding:0 10px; border:1px solid var(--line); border-radius:10px; background:var(--card); color:var(--ink); }
+.pl-est { background:var(--soft); border-radius:10px; padding:10px 12px; font-size:14px; min-height:44px; } .pl-est.bad { color:var(--bad); }
+.pl-url { width:100%; min-height:44px; padding:0 12px; border:1px solid var(--line); border-radius:10px; background:var(--card2); color:var(--ink); font:13px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.pl-msg { white-space:pre-wrap; background:var(--soft); border-radius:10px; padding:10px 12px; font-size:14px; overflow-wrap:anywhere; }
+.pl-search { width:100%; min-height:42px; padding:0 12px; border:1px solid var(--line); border-radius:10px; background:var(--card); color:var(--ink); margin-bottom:10px; }
+@media (min-width:900px) { .pl-list { grid-template-columns:1fr 1fr; } }
