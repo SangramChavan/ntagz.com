@@ -14,7 +14,7 @@ const EVENTS = {
   preorder_confirmed: ["Your ntagz pre-order is confirmed", "Your pre-order is confirmed. We'll let you know when it is ready to ship.", "Pre-order confirmed"],
   preorder_ready: ["Your pre-order is ready to ship", "The stock for your pre-order has arrived and we're getting it ready to ship.", "Ready to ship"],
   packed: ["Your ntagz order is packed", "Your order is packed and will be handed to the courier soon.", "Packed"],
-  shipped: ["Your ntagz order has shipped", "Your order is on its way.", "Shipped"],
+  shipped: ["Your ntagz order has shipped", "Your order is on its way. Your courier and tracking details are below.", "Shipped"],
   out_for_delivery: ["Your ntagz order is out for delivery", "Your order is out for delivery.", "Out for delivery"],
   delivered: ["Your ntagz order was delivered", "Your order has been delivered.", "Delivered"],
   delivery_failed: ["Delivery attempt unsuccessful", "The courier could not deliver your order. We're following up and will update you.", "Delivery failed"],
@@ -61,6 +61,7 @@ export function buildMessage(event, o, x = {}) {
   }
   if (x.awb) rows.push(["Courier", x.courier || ""], ["AWB / tracking number", x.awb]);
   if (x.est_delivery && pretty(x.est_delivery)) rows.push(["Estimated delivery", `${pretty(x.est_delivery)} (an estimate, not a guarantee)`]);
+  if (event === "shipped" && !x.est_delivery) rows.push(["Tracking", "Use the courier tracking link or your order tracking page for updates."]);
   if (event === "dispatch_updated" || event === "preorder_confirmed") {
     if (o.expected_dispatch && pretty(o.expected_dispatch)) rows.push(["Expected dispatch", `${pretty(o.expected_dispatch)} (not a delivery date)`]);
   }
@@ -87,6 +88,7 @@ export async function notify(env, orderId, event, dedupeKey, extra = {}) {
     try { o = await env.DB.prepare("SELECT id,name,email,track_token,expected_dispatch,txn_id,market,currency,subtotal,total,paid_paise,payment_status,quote_status FROM orders WHERE id=?").bind(orderId).first(); }
     catch { o = await env.DB.prepare("SELECT id,name,email,track_token,expected_dispatch FROM orders WHERE id=?").bind(orderId).first(); } // before migration 0019
     if (!o) return "ignored";
+    if (o.market !== "INTL" && event !== "shipped") return "ignored"; // India orders: the customer is emailed only when the AWB is added
     const msg = buildMessage(event, o, extra);
     const nid = crypto.randomUUID();
     const ins = await env.DB.prepare("INSERT OR IGNORE INTO notifications (id,order_id,event,dedupe_key,subject) VALUES (?,?,?,?,?)").bind(nid, orderId, event, dedupeKey, msg.subject).run();

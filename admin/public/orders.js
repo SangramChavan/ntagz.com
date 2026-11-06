@@ -140,13 +140,13 @@ function shipDialog(o) {
   // International orders ship only when the quotation is accepted and fully paid; anything else needs a written, recorded override.
   const needsOv = o.market === "INTL" && (o.payment_status !== "paid" || o.quote_status !== "accepted");
   const ov = el("textarea", { id: "ovr", rows: "2", maxlength: "300", placeholder: "Why is this being shipped before payment or approval? (required, kept on the order)" });
-  actionDialog(extra ? "Add another shipment" : "Ship order", [el("p", { class: "sub" }, `${o.name || "Order"} · ${orderRef(o)}`), ...(needsOv ? [el("p", { class: "msg" }, "This international order is not accepted and fully paid yet."), labeled("ovr", "Override reason", ov, "Only for an arrangement agreed in writing. It is recorded and audited.")] : []), ...f.nodes, labeled("apub", "Note for the customer", pub)], extra ? "Save shipment" : "Save & mark as shipped", {
-    onSubmit: async () => { const d = await postForm(`/api/orders/${o.id}/ship`, { ...f.values(), public_note: pub.value, idempotency_key: k, ...(needsOv ? { override_reason: ov.value } : {}) }); toast("Shipment saved"); $("adlg").close(); await openOrder(o.id, d); load(); },
+  actionDialog(extra ? "Add another shipment" : "Ship order", [el("p", { class: "sub" }, `${o.name || "Order"} · ${orderRef(o)}`), ...(needsOv ? [el("p", { class: "msg" }, "This international order is not accepted and fully paid yet."), labeled("ovr", "Override reason", ov, "Only for an arrangement agreed in writing. It is recorded and audited.")] : []), ...f.nodes, labeled("apub", "Note for the customer", pub, o.email ? `Shipment details will be emailed to ${o.email}.` : "No customer email is on this order; add an email at checkout to send shipment notifications.")], extra ? "Save shipment" : "Save & mark as shipped", {
+    onSubmit: async () => { const d = await postForm(`/api/orders/${o.id}/ship`, { ...f.values(), public_note: pub.value, idempotency_key: k, ...(needsOv ? { override_reason: ov.value } : {}) }); toast(o.email ? "Shipment saved · email notification attempted" : "Shipment saved · no customer email on file"); $("adlg").close(); await openOrder(o.id, d); load(); },
   });
 }
 function editShipmentDialog(o, s) {
   const f = shipFields(s, o);
-  actionDialog("Correct shipment", [el("p", { class: "sub" }, "Changes are saved with your name and the time, and the old values are kept."), ...f.nodes], "Save correction", {
+  actionDialog("Correct shipment", [el("p", { class: "sub" }, "Changes are saved with your name and the time, and the old values are kept."), ...f.nodes, el("p", { class: "sub" }, o.market === "INTL" ? "For international orders, updated tracking details are emailed to the customer." : "For India orders, the shipment email is sent when the AWB is first added.")], "Save correction", {
     onSubmit: async () => { const v = f.values(); const d = await postForm(`/api/orders/${o.id}/shipments/${s.id}`, v); toast("Shipment updated"); $("adlg").close(); await openOrder(o.id, d); load(); },
   });
 }

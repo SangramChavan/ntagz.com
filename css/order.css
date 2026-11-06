@@ -727,6 +727,25 @@
       font-weight: 700;
     }
 
+    #hint-customerEmail {
+      color: var(--ink-3);
+      font-size: 12px;
+      line-height: 1.5;
+      margin-top: 3px;
+    }
+
+    .qc-input[aria-invalid="true"] {
+      border-color: #dc2626;
+      box-shadow: 0 0 0 3px rgba(220, 38, 38, .08);
+    }
+
+    .qc-err:not([hidden]) {
+      color: #b91c1c;
+      font-size: 12px;
+      line-height: 1.4;
+      margin-top: 3px;
+    }
+
     .qc-field-value {
       font-size: 12px;
       font-weight: 600;
