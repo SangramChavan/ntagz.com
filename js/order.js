@@ -934,10 +934,12 @@
   }
   function requireDetails() {
     var name = $('customerName').value.trim(), phone = $('customerNumber').value.replace(/\D/g, '').slice(-10), addr = $('customerAddress').value.trim();
+    var email = $('customerEmail').value.trim();
     var pin = $('customerPincode').value.trim(), gst = $('customerGST').value.trim().toUpperCase(), bad = [];
     function check(id, isBad, msg) { setFieldError(id, isBad ? msg : ''); if (isBad) bad.push(id); }
     check('customerName', name.length < 2, 'Enter your name');
     check('customerNumber', phone.length !== 10, 'Enter a 10-digit mobile number');
+    check('customerEmail', !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email), 'Enter a valid email for shipping updates');
     check('customerAddress', addr.length < 10, 'Enter the full delivery address');
     var pinOk = /^\d{6}$/.test(pin);
     check('customerPincode', !pinOk || !$('customerState').value, !pinOk ? 'Enter the 6-digit pincode' : ($('stateFallback').hidden ? 'Check the pincode: we could not find a state for it' : 'Choose your state'));
@@ -950,7 +952,7 @@
     return bad.length === 0;
   }
   window.NTAGZ_REQUIRE_DETAILS = requireDetails; /* used by the Razorpay and PayU buttons in order.html */
-  ['customerName', 'customerNumber', 'customerAddress', 'customerPincode', 'customerGST'].forEach(function (id) {
+  ['customerName', 'customerNumber', 'customerEmail', 'customerAddress', 'customerPincode', 'customerGST'].forEach(function (id) {
     $(id).addEventListener('input', function () { setFieldError(id, ''); });
   });
 
