@@ -907,6 +907,7 @@
 
   /* Signed-in checkout: use verified profile + default address as editable defaults. Never make a customer wait for account data,
      never overwrite a field the customer has already touched, and never persist checkout edits back to the profile implicitly. */
+  var checkoutUi = null; /* set by prefillAccountDetails; requireDetails runs outside its scope */
   (function prefillAccountDetails() {
     var status = $('savedDetailsStatus'), addressWrap = $('savedAddressWrap'), addressSelect = $('savedAddressSelect');
     var summary = $('savedCheckoutSummary'), detailsGrid = $('checkoutDetailsGrid');
@@ -972,6 +973,13 @@
       $('editCheckoutDetails').setAttribute('aria-expanded', 'true');
       $('customerAddress').focus({ preventScroll: true });
     });
+    checkoutUi = {
+      reveal: function () {
+        summary.hidden = true; detailsGrid.hidden = false; status.hidden = !savedProfileLoaded;
+        $('editCheckoutDetails').setAttribute('aria-expanded', 'true'); editing = true;
+      },
+      refresh: function () { if (savedProfileLoaded) renderSummary(); }
+    };
     fetch('/api/accounts/me', { credentials: 'same-origin' }).then(function (r) {
       if (!r.ok) return null;
       return r.json();
@@ -1061,15 +1069,11 @@
     check('customerPincode', !pinOk || !$('customerState').value, !pinOk ? 'Enter the 6-digit pincode' : ($('stateFallback').hidden ? 'Check the pincode: we could not find a state for it' : 'Choose your state'));
     check('customerGST', !!gst && !GSTIN_RE.test(gst), 'This GST number is not valid. Leave it blank if you have none');
     if (bad.length) {
-      $('savedCheckoutSummary').hidden = true;
-      $('checkoutDetailsGrid').hidden = false;
-      $('savedDetailsStatus').hidden = !savedProfileLoaded;
-      $('editCheckoutDetails').setAttribute('aria-expanded', 'true');
-      editing = true;
+      if (checkoutUi) checkoutUi.reveal();
       var first = bad[0] === 'customerPincode' && !$('stateFallback').hidden && pinOk ? $('stateFallback') : $(bad[0]);
       first.focus({ preventScroll: true });
       first.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    } else if (savedProfileLoaded) renderSummary();
+    } else if (checkoutUi) checkoutUi.refresh();
     return bad.length === 0;
   }
   window.NTAGZ_REQUIRE_DETAILS = requireDetails; /* used by the Razorpay and PayU buttons in order.html */
