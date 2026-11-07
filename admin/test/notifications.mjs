@@ -14,7 +14,7 @@ const ASHA = "11111111-aaaa-bbbb-cccc-000000000001", WALI = "66666666-aaaa-bbbb-
 // ── message content (pure) ──
 const o = { id: "abcdef12-0000-0000-0000-000000000000", name: "<b>Asha</b> Rao", track_token: "a".repeat(32), expected_dispatch: "2026-11-15" };
 let m = buildMessage("shipped", o, { courier: "Delhivery", awb: "DL123", tracking_url: "https://www.delhivery.com/t/DL123", est_delivery: "2026-10-14" });
-assert.match(m.text, /Order: abcdef12/); assert.match(m.text, /AWB: DL123/); assert.match(m.text, /Track your order: https:\/\/ntagz\.com\/track\.html\?o=abcdef12-0000-0000-0000-000000000000&t=a{32}/);
+assert.match(m.text, /Order: abcdef12/); assert.match(m.text, /AWB \/ tracking number: DL123/); assert.match(m.text, /Track your order: https:\/\/ntagz\.com\/track\.html\?o=abcdef12-0000-0000-0000-000000000000&t=a{32}/);
 assert.match(m.text, /Courier tracking: https:\/\/www\.delhivery\.com/); assert.match(m.text, /14 Oct 2026 \(an estimate, not a guarantee\)/); assert.ok(!m.html.includes("<b>Asha")); assert.match(m.html, /&lt;b&gt;Asha/); ok("message has order id, AWB, track link, courier link, estimate wording; customer name is HTML-escaped");
 m = buildMessage("shipped", o, { courier: "Delhivery", awb: "DL123" }); assert.match(m.text, /Use the courier tracking link or your order tracking page/); ok("shipment email guides the customer when no estimate is supplied");
 m = buildMessage("shipped", o, { courier: "X", awb: "A1", tracking_url: "javascript:alert(1)" }); assert.ok(!/javascript:/.test(m.text + m.html)); m = buildMessage("shipped", o, { awb: "A1", tracking_url: "http://insecure.example.com" }); assert.ok(!/insecure/.test(m.text)); ok("only https courier links are included");

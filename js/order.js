@@ -977,7 +977,7 @@
       body: JSON.stringify({
         method: pay === 'bank' ? 'bank' : pay === 'upi' ? 'upi' : 'whatsapp', items: items, quoteRef: $('quoteNum').textContent,
         name: $('customerName').value.trim(), phone: $('customerNumber').value.trim(), address: $('customerAddress').value.trim(),
-        pincode: $('customerPincode').value.trim(), state: $('customerState').value, gstin: $('customerGST').value.trim()
+        pincode: $('customerPincode').value.trim(), state: $('customerState').value, email: $('customerEmail').value.trim(), gstin: $('customerGST').value.trim()
       })
     }).catch(function () { /* the WhatsApp message + sheet ledger remain the fallback record */ });
   }
