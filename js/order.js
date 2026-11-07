@@ -912,7 +912,7 @@
     var summary = $('savedCheckoutSummary'), detailsGrid = $('checkoutDetailsGrid');
     if (!status || !addressWrap || !addressSelect || !summary || !detailsGrid) return;
     var touched = Object.create(null), profile = null, addresses = [];
-    var canCollapse = false, editing = false;
+    var savedProfileLoaded = false, editing = false;
     ['customerName', 'customerNumber', 'customerEmail', 'customerAddress', 'customerPincode', 'customerState', 'customerGST'].forEach(function (id) {
       $(id).addEventListener('input', function () { touched[id] = true; });
       $(id).addEventListener('change', function () { touched[id] = true; });
@@ -947,10 +947,15 @@
     }
     function renderSummary() {
       var address = $('customerAddress').value.trim();
-      var place = [$('locationText').textContent, $('customerPincode').value.trim() ? 'PIN ' + $('customerPincode').value.trim() : ''].filter(Boolean).join(' · ');
-      $('savedCheckoutName').textContent = $('customerName').value.trim() || 'Delivery details';
-      $('savedCheckoutAddress').textContent = [address, place].filter(Boolean).join(' · ');
-      $('savedCheckoutContact').textContent = [$('customerEmail').value.trim(), $('customerNumber').value.trim()].filter(Boolean).join(' · ');
+      var place = [($('locationText').textContent === 'Auto-filled from pincode' ? '' : $('locationText').textContent), $('customerPincode').value.trim() ? 'PIN ' + $('customerPincode').value.trim() : ''].filter(Boolean).join(' · ');
+      var name = $('customerName').value.trim(), email = $('customerEmail').value.trim(), phone = $('customerNumber').value.trim();
+      $('savedCheckoutName').textContent = name || (savedProfileLoaded ? 'Delivery details' : 'Add delivery details');
+      $('savedCheckoutAddress').textContent = [address, place].filter(Boolean).join(' · ') || (savedProfileLoaded ? 'Add a delivery address' : 'Enter your contact and delivery details at checkout.');
+      $('savedCheckoutContact').textContent = [email, phone].filter(Boolean).join(' · ') || (savedProfileLoaded ? profile.email : '');
+      var complete = name.length >= 2 && /^\d{10}$/.test(phone.replace(/\D/g, '').slice(-10)) && /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email) && address.length >= 10 && /^\d{6}$/.test($('customerPincode').value.trim()) && !!$('customerState').value;
+      var editButton = $('editCheckoutDetails');
+      editButton.textContent = complete ? 'Change' : 'Add details';
+      editButton.setAttribute('aria-expanded', 'false');
       summary.hidden = false;
       detailsGrid.hidden = true;
       status.hidden = true;
@@ -964,10 +969,11 @@
       status.hidden = false;
       addressWrap.hidden = addresses.length < 2;
       addressSelect.value = '';
+      $('editCheckoutDetails').setAttribute('aria-expanded', 'true');
       $('customerAddress').focus({ preventScroll: true });
     });
-    ['customerName', 'customerNumber', 'customerEmail', 'customerAddress', 'customerPincode'].forEach(function (id) {
-      $(id).addEventListener('change', function () { if (canCollapse && editing) renderSummary(); });
+    ['customerName', 'customerNumber', 'customerEmail', 'customerAddress', 'customerPincode', 'customerGST'].forEach(function (id) {
+      $(id).addEventListener('change', function () { if (editing) renderSummary(); });
     });
     fetch('/api/accounts/me', { credentials: 'same-origin' }).then(function (r) {
       if (!r.ok) return null;
@@ -975,6 +981,7 @@
     }).then(function (data) {
       if (!data || !data.user) return;
       profile = data.user;
+      savedProfileLoaded = true;
       setIfEmpty('customerName', profile.name);
       setIfEmpty('customerNumber', profile.phone);
       setIfEmpty('customerEmail', profile.email);
@@ -984,9 +991,6 @@
       var defaultAddress = addresses.find(function (a) { return !!a.is_default; }) || addresses[0] || null;
       if (defaultAddress) {
         useAddress(defaultAddress, false);
-        status.textContent = 'Signed in as ' + profile.email + '. Using your saved delivery address; review or edit it before placing the order.';
-      } else {
-        status.textContent = 'Signed in as ' + profile.email + '. Your saved contact details are prefilled. Add a delivery address to your account to reuse it next time.';
       }
       if (!addresses.length) { calculateQuote(); return; }
       addressSelect.replaceChildren();
@@ -1012,12 +1016,16 @@
         var selected = addresses[parseInt(addressSelect.value, 10)];
         if (!selected) return;
         useAddress(selected, true);
-        if (canCollapse && editing) renderSummary();
+        if (editing) renderSummary();
       });
-      canCollapse = !!($('customerName').value.trim() && $('customerEmail').value.trim() && $('customerNumber').value.trim() && $('customerAddress').value.trim() && $('customerPincode').value.trim() && $('customerState').value);
-      if (canCollapse) renderSummary();
+      status.textContent = 'Signed in as ' + profile.email + '. Your details are saved to your account. Update them here for this order only.';
+      renderSummary();
       calculateQuote();
-    }).catch(function () { calculateQuote(); });
+    }).catch(function () {
+      savedProfileLoaded = false;
+      renderSummary();
+      calculateQuote();
+    });
   })();
 
   Array.prototype.forEach.call(
@@ -1060,15 +1068,26 @@
     check('customerPincode', !pinOk || !$('customerState').value, !pinOk ? 'Enter the 6-digit pincode' : ($('stateFallback').hidden ? 'Check the pincode: we could not find a state for it' : 'Choose your state'));
     check('customerGST', !!gst && !GSTIN_RE.test(gst), 'This GST number is not valid. Leave it blank if you have none');
     if (bad.length) {
+      $('savedCheckoutSummary').hidden = true;
+      $('checkoutDetailsGrid').hidden = false;
+      $('savedDetailsStatus').hidden = !savedProfileLoaded;
+      $('editCheckoutDetails').setAttribute('aria-expanded', 'true');
+      editing = true;
       var first = bad[0] === 'customerPincode' && !$('stateFallback').hidden && pinOk ? $('stateFallback') : $(bad[0]);
       first.focus({ preventScroll: true });
       first.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    }
+    } else if (savedProfileLoaded) renderSummary();
     return bad.length === 0;
   }
   window.NTAGZ_REQUIRE_DETAILS = requireDetails; /* used by the Razorpay and PayU buttons in order.html */
   ['customerName', 'customerNumber', 'customerEmail', 'customerAddress', 'customerPincode', 'customerGST'].forEach(function (id) {
-    $(id).addEventListener('input', function () { setFieldError(id, ''); });
+    $(id).addEventListener('input', function () {
+      setFieldError(id, '');
+      if (id === 'customerAddress' || id === 'customerPincode' || id === 'customerState') calculateQuote();
+    });
+  });
+  ['customerAddress', 'customerPincode'].forEach(function (id) {
+    $(id).addEventListener('change', function () { checkPincodeLength($('customerPincode').value); calculateQuote(); });
   });
 
   /* Order has been handed off to WhatsApp for confirmation — the
