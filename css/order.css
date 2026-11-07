@@ -741,6 +741,33 @@
       margin: 2px 0;
     }
 
+    .saved-checkout-summary {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 12px 14px;
+      background: #fff;
+      border: 1px solid var(--paper);
+      border-radius: var(--r);
+    }
+
+    .saved-checkout-copy { display: grid; gap: 3px; min-width: 0; }
+    .saved-checkout-copy strong { color: var(--ink); font-size: 14px; }
+    .saved-checkout-copy span { color: var(--ink-2); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+    .saved-checkout-copy small { color: var(--ink-3); font-size: 12px; overflow-wrap: anywhere; }
+    .saved-checkout-edit {
+      border: 0;
+      background: transparent;
+      color: var(--tagz);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 4px 2px;
+      cursor: pointer;
+      flex: 0 0 auto;
+    }
+
     .qc-input[aria-invalid="true"] {
       border-color: #dc2626;
       box-shadow: 0 0 0 3px rgba(220, 38, 38, .08);

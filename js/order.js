@@ -909,8 +909,10 @@
      never overwrite a field the customer has already touched, and never persist checkout edits back to the profile implicitly. */
   (function prefillAccountDetails() {
     var status = $('savedDetailsStatus'), addressWrap = $('savedAddressWrap'), addressSelect = $('savedAddressSelect');
-    if (!status || !addressWrap || !addressSelect) return;
+    var summary = $('savedCheckoutSummary'), detailsGrid = $('checkoutDetailsGrid');
+    if (!status || !addressWrap || !addressSelect || !summary || !detailsGrid) return;
     var touched = Object.create(null), profile = null, addresses = [];
+    var canCollapse = false, editing = false;
     ['customerName', 'customerNumber', 'customerEmail', 'customerAddress', 'customerPincode', 'customerState', 'customerGST'].forEach(function (id) {
       $(id).addEventListener('input', function () { touched[id] = true; });
       $(id).addEventListener('change', function () { touched[id] = true; });
@@ -943,6 +945,30 @@
       }
       calculateQuote();
     }
+    function renderSummary() {
+      var address = $('customerAddress').value.trim();
+      var place = [$('locationText').textContent, $('customerPincode').value.trim() ? 'PIN ' + $('customerPincode').value.trim() : ''].filter(Boolean).join(' · ');
+      $('savedCheckoutName').textContent = $('customerName').value.trim() || 'Delivery details';
+      $('savedCheckoutAddress').textContent = [address, place].filter(Boolean).join(' · ');
+      $('savedCheckoutContact').textContent = [$('customerEmail').value.trim(), $('customerNumber').value.trim()].filter(Boolean).join(' · ');
+      summary.hidden = false;
+      detailsGrid.hidden = true;
+      status.hidden = true;
+      addressWrap.hidden = true;
+      editing = false;
+    }
+    $('editCheckoutDetails').addEventListener('click', function () {
+      editing = true;
+      summary.hidden = true;
+      detailsGrid.hidden = false;
+      status.hidden = false;
+      addressWrap.hidden = addresses.length < 2;
+      addressSelect.value = '';
+      $('customerAddress').focus({ preventScroll: true });
+    });
+    ['customerName', 'customerNumber', 'customerEmail', 'customerAddress', 'customerPincode'].forEach(function (id) {
+      $(id).addEventListener('change', function () { if (canCollapse && editing) renderSummary(); });
+    });
     fetch('/api/accounts/me', { credentials: 'same-origin' }).then(function (r) {
       if (!r.ok) return null;
       return r.json();
@@ -953,8 +979,8 @@
       setIfEmpty('customerNumber', profile.phone);
       setIfEmpty('customerEmail', profile.email);
       setIfEmpty('customerGST', profile.gstin);
-      status.hidden = false;
       addresses = Array.isArray(data.addresses) ? data.addresses : [];
+      status.hidden = false;
       var defaultAddress = addresses.find(function (a) { return !!a.is_default; }) || addresses[0] || null;
       if (defaultAddress) {
         useAddress(defaultAddress, false);
@@ -982,10 +1008,14 @@
         if (prompt) prompt.textContent = 'Choose another saved address';
       }
       addressSelect.addEventListener('change', function () {
+        if (addressSelect.value === '') return;
         var selected = addresses[parseInt(addressSelect.value, 10)];
         if (!selected) return;
         useAddress(selected, true);
+        if (canCollapse && editing) renderSummary();
       });
+      canCollapse = !!($('customerName').value.trim() && $('customerEmail').value.trim() && $('customerNumber').value.trim() && $('customerAddress').value.trim() && $('customerPincode').value.trim() && $('customerState').value);
+      if (canCollapse) renderSummary();
       calculateQuote();
     }).catch(function () { calculateQuote(); });
   })();
