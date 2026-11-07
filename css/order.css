@@ -712,6 +712,10 @@
       gap: 8px;
     }
 
+    #checkoutDetailsGrid[hidden], #savedCheckoutSummary[hidden], #savedAddressWrap[hidden], #savedDetailsStatus[hidden] {
+      display: none !important;
+    }
+
     .qc-field {
       display: flex;
       flex-direction: column;
