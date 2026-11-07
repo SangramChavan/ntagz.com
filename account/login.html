@@ -72,6 +72,8 @@
   <script>
     var API = '/api/accounts';
     var email = '';
+    var requestedEmail = new URLSearchParams(location.search).get('email') || '';
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(requestedEmail)) document.getElementById('emailInput').value = requestedEmail;
 
     function showError(msg) {
       var el = document.getElementById('errorMsg');

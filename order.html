@@ -60,7 +60,7 @@
   <script src="js/qrcode.min.js"></script>
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/neumorphic.css">
-   <link rel="stylesheet" href="css/order.css?v=20261106">
+  <link rel="stylesheet" href="css/order.css?v=20261107">
   <link rel="stylesheet" href="css/order-points.css?v=20261020">
 </head>
 
@@ -168,7 +168,7 @@
               <div class="qc-field full-width">
                 <label class="qc-field-label" for="customerEmail">Email for delivery updates <span class="req-star">*</span></label>
                 <input type="email" id="customerEmail" class="qc-input" placeholder="you@example.com" required autocomplete="email" inputmode="email" maxlength="254" aria-describedby="hint-customerEmail err-customerEmail">
-                <span class="qc-hint" id="hint-customerEmail">We’ll email you when your order ships, with the courier and AWB / tracking link.</span>
+                <span class="qc-hint" id="hint-customerEmail">We’ll use this to email your courier and AWB when the order ships. You can optionally create an account with this email after checkout.</span>
                 <span class="qc-err" id="err-customerEmail" role="alert" hidden></span>
               </div>
               <div class="qc-field full-width">
@@ -424,7 +424,7 @@
   <script src="js/cart.js" defer></script>
   <script src="js/cart-ui.js" defer></script>
 <script defer src="js/member-pricing.js?v=20261012"></script>
-  <script src="js/order.js?v=20261106" defer></script>
+  <script src="js/order.js?v=20261107" defer></script>
   <script defer="" src="js/component-loader.js"></script>
   <script>
     // Same origin (ntagz.com/api/* is routed to the payments Worker) so the customer's sign-in cookie reaches checkout:
