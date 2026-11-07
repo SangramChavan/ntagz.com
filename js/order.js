@@ -972,9 +972,6 @@
       $('editCheckoutDetails').setAttribute('aria-expanded', 'true');
       $('customerAddress').focus({ preventScroll: true });
     });
-    ['customerName', 'customerNumber', 'customerEmail', 'customerAddress', 'customerPincode', 'customerGST'].forEach(function (id) {
-      $(id).addEventListener('change', function () { if (editing) renderSummary(); });
-    });
     fetch('/api/accounts/me', { credentials: 'same-origin' }).then(function (r) {
       if (!r.ok) return null;
       return r.json();
@@ -1021,11 +1018,7 @@
       status.textContent = 'Signed in as ' + profile.email + '. Your details are saved to your account. Update them here for this order only.';
       renderSummary();
       calculateQuote();
-    }).catch(function () {
-      savedProfileLoaded = false;
-      renderSummary();
-      calculateQuote();
-    });
+    }).catch(function () { calculateQuote(); });
   })();
 
   Array.prototype.forEach.call(
