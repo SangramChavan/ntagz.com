@@ -643,7 +643,13 @@ async function handleAccounts(url, request, env, allowedOrigin) {
   if (method === "GET" && path.endsWith("/accounts/me")) {
     const u = await getSession(request, env);
     if (!u) return jsonAuth({ error: "Not authenticated" }, 401, allowedOrigin);
-    return jsonAuth({ user: { email: u.email, name: u.name, phone: u.phone, gstin: u.gstin } }, 200, allowedOrigin);
+    let addresses = [];
+    try {
+      const result = await env.DB.prepare("SELECT id,label,name,phone,line1,city,state,pincode,is_default FROM addresses WHERE user_id=? ORDER BY is_default DESC, created_at DESC")
+        .bind(u.user_id).all();
+      addresses = result.results || [];
+    } catch { /* legacy account DB before saved-address migration */ }
+    return jsonAuth({ user: { email: u.email, name: u.name, phone: u.phone, gstin: u.gstin }, addresses }, 200, allowedOrigin);
   }
 
   // PUT /api/accounts/me
@@ -656,16 +662,6 @@ async function handleAccounts(url, request, env, allowedOrigin) {
     await env.DB.prepare("UPDATE users SET name=COALESCE(?,name), phone=COALESCE(?,phone), gstin=COALESCE(?,gstin) WHERE id=?")
       .bind(name, phone, gstin, u.user_id).run();
     return jsonAuth({ ok: true }, 200, allowedOrigin);
-  }
-
-  // GET /api/accounts/addresses
-  if (method === "GET" && path.endsWith("/accounts/addresses")) {
-    const u = await getSession(request, env);
-    if (!u) return jsonAuth({ error: "Not authenticated" }, 401, allowedOrigin);
-    const { results } = await env.DB.prepare(
-      "SELECT * FROM addresses WHERE user_id=? ORDER BY is_default DESC, created_at DESC"
-    ).bind(u.user_id).all();
-    return jsonAuth({ addresses: results }, 200, allowedOrigin);
   }
 
   // POST /api/accounts/addresses
@@ -793,7 +789,7 @@ function cleanDetails(b) {
   return {
     name: str(b.name, 100),
     phone: typeof b.phone === "string" ? b.phone.replace(/\D/g, "").slice(-10) : "",
-    email: str(b.email, 254),
+    email: /^[^\s@<>|]+@[^\s@<>|]+\.[^\s@<>|]+$/.test(str(b.email, 254)) ? str(b.email, 254).toLowerCase() : "",
     address: str(b.address, 500),
     pincode: /^\d{6}$/.test(str(b.pincode, 6)) ? str(b.pincode, 6) : "",
     state: str(b.state, 50),

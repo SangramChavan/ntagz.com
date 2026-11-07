@@ -905,6 +905,91 @@
     calculateQuote(); /* the delivery estimate follows the pincode (re-quote only fires when the pincode part of the key changes) */
   });
 
+  /* Signed-in checkout: use verified profile + default address as editable defaults. Never make a customer wait for account data,
+     never overwrite a field the customer has already touched, and never persist checkout edits back to the profile implicitly. */
+  (function prefillAccountDetails() {
+    var status = $('savedDetailsStatus'), addressWrap = $('savedAddressWrap'), addressSelect = $('savedAddressSelect');
+    if (!status || !addressWrap || !addressSelect) return;
+    var touched = Object.create(null), profile = null, addresses = [];
+    ['customerName', 'customerNumber', 'customerEmail', 'customerAddress', 'customerPincode', 'customerState', 'customerGST'].forEach(function (id) {
+      $(id).addEventListener('input', function () { touched[id] = true; });
+      $(id).addEventListener('change', function () { touched[id] = true; });
+    });
+    function setIfEmpty(id, value) {
+      var input = $(id), v = String(value || '').trim();
+      if (!input || !v || touched[id] || input.value.trim()) return false;
+      input.value = v;
+      return true;
+    }
+    function useAddress(a, force) {
+      if (!a) return;
+      function put(id, value) {
+        if (force) $(id).value = String(value || '').trim();
+        else setIfEmpty(id, value);
+      }
+      put('customerName', a.name || (profile && profile.name));
+      put('customerNumber', a.phone || (profile && profile.phone));
+      put('customerAddress', a.line1);
+      put('customerPincode', a.pincode);
+      if (profile) { put('customerEmail', profile.email); put('customerGST', profile.gstin); }
+      if (force || !touched.customerState && !$('customerState').value) {
+        var state = String(a.state || '').trim();
+        fetchedCity = a.city || ''; fetchedState = state;
+        $('customerState').value = state;
+        hideStateFallback(); $('locationDisplay').hidden = false;
+        var loc = $('locationDisplay'); loc.classList.toggle('filled', !!state);
+        $('locationText').className = state ? '' : 'location-placeholder';
+        $('locationText').textContent = state ? [a.city, state].filter(Boolean).join(' · ') : 'Auto-filled from pincode';
+      }
+      calculateQuote();
+    }
+    fetch('/api/accounts/me', { credentials: 'same-origin' }).then(function (r) {
+      if (!r.ok) return null;
+      return r.json();
+    }).then(function (data) {
+      if (!data || !data.user) return;
+      profile = data.user;
+      setIfEmpty('customerName', profile.name);
+      setIfEmpty('customerNumber', profile.phone);
+      setIfEmpty('customerEmail', profile.email);
+      setIfEmpty('customerGST', profile.gstin);
+      status.hidden = false;
+      addresses = Array.isArray(data.addresses) ? data.addresses : [];
+      var defaultAddress = addresses.find(function (a) { return !!a.is_default; }) || addresses[0] || null;
+      if (defaultAddress) {
+        useAddress(defaultAddress, false);
+        status.textContent = 'Signed in as ' + profile.email + '. Using your saved delivery address; review or edit it before placing the order.';
+      } else {
+        status.textContent = 'Signed in as ' + profile.email + '. Your saved contact details are prefilled. Add a delivery address to your account to reuse it next time.';
+      }
+      if (!addresses.length) { calculateQuote(); return; }
+      addressSelect.replaceChildren();
+      var prompt = document.createElement('option'); prompt.value = ''; prompt.textContent = 'Choose a saved address';
+      addressSelect.appendChild(prompt);
+      addresses.forEach(function (a, index) {
+        var option = document.createElement('option'); option.value = String(index);
+        option.textContent = [a.label || 'Address', a.line1, a.city, a.state, a.pincode].filter(Boolean).join(' · ');
+        addressSelect.appendChild(option);
+      });
+      addressWrap.hidden = false;
+      var defaultIndex = addresses.findIndex(function (a) { return !!a.is_default; });
+      if (defaultIndex < 0) defaultIndex = 0;
+      addressSelect.value = String(defaultIndex);
+      if (addresses.length === 1) {
+        addressWrap.hidden = true;
+      } else {
+        var prompt = addressSelect.options[0];
+        if (prompt) prompt.textContent = 'Choose another saved address';
+      }
+      addressSelect.addEventListener('change', function () {
+        var selected = addresses[parseInt(addressSelect.value, 10)];
+        if (!selected) return;
+        useAddress(selected, true);
+      });
+      calculateQuote();
+    }).catch(function () { calculateQuote(); });
+  })();
+
   Array.prototype.forEach.call(
     document.querySelectorAll('[data-copy]'),
     function (btn) {
