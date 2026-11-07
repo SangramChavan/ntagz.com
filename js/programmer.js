@@ -93,18 +93,49 @@
       if ('NDEFReader' in window) {
         nfcSupported = true;
         banner.className = 'status-banner supported';
-        banner.innerHTML = `
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-      <div><strong>Web NFC Supported.</strong> Your browser can read and write NFC tags. Ensure NFC is turned on in your device settings.</div>
-    `;
+        banner.replaceChildren(
+          makeStatusIcon(true),
+          statusMessage('Web NFC Supported.', 'Your browser can read and write NFC tags. Ensure NFC is turned on in your device settings.')
+        );
       } else {
         nfcSupported = false;
         banner.className = 'status-banner unsupported';
-        banner.innerHTML = `
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-      <div><strong>Simulation Mode.</strong> Web NFC requires Chrome on Android. You can test the interface here, but you cannot write to physical tags on this device.</div>
-    `;
+        banner.replaceChildren(
+          makeStatusIcon(false),
+          statusMessage('Simulation Mode.', 'Web NFC requires Chrome on Android. You can test the interface here, but you cannot write to physical tags on this device.')
+        );
       }
+    }
+
+    function makeStatusIcon(supported) {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('width', '20'); svg.setAttribute('height', '20'); svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('fill', 'none'); svg.setAttribute('stroke', 'currentColor'); svg.setAttribute('stroke-width', '2');
+      svg.setAttribute('stroke-linecap', 'round'); svg.setAttribute('stroke-linejoin', 'round');
+      if (supported) {
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', 'M22 11.08V12a10 10 0 1 1-5.93-9.14');
+        const check = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+        check.setAttribute('points', '22 4 12 14.01 9 11.01');
+        svg.append(path, check);
+      } else {
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', '12'); circle.setAttribute('cy', '12'); circle.setAttribute('r', '10');
+        const stem = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        stem.setAttribute('x1', '12'); stem.setAttribute('y1', '8'); stem.setAttribute('x2', '12'); stem.setAttribute('y2', '12');
+        const dot = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        dot.setAttribute('x1', '12'); dot.setAttribute('y1', '16'); dot.setAttribute('x2', '12.01'); dot.setAttribute('y2', '16');
+        svg.append(circle, stem, dot);
+      }
+      return svg;
+    }
+
+    function statusMessage(title, message) {
+      const wrapper = document.createElement('div');
+      const strong = document.createElement('strong');
+      strong.textContent = title + ' ';
+      wrapper.append(strong, document.createTextNode(message));
+      return wrapper;
     }
 
     function showLog(msg, type) {
@@ -201,7 +232,7 @@
       }
 
       if (!nfcSupported) {
-        showLog(`Unsupported Device: (Simulated Write) Wrote [${currentRecordType}] -> ${currentPayloadData}`, "success");
+        showLog("Unsupported Device: Simulated Write completed. Record: " + currentRecordType + ". Payload: " + currentPayloadData, "success");
         return;
       }
 
