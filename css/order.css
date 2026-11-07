@@ -734,6 +734,13 @@
       margin-top: 3px;
     }
 
+    #savedDetailsStatus {
+      color: var(--teal);
+      font-size: 12px;
+      line-height: 1.45;
+      margin: 2px 0;
+    }
+
     .qc-input[aria-invalid="true"] {
       border-color: #dc2626;
       box-shadow: 0 0 0 3px rgba(220, 38, 38, .08);
