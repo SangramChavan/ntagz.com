@@ -13,14 +13,15 @@ async function log(db, { identifier, ip, portal, stage, success }) {
 }
 
 // `send(email, code)` delivers the code (email provider in production). Always answers the same way so the response does not reveal accounts.
-export async function requestOtp(db, { email, ip, portal, send }) {
+export async function requestOtp(db, { email, ip, portal, send, ipLimit }) {
   const e = cleanEmail(email);
   if (!e) throw new AppError('VALIDATION_FAILED', 'Enter a valid email address', { email: 'invalid' });
   const byEmail = await db.prepare('SELECT COUNT(*) n FROM otp_tokens WHERE email = ? AND created_at > unixepoch() - ?').bind(e, WINDOW).first();
+  const perIp = Number.isInteger(ipLimit) && ipLimit > 0 ? ipLimit : PER_IP; // configurable (OTP_IP_LIMIT) so local test servers sharing one IP are not throttled; production keeps the default
   if (byEmail.n >= PER_EMAIL) throw new AppError('RATE_LIMITED', 'Too many codes requested. Try again in a few minutes.');
   if (ip) {
     const byIp = await db.prepare("SELECT COUNT(*) n FROM login_attempts WHERE ip = ? AND stage = 'send' AND created_at > unixepoch() - ?").bind(ip, WINDOW).first();
-    if (byIp.n >= PER_IP) throw new AppError('RATE_LIMITED', 'Too many requests. Try again in a few minutes.');
+    if (byIp.n >= perIp) throw new AppError('RATE_LIMITED', 'Too many requests. Try again in a few minutes.');
   }
   const buf = new Uint32Array(1); crypto.getRandomValues(buf);
   const code = String(100000 + (buf[0] % 900000));

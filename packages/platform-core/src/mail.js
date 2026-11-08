@@ -29,6 +29,12 @@ const T = {
     `Hi ${d.name || 'there'},`, `Your Ntagz partner access (${d.partnerCode}) has been suspended.`, `Reason from the team: “${d.note}”`, 'If you have questions, reply to this email.'] }),
   partner_reinstated: (d, env) => ({ subject: 'Your Ntagz partner access is restored', lines: [
     `Hi ${d.name || 'there'},`, `Your Ntagz partner access (${d.partnerCode}) has been restored.`], cta: ['Open your dashboard', partnerUrl(env) + '/dashboard'] }),
+  quotation_submitted: (d, env) => ({ subject: oneLine(`Quotation to approve: ${d.number} (${d.businessName || 'lead'})`), lines: [
+    `${d.partnerBusiness || 'A partner'} submitted quotation ${d.number} for ${d.businessName || 'a lead'}: ${d.total}.`, 'It needs your approval before it can be sent to the customer.'], cta: ['Review in admin', adminUrl(env) + '/#/quotes'] }),
+  quotation_approved: (d, env) => ({ subject: oneLine(`Quotation ${d.number} approved`), lines: [
+    `Hi ${d.name || 'there'},`, `Ntagz approved quotation ${d.number} for ${d.businessName || 'your lead'} (${d.total}). It is valid until ${d.validUntil}.`, 'You can now send it to your customer and record their answer.'], cta: ['Open the quotation', partnerUrl(env) + '/quotes'] }),
+  quotation_rejected: (d, env) => ({ subject: oneLine(`Quotation ${d.number} needs changes`), lines: [
+    `Hi ${d.name || 'there'},`, `Ntagz did not approve quotation ${d.number} for ${d.businessName || 'your lead'}.`, `Reason from the team: “${d.note}”`, 'You can change it and send it again.'], cta: ['Open the quotation', partnerUrl(env) + '/quotes'] }),
   hq_new_application: (d, env) => ({ subject: oneLine(`${d.resubmitted ? 'Updated' : 'New'} partner application: ${d.businessName || 'Unnamed'} (${TYPE[d.typeKey] || d.typeKey})`), lines: [
     `${d.businessName || 'A business'} in ${[d.city, d.state].filter(Boolean).join(', ') || 'an unspecified location'} ${d.resubmitted ? 'sent an updated application' : 'applied'} as ${TYPE[d.typeKey] || d.typeKey}.`], cta: ['Review in admin', adminUrl(env) + '/#/partners'] }),
 };

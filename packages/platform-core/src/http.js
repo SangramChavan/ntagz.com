@@ -4,6 +4,7 @@ import { requestOtp, verifyOtp, sessionUser, revokeSession } from './auth.js';
 import * as apps from './applications.js';
 import * as review from './review.js';
 import * as leads from './leads.js';
+import * as quotes from './quotes.js';
 import { flushOutbox } from './mail.js';
 
 const COOKIE = '__Host-ntagz_partner';
@@ -61,7 +62,7 @@ async function partnerRouterInner(request, env) {
 
     if (method === 'POST' && path === '/api/v1/auth/otp/send') {
       const b = await readJson(request);
-      return withHeaders(ok(await requestOtp(env.DB, { email: b.email, ip, portal: 'partner', send: (e, c) => sendOtpEmail(env, e, c) })));
+      return withHeaders(ok(await requestOtp(env.DB, { email: b.email, ip, portal: 'partner', ipLimit: parseInt(env.OTP_IP_LIMIT, 10) || undefined, send: (e, c) => sendOtpEmail(env, e, c) })));
     }
     if (method === 'POST' && path === '/api/v1/auth/otp/verify') {
       const b = await readJson(request);
@@ -101,6 +102,21 @@ async function partnerRouterInner(request, env) {
     if (path === '/api/v1/partner/leads') {
       if (method === 'GET') return withHeaders(ok(await leads.listMine(env.DB, access, { status: url.searchParams.get('status') || undefined, q: url.searchParams.get('q') || undefined })));
       if (method === 'POST') return withHeaders(ok(await leads.createLead(env.DB, access, await readJson(request)), {}, 201));
+    }
+    if (method === 'GET' && path === '/api/v1/partner/quote-products') return withHeaders(ok(await quotes.catalogue(env.DB, access)));
+    if (method === 'POST' && path === '/api/v1/partner/quote-price') return withHeaders(ok(await quotes.price(env.DB, access, await readJson(request))));
+    if (path === '/api/v1/partner/quotes') {
+      if (method === 'GET') return withHeaders(ok(await quotes.listMine(env.DB, access, { status: url.searchParams.get('status') || undefined, leadId: url.searchParams.get('leadId') || undefined })));
+      if (method === 'POST') return withHeaders(ok(await quotes.createQuote(env.DB, access, await readJson(request), env), {}, 201));
+    }
+    if ((m = path.match(/^\/api\/v1\/partner\/quotes\/([0-9a-f-]{36})(\/items|\/submit|\/cancel|\/sent|\/response)?$/))) {
+      const qid = m[1];
+      if (method === 'GET' && !m[2]) return withHeaders(ok(await quotes.getMine(env.DB, access, qid)));
+      if (method === 'POST' && m[2] === '/items') return withHeaders(ok(await quotes.replaceItems(env.DB, access, qid, await readJson(request))));
+      if (method === 'POST' && m[2] === '/submit') return withHeaders(ok(await quotes.submit(env.DB, access, qid, env)));
+      if (method === 'POST' && m[2] === '/cancel') return withHeaders(ok(await quotes.cancel(env.DB, access, qid)));
+      if (method === 'POST' && m[2] === '/sent') return withHeaders(ok(await quotes.markSent(env.DB, access, qid)));
+      if (method === 'POST' && m[2] === '/response') return withHeaders(ok(await quotes.recordResponseMine(env.DB, access, qid, (await readJson(request)).outcome)));
     }
     if ((m = path.match(/^\/api\/v1\/partner\/leads\/([0-9a-f-]{36})(\/activity|\/status)?$/))) {
       if (method === 'GET' && !m[2]) return withHeaders(ok(await leads.getMine(env.DB, access, m[1])));
@@ -150,6 +166,13 @@ async function adminV1Inner(request, env, actor, body) {
       return ok(await review.reinstate(env.DB, access, id));
     }
     if (method === 'GET' && path === '/api/v1/admin/leads') return ok(await leads.listAll(env.DB, access, { status: url.searchParams.get('status') || undefined, partnerId: url.searchParams.get('partnerId') || undefined, q: url.searchParams.get('q') || undefined }));
+    if (method === 'GET' && path === '/api/v1/admin/quotes') return ok(await quotes.listAll(env.DB, access, { status: url.searchParams.get('status') || undefined, q: url.searchParams.get('q') || undefined }));
+    if ((m = path.match(/^\/api\/v1\/admin\/quotes\/([0-9a-f-]{36})(\/approve|\/reject|\/response)?$/))) {
+      if (method === 'GET' && !m[2]) return ok(await quotes.getAny(env.DB, access, m[1]));
+      if (method === 'POST' && m[2] === '/approve') return ok(await quotes.approve(env.DB, access, m[1]));
+      if (method === 'POST' && m[2] === '/reject') return ok(await quotes.reject(env.DB, access, m[1], body.note));
+      if (method === 'POST' && m[2] === '/response') return ok(await quotes.recordResponseHq(env.DB, access, m[1], body.outcome));
+    }
     if (method === 'GET' && path === '/api/v1/admin/active-partners') return ok(await leads.activePartners(env.DB, access));
     if ((m = path.match(/^\/api\/v1\/admin\/leads\/([0-9a-f-]{36})(\/assign|\/status|\/note)?$/))) {
       if (method === 'GET' && !m[2]) return ok(await leads.getAny(env.DB, access, m[1]));

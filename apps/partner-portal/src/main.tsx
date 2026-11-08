@@ -9,6 +9,9 @@ import { Status } from './pages/Status';
 import { Dashboard } from './pages/Dashboard';
 import { Leads } from './pages/Leads';
 import { LeadDetail } from './pages/LeadDetail';
+import { Quotes } from './pages/Quotes';
+import { QuoteEditor } from './pages/QuoteEditor';
+import { QuoteView } from './pages/QuoteView';
 import type { Me, Mine } from './types';
 
 type Boot = { s: 'loading' } | { s: 'out' } | { s: 'in'; me: Me; mine: Mine | null } | { s: 'error'; msg: string };
@@ -50,6 +53,7 @@ function App() {
       else if (path === '/apply' && (active || !editable)) navigate(h, true);
       else if (path === '/status' && (active || !b.mine?.application)) navigate(h, true);
       else if (path.startsWith('/leads') && !(active && b.me.permissions.includes('leads.manage.own'))) navigate(h, true);
+      else if (path.startsWith('/quotes') && !(active && b.me.permissions.includes('quotes.create'))) navigate(h, true);
     }
   }, [b, path]);
 
@@ -60,6 +64,7 @@ function App() {
         {b.s === 'in' && b.me.partner?.status === 'active' && (
           <nav class="subnav" aria-label="Partner sections">
             <a href="/dashboard" aria-current={path === '/dashboard' ? 'page' : undefined} onClick={(e) => { e.preventDefault(); navigate('/dashboard'); }}>Overview</a>
+            {b.me.permissions.includes('quotes.create') && <a href="/quotes" aria-current={path.startsWith('/quotes') ? 'page' : undefined} onClick={(e) => { e.preventDefault(); navigate('/quotes'); }}>Quotes</a>}
             {b.me.permissions.includes('leads.manage.own') && <a href="/leads" aria-current={path.startsWith('/leads') ? 'page' : undefined} onClick={(e) => { e.preventDefault(); navigate('/leads'); }}>Leads</a>}
           </nav>
         )}
@@ -73,7 +78,11 @@ function App() {
         {b.s === 'in' && path === '/status' && b.mine && <Status mine={b.mine} onRefresh={() => void load()} onEdit={() => navigate('/apply')} onNew={async () => { await api.save({}).catch(() => null); navigate('/apply'); }} />}
         {b.s === 'in' && path === '/dashboard' && <Dashboard me={b.me} />}
         {b.s === 'in' && path === '/leads' && <Leads />}
-        {b.s === 'in' && /^\/leads\/[0-9a-f-]{36}$/.test(path) && <LeadDetail id={path.slice(7)} key={path} />}
+        {b.s === 'in' && /^\/leads\/[0-9a-f-]{36}$/.test(path) && <LeadDetail id={path.slice(7)} key={path} canQuote={b.me.permissions.includes('quotes.create')} />}
+        {b.s === 'in' && path === '/quotes' && <Quotes />}
+        {b.s === 'in' && /^\/quotes\/new\/[0-9a-f-]{36}$/.test(path) && <QuoteEditor leadId={path.slice(12)} key={path} />}
+        {b.s === 'in' && /^\/quotes\/[0-9a-f-]{36}\/edit$/.test(path) && <QuoteEditor quoteId={path.slice(8, 44)} key={path} />}
+        {b.s === 'in' && /^\/quotes\/[0-9a-f-]{36}$/.test(path) && <QuoteView id={path.slice(8)} key={path} />}
       </main>
     </>
   );

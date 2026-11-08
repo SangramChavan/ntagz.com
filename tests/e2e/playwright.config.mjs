@@ -39,7 +39,7 @@ export default defineConfig({
   webServer: [
     {
       // --var supplies local-only settings (no .dev.vars file). DEV_OTP_ECHO returns the sign-in code in the API response so the test can read it.
-      command: `${WRANGLER} dev --local --port 8815 --persist-to ${STATE} --var DEV_OTP_ECHO:1 --var PAN_HASH_SECRET:e2e-only-secret --var HQ_NOTIFY_EMAILS:hq@example.test`,
+      command: `${WRANGLER} dev --local --port 8815 --persist-to ${STATE} --var DEV_OTP_ECHO:1 --var OTP_IP_LIMIT:1000 --var PAN_HASH_SECRET:e2e-only-secret --var HQ_NOTIFY_EMAILS:hq@example.test`,
       cwd: path.join(root, 'workers/partner'), url: 'http://localhost:8815/api/v1/partner/types', timeout: 120_000, reuseExistingServer: false, env,
     },
     {

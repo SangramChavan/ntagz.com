@@ -70,6 +70,7 @@ const pdf = () => new TextEncoder().encode("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n");
   // ---- rate limits ----
   for (let i = 0; i < 10; i++) assert.equal((await call("/api/v1/auth/otp/send", { method: "POST", body: { email: `ip${i}@example.test` }, headers: { "cf-connecting-ip": "9.9.9.9" } })).status, 200);
   assert.equal((await call("/api/v1/auth/otp/send", { method: "POST", body: { email: "ip11@example.test" }, headers: { "cf-connecting-ip": "9.9.9.9" } })).status, 429); ok("11th code request from one IP -> 429");
+  { const e2 = { ...env, OTP_IP_LIMIT: "2" }; const sendTo = (em) => partnerRouter(new Request(ORIGIN + "/api/v1/auth/otp/send", { method: "POST", headers: { origin: ORIGIN, "x-requested-with": "ntagz", "content-type": "application/json", "cf-connecting-ip": "7.7.7.7" }, body: JSON.stringify({ email: em }) }), e2); assert.equal((await sendTo("c1@example.test")).status, 200); assert.equal((await sendTo("c2@example.test")).status, 200); assert.equal((await sendTo("c3@example.test")).status, 429); ok("the per-IP sign-in limit is configurable (OTP_IP_LIMIT) and enforced"); }
   const lim = "limit@example.test"; for (let i = 0; i < 3; i++) await call("/api/v1/auth/otp/send", { method: "POST", body: { email: lim } });
   assert.equal((await call("/api/v1/auth/otp/send", { method: "POST", body: { email: lim } })).status, 429); ok("4th code for one email -> 429");
 

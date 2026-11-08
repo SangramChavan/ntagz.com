@@ -96,3 +96,22 @@ export async function activateThroughUi(page, biz) {
   await act(page, 'Activate partner').click(); await confirmDialog(page, 'Activate').click();
   await expect(pill(page)).toHaveText('Active');
 }
+
+// Brings a new partner of the given type all the way to an active dashboard through the real UI. `hq` is a signed-in admin page.
+export async function activePartner(browser, hq, type, label) {
+  const biz = uniq(`${label} `);
+  const page = await (await browser.newContext()).newPage();
+  await partnerSignIn(page, `${uniq(label.toLowerCase())}@example.test`);
+  await applyThroughUi(page, { type, biz });
+  await activateThroughUi(hq, biz);
+  await page.getByRole('button', { name: 'Check for updates' }).click();
+  await expect(page.getByRole('heading', { name: `Welcome, ${biz}` })).toBeVisible();
+  return { page, biz };
+}
+
+// Detail panels in admin are modal dialogs; close whichever is open before moving to another tab.
+export async function closePanels(page) {
+  for (const id of ['#pnpanel', '#ldpanel', '#qtpanel']) {
+    if (await page.locator(`${id}[open]`).count()) await page.locator(id).getByRole('button', { name: 'Close' }).click();
+  }
+}

@@ -1,19 +1,7 @@
 import { test, expect } from '@playwright/test';
-import { ADMIN, PARTNER, partnerSignIn, adminSignIn, applyThroughUi, activateThroughUi, uniq, confirmDialog } from './helpers.mjs';
+import { ADMIN, PARTNER, adminSignIn, activePartner, closePanels, uniq, confirmDialog } from './helpers.mjs';
 
 const phone = () => '9' + String(Math.floor(Math.random() * 1e9)).padStart(9, '0');
-
-// Brings a new partner of the given type all the way to an active dashboard through the real UI.
-async function activePartner(browser, hq, type, label) {
-  const biz = uniq(`${label} `);
-  const page = await (await browser.newContext()).newPage();
-  await partnerSignIn(page, `${uniq(label.toLowerCase())}@example.test`);
-  await applyThroughUi(page, { type, biz });
-  await activateThroughUi(hq, biz);
-  await page.getByRole('button', { name: 'Check for updates' }).click();
-  await expect(page.getByRole('heading', { name: `Welcome, ${biz}` })).toBeVisible();
-  return { page, biz };
-}
 
 test('leads: register, one owner per number, HQ sees the conflict, reassign moves access, close as lost', async ({ browser }) => {
   const hq = await (await browser.newContext()).newPage();
@@ -63,7 +51,7 @@ test('leads: register, one owner per number, HQ sees the conflict, reassign move
   await expect(B.page.getByText('No leads yet.')).toBeVisible();
 
   // --- HQ sees it all, including the attempted conflict
-  if (await hq.locator('#pnpanel[open]').count()) await hq.locator('#pnpanel').getByRole('button', { name: 'Close' }).click(); // left open by the activations
+  await closePanels(hq); // left open by the activations
   await hq.goto(ADMIN + '/#/leads');
   const row = hq.locator('#view-leads .pn-card', { hasText: lead });
   await expect(row).toBeVisible();

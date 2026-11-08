@@ -1,4 +1,4 @@
-import type { DocType, FormExtras, Lead, LeadActivity, LeadCounts, LeadInput, LeadStatus, Me, Mine, PartnerType } from './types';
+import type { DocType, FormExtras, Lead, LeadActivity, LeadCounts, LeadInput, LeadStatus, Me, Mine, PartnerType, Quote, QuoteInput, QuoteProduct, QuoteStatus, QuoteTotals } from './types';
 
 export class ApiError extends Error {
   constructor(public code: string, message: string, public status: number, public fields: Record<string, string> = {}) { super(message); }
@@ -38,5 +38,13 @@ export const api = {
   createLead: (input: LeadInput) => call<{ lead: Lead; activities: LeadActivity[] }>('/api/v1/partner/leads', json('POST', input)),
   leadNote: (id: string, kind: 'note' | 'call' | 'visit', body: string) => call<{ lead: Lead; activities: LeadActivity[] }>(`/api/v1/partner/leads/${id}/activity`, json('POST', { kind, body })),
   leadStatus: (id: string, status: LeadStatus, reason?: string) => call<{ lead: Lead; activities: LeadActivity[] }>(`/api/v1/partner/leads/${id}/status`, json('POST', { status, reason })),
+  quoteProducts: () => call<QuoteProduct[]>('/api/v1/partner/quote-products'),
+  quotePrice: (items: QuoteInput['items'], state?: string) => call<{ lines: Array<{ productId: string; name: string; qty: number; lineNetPaise: number; bulkPct: number }>; totals: QuoteTotals }>('/api/v1/partner/quote-price', json('POST', { items, state })),
+  quotes: (status?: string, leadId?: string) => call<{ items: Quote[]; counts: Record<QuoteStatus, number> }>('/api/v1/partner/quotes' + qs({ status, leadId })),
+  quote: (id: string) => call<{ quote: Quote }>(`/api/v1/partner/quotes/${id}`),
+  createQuote: (input: QuoteInput) => call<{ quote: Quote }>('/api/v1/partner/quotes', json('POST', input)),
+  editQuote: (id: string, input: Omit<QuoteInput, 'leadId'>) => call<{ quote: Quote }>(`/api/v1/partner/quotes/${id}/items`, json('POST', input)),
+  quoteAction: (id: string, action: 'submit' | 'cancel' | 'sent') => call<{ quote: Quote }>(`/api/v1/partner/quotes/${id}/${action}`, { method: 'POST' }),
+  quoteAnswer: (id: string, outcome: 'accepted' | 'declined') => call<{ quote: Quote }>(`/api/v1/partner/quotes/${id}/response`, json('POST', { outcome })),
   upload: (docType: DocType, file: File) => call<{ id: string; type: DocType }>('/api/v1/partner/documents', { method: 'POST', headers: { 'X-Doc-Type': docType, 'Content-Type': 'application/octet-stream' }, body: file }),
 };
