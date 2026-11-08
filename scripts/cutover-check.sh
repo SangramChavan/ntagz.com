@@ -12,7 +12,9 @@ done
 for u in /docs/platform/CONTRACTS.md /admin/README.md /wrangler.toml /.dev.vars /db/schema.sql /RECOVERY.md /package.json /test/site-worker.test.js /packages/platform-core/src/auth.js /workers/partner/wrangler.jsonc /admin/migrations/0023_partner_sessions_fees.sql; do
   c=$(curl -s -o /dev/null -w '%{http_code}' "$BASE$u"); [ "$c" = 404 ] && continue; bad "private path exposed: $c $u"
 done
-[ -d dist ] || npm run -s build:static >/dev/null
+# Always rebuild: a leftover dist/ from another branch gives false failures (or hides real differences).
+# This compares against THIS checkout, so run it from the commit that is deployed (normally main).
+npm run -s build:static >/dev/null || { echo "FAIL build:static"; exit 1; }
 for f in index.html order.html track.html tools/bulk-quote.html js/catalog.js js/order.js css/tokens.css robots.txt sitemap.xml llms.txt; do
   u="/$f"; [ "$f" = index.html ] && u=/
   a=$(curl -s "$BASE$u" | shasum | cut -c1-16); b=$(shasum < "dist/$f" | cut -c1-16); [ "$a" = "$b" ] || bad "content differs from dist: $u"
