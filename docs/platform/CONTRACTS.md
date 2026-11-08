@@ -156,6 +156,7 @@ A staff member needs `settings.manage` or `staff.manage` before MFA is required 
 `--ink #1F1C20`, `--accent #FF6A21`, `--paper #FFFFFF`, `--surface #F4F6F8`, plus semantic success, warning and danger colours (to be fixed with contrast checks in the design system). Base 4 px spacing. Radius 6 px. System font stack first. Touch targets 44 px. No gradients.
 
 ## Change log
+- v0.4: `GET /api/v1/partner/applications/mine` also returns `partner: { partnerCode, status } | null` (the caller's own partner record from approval on), so the portal can show the onboarding stage before access is active.
 - v0.1 initial.
 - v0.3 (apply/approval API implemented; migration 0023):
   - **Approving** an application needs `partners.activate` (HQ only). Operations and Regional can start review, request documents and reject, but cannot approve.
