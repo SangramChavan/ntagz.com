@@ -1615,6 +1615,11 @@
       min-width: 0;
     }
 
+    /* Phone cards are ~160px wide; two columns squeezed the prices to ~63px and clipped them. */
+    @media (max-width: 767px) {
+      .dual-price-meta .price-options { grid-template-columns: 1fr; }
+    }
+
     .dual-price-meta .price-gst {
       white-space: nowrap;
       font-size: 13px;
