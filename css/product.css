@@ -187,7 +187,7 @@
       overflow: hidden;
       position: relative;
     }
-    .prod-media img { width: 100%; height: 100%; object-fit: cover; }
+    .prod-media img { width: 100%; height: 100%; object-fit: contain; } /* contain: square art was cropped in the 4:3 frame */
     .prod-badge-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
     .ptag2 {
       font-size: 12px; font-weight: 600; font-family: var(--ff-head);
