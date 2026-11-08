@@ -15,6 +15,7 @@ exclude:
   - workers
   - packages
   - apps
+  - tests
   - RECOVERY.md
   - CLAUDE.md
   - .dev.vars.example

@@ -64,7 +64,7 @@ Legend: ☐ not started · ◐ in progress · ✔ done and tested · ⛔ blocked
 | Item | Owner | Status |
 |---|---|---|
 | Public indexable landing page for partner categories and `/apply` (the app is `noindex`; a client-rendered SPA is a poor SEO page) | Partner portal | ☐ |
-| Browser end-to-end test in CI (Playwright) for apply -> approve -> dashboard | QA | ☐ |
+| Browser end-to-end tests in CI (Playwright): apply -> approve -> dashboard, documents loop, suspension lockout, wizard validation, 360 px phone | QA | ✔ `tests/e2e`, CI job `e2e`. Customer checkout and other admin screens are not covered |
 | Accessibility audit with a screen reader and keyboard-only pass | Design | ☐ |
 | Show "Applying as" fee GST wording once owner decides O5 | Partner portal | ⛔ O5 |
 
