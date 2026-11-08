@@ -89,24 +89,8 @@ async function rewardsBlock(env, request, you, items, pricing, member) {
   return block;
 }
 
-// Returns a customer-facing message if any item can't be sold right now, else null.
-function unavailableReason(items, pricing) {
-  if (!pricing || !Array.isArray(items)) return null;
-  for (const item of items) {
-    const row = pricing[item && item.id];
-    if (!row) continue;
-    const name = row.name || item.id;
-    if (!row.active) return `${name} is currently unavailable`;
-    if (row.track_stock && Number.isInteger(item.qty)) {
-      const room = row.preorder_enabled ? (row.preorder_max == null ? Infinity : Math.max(row.preorder_max - row.preordered_qty, 0)) : 0;
-      if (item.qty > row.stock_qty + room) {
-        if (!row.preorder_enabled) return row.stock_qty > 0 ? `Only ${row.stock_qty} of ${name} available` : `${name} is out of stock`;
-        return `Only ${row.stock_qty + room} of ${name} available (${row.stock_qty} ready to ship, ${room} for pre-order)`;
-      }
-    }
-  }
-  return null;
-}
+// One availability rule for checkout, pay links and the partner API (lib/stock.js).
+const unavailableReason = (items, pricing) => STOCK.unavailableReason(items, pricing);
 
 // Server-side price of a cart. `member` is the result of getMemberContext (null = regular prices). See functions/lib/pricing.js.
 // `member` = getMemberContext's {settings, paid, loyalty} (null = regular prices). A bare {settings} means a paid member (the quote's what-if).

@@ -171,5 +171,11 @@ global.fetch = async (url, opts) => {
   assert.equal(l4.kind, "link"); assert.equal(l4.creditPaise, 0); run("UPDATE products SET cost_paise = NULL WHERE id = 'google-review-nfc-qr-stand-custom-10x10'");
   const gone = await jget("/api/pay/" + l4.linkId); assert.equal(gone.status, 200); assert.equal(gone.body.status, "error"); assert.match(gone.body.message, /can no longer be priced/); ok("if a cost disappears after a link was made, the payments Worker refuses to price it rather than guessing");
 
+  // ---- review follow-ups: stock rule on the credit path; a partner's own wholesale order never wins a lead ----
+  run("UPDATE products SET cost_paise = 900, track_stock = 1, stock_qty = 5, preorder_enabled = 0 WHERE id = 'black-nfc-card'");
+  await rej(W.placeOrder(D1, ent, { ...addr, items: cart("black-nfc-card", 10) }), "VALIDATION_FAILED"); assert.equal(one("SELECT COUNT(*) c FROM orders WHERE partner_id = 'pe'").c, 1); ok("credit orders respect tracked stock like checkout (no order beyond stock)");
+  const Lm = await imp("packages/platform-core/src/leads.js"); run("INSERT INTO leads (id, partner_id, created_by, business_name, contact_name, phone, status) VALUES ('ld1', 'pe', 'u-pe', 'Cafe X', 'R', '9811111111', 'qualified')");
+  await rej(Lm.setStatusHq(D1, hq, "ld1", { status: "won", orderId: o1.orderId }), "VALIDATION_FAILED"); assert.equal(one("SELECT COUNT(*) c FROM commissions").c, 0); ok("a partner's own wholesale order cannot win a lead or earn commission");
+
   console.log(`all ${n} wholesale checks passed`);
 })().catch((e) => { console.error(e); process.exit(1); });

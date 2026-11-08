@@ -56,7 +56,7 @@ async function partnerCtx(db, access) {
 }
 export async function canOrder(db, access) { try { await partnerCtx(db, access); return true; } catch { return false; } }
 
-const productRows = async (db, ids) => Object.fromEntries((await db.prepare(`SELECT id, name, active, price_paise, cost_paise FROM products WHERE id IN (${ids.map(() => '?').join(',')})`).bind(...ids).all()).results.map((r) => [r.id, r]));
+const productRows = async (db, ids) => Object.fromEntries((await db.prepare(`SELECT id, name, active, price_paise, cost_paise, track_stock, stock_qty, preorder_enabled, preorder_max, preordered_qty FROM products WHERE id IN (${ids.map(() => '?').join(',')})`).bind(...ids).all()).results.map((r) => [r.id, r]));
 
 // Catalogue at the partner's own price. Cost and floor are never sent to a partner; a product with no usable price just says so.
 export async function catalogue(db, access) {
@@ -87,6 +87,8 @@ async function priceItems(db, terms, items, state) {
     engine.push({ id: ids[i], qty });
   });
   if (Object.keys(errs).length) throw bad('Check the products and quantities', errs);
+  const short = STOCK.unavailableReason(engine, live); // same availability rule as checkout and pay links
+  if (short) throw bad(short, { items: short });
   const r = PRICING.priceCart(engine, { products: PRICING.PRODUCTS, live, state: state || null, member: false, settings: PRICING.settingsFrom({}), partner: terms });
   if (!r) throw bad('This basket is outside the range that can be ordered', { items: 'too large or too small' });
   return {

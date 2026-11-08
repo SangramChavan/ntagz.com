@@ -42,4 +42,23 @@ function stockStatements(db, orderId, txnId, items) {
   return out;
 }
 
-module.exports = { stockStatements };
+// Returns a customer-facing message if any item can't be sold right now, else null.
+function unavailableReason(items, pricing) {
+  if (!pricing || !Array.isArray(items)) return null;
+  for (const item of items) {
+    const row = pricing[item && item.id];
+    if (!row) continue;
+    const name = row.name || item.id;
+    if (!row.active) return `${name} is currently unavailable`;
+    if (row.track_stock && Number.isInteger(item.qty)) {
+      const room = row.preorder_enabled ? (row.preorder_max == null ? Infinity : Math.max(row.preorder_max - row.preordered_qty, 0)) : 0;
+      if (item.qty > row.stock_qty + room) {
+        if (!row.preorder_enabled) return row.stock_qty > 0 ? `Only ${row.stock_qty} of ${name} available` : `${name} is out of stock`;
+        return `Only ${row.stock_qty + room} of ${name} available (${row.stock_qty} ready to ship, ${room} for pre-order)`;
+      }
+    }
+  }
+  return null;
+}
+
+module.exports = { stockStatements, unavailableReason };
