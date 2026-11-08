@@ -2,7 +2,7 @@
 const fs = require('fs'), path = require('path');
 const root = path.join(__dirname, '..');
 const ORIGIN = 'https://ntagz.com';
-const SKIP = /^(dist|admin|node_modules|graphify-out|components|functions|db|cutline|\.claude)\b|_preview/;
+const SKIP = /^(dist|admin|node_modules|graphify-out|components|functions|db|cutline|\.claude|\.worktree-[^/]*)\b|_preview/;
 
 const walk = d => fs.readdirSync(d, { withFileTypes: true }).flatMap(e => {
   const p = path.join(d, e.name), rel = path.relative(root, p);

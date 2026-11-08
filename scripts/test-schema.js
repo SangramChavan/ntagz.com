@@ -8,7 +8,8 @@ for (const f of pages) {
   const h = fs.readFileSync(path.join(root, f), 'utf8');
   const nodes = [...h.matchAll(/<script[^>]+ld\+json[^>]*>([\s\S]*?)<\/script>/gi)].flatMap(m => { try { return flat(JSON.parse(m[1])); } catch { return []; } });
   const prods = nodes.filter(n => [].concat(n['@type']).includes('Product'));
-  if (f !== 'index.html' && !prods.length) errs.push(`${f}: no Product JSON-LD`);
+  const noindex = /<meta\b[^>]*name=["']robots["'][^>]*content=["'][^"']*noindex/i.test(h); // not indexed -> no rich result to validate (same rule as seo-check.js)
+  if (f !== 'index.html' && !prods.length && !noindex) errs.push(`${f}: no Product JSON-LD`);
   for (const p of prods) {
     const t = `${f} [${p.name}]`;
     if (!p.name) errs.push(`${t}: no name`);
