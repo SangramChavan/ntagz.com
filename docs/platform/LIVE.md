@@ -16,6 +16,13 @@
 ## Optional settings
 `HQ_NOTIFY_EMAILS` (inboxes for "new partner application"), `PARTNER_URL`, `ADMIN_URL`. Without `HQ_NOTIFY_EMAILS` HQ gets no email; they still see applications in admin > Partners.
 
+## Commissions (deployed 2026-11-08)
+- Migration 0028 applied to production D1. Restore point taken before it: `00001043-00000000-0000511d-7d977d963601f3f86a4c3219477ae913`.
+- `ntagz-admin` version `64408e48-d56c-49a0-aba7-dcb0d92ca8e2`; `ntagz-partner` version `7932f13e-f2d6-48e7-a58c-993fe993f064`.
+- Smoke test signed out: partner and admin commission APIs answer 401, admin script is not served (404). Not yet exercised with a real signed-in session.
+- No commission rules or TDS rate exist, so nothing is earned until HQ adds a rule in admin > Commissions > Terms.
+- Rollback: admin `cd admin && npx wrangler rollback 35943468-88b3-41d7-95ce-ed86c6cdeee3`; partner `npx wrangler rollback 79b1f28d-5c22-46f9-b020-706638abd4e3 --name ntagz-partner`. The new tables stay and older code ignores them.
+
 ## Rollback
 - Admin back one step (without Quotes): `cd admin && npx wrangler rollback c27c23e0-3b0a-4170-898e-e3e5c001ddf6` (the new tables stay; older code ignores them). Further back: `cf775972-bda6-4263-894b-e01eb2425fad` (without Leads), `7cfb6ef2-0fb5-4fe3-a622-7ba45522a04d` (before the partner platform).
 - Partner portal back one step (without Quotes): `npx wrangler rollback 34d91dbe-b1e6-4963-b6ac-a0f038b3c096 --name ntagz-partner`. Further back: `62d2ca15-a8f6-42e9-9c5f-dbd883b2ad25` (without Leads).
