@@ -5,6 +5,7 @@ import * as apps from './applications.js';
 import * as review from './review.js';
 import * as leads from './leads.js';
 import * as quotes from './quotes.js';
+import * as comm from './commissions.js';
 import { flushOutbox } from './mail.js';
 
 const COOKIE = '__Host-ntagz_partner';
@@ -103,6 +104,12 @@ async function partnerRouterInner(request, env) {
       if (method === 'GET') return withHeaders(ok(await leads.listMine(env.DB, access, { status: url.searchParams.get('status') || undefined, q: url.searchParams.get('q') || undefined })));
       if (method === 'POST') return withHeaders(ok(await leads.createLead(env.DB, access, await readJson(request)), {}, 201));
     }
+    if (method === 'GET' && path === '/api/v1/partner/commissions') return withHeaders(ok(await comm.listMine(env.DB, access, { status: url.searchParams.get('status') || undefined })));
+    if (method === 'GET' && path === '/api/v1/partner/settlements') return withHeaders(ok(await comm.listSettlementsMine(env.DB, access)));
+    if ((m = path.match(/^\/api\/v1\/partner\/commissions\/([0-9a-f-]{36})(\/dispute)?$/))) {
+      if (method === 'GET' && !m[2]) return withHeaders(ok(await comm.getMine(env.DB, access, m[1])));
+      if (method === 'POST' && m[2] === '/dispute') return withHeaders(ok(await comm.disputeMine(env.DB, access, m[1], (await readJson(request)).reason)));
+    }
     if (method === 'GET' && path === '/api/v1/partner/quote-products') return withHeaders(ok(await quotes.catalogue(env.DB, access)));
     if (method === 'POST' && path === '/api/v1/partner/quote-price') return withHeaders(ok(await quotes.price(env.DB, access, await readJson(request))));
     if (path === '/api/v1/partner/quotes') {
@@ -166,6 +173,21 @@ async function adminV1Inner(request, env, actor, body) {
       return ok(await review.reinstate(env.DB, access, id));
     }
     if (method === 'GET' && path === '/api/v1/admin/leads') return ok(await leads.listAll(env.DB, access, { status: url.searchParams.get('status') || undefined, partnerId: url.searchParams.get('partnerId') || undefined, q: url.searchParams.get('q') || undefined }));
+    if (method === 'GET' && path === '/api/v1/admin/commissions') return ok(await comm.listAll(env.DB, access, { status: url.searchParams.get('status') || undefined, partnerId: url.searchParams.get('partnerId') || undefined, q: url.searchParams.get('q') || undefined }));
+    if ((m = path.match(/^\/api\/v1\/admin\/commissions\/([0-9a-f-]{36})(\/approve|\/reverse|\/adjust|\/resolve)?$/))) {
+      if (method === 'GET' && !m[2]) return ok(await comm.getAny(env.DB, access, m[1]));
+      if (method === 'POST' && m[2] === '/approve') return ok(await comm.approve(env.DB, access, m[1]));
+      if (method === 'POST' && m[2] === '/reverse') return ok(await comm.reverse(env.DB, access, m[1], body.reason));
+      if (method === 'POST' && m[2] === '/adjust') return ok(await comm.adjust(env.DB, access, m[1], { deltaPaise: body.deltaPaise, reason: body.reason }));
+      if (method === 'POST' && m[2] === '/resolve') return ok(await comm.resolve(env.DB, access, m[1], { action: body.action, note: body.note }));
+    }
+    if (method === 'GET' && path === '/api/v1/admin/commission-rules') return ok(await comm.listRules(env.DB, access));
+    if (method === 'POST' && path === '/api/v1/admin/commission-rules') return ok(await comm.createRule(env.DB, access, body), {}, 201);
+    if (method === 'POST' && (m = path.match(/^\/api\/v1\/admin\/commission-rules\/([0-9a-f-]{36})$/))) return ok(await comm.updateRule(env.DB, access, m[1], body));
+    if (method === 'POST' && path === '/api/v1/admin/commission-settings') return ok(await comm.setSettings(env.DB, access, { defaultHoldDays: body.defaultHoldDays, tdsRateBp: body.tdsRateBp }));
+    if (method === 'GET' && path === '/api/v1/admin/payables') return ok(await comm.payables(env.DB, access));
+    if (method === 'GET' && path === '/api/v1/admin/settlements') return ok(await comm.listSettlements(env.DB, access));
+    if (method === 'POST' && path === '/api/v1/admin/settlements') return ok(await comm.createSettlement(env.DB, access, { partnerId: body.partnerId, method: body.method, reference: body.reference }), {}, 201);
     if (method === 'GET' && path === '/api/v1/admin/quotes') return ok(await quotes.listAll(env.DB, access, { status: url.searchParams.get('status') || undefined, q: url.searchParams.get('q') || undefined }));
     if ((m = path.match(/^\/api\/v1\/admin\/quotes\/([0-9a-f-]{36})(\/approve|\/reject|\/response)?$/))) {
       if (method === 'GET' && !m[2]) return ok(await quotes.getAny(env.DB, access, m[1]));
