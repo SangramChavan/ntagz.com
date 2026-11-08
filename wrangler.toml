@@ -1,6 +1,7 @@
+# Reference config only. Deploy the payments Worker with: wrangler deploy -c wrangler.payment.toml
+# (never set pages_build_output_dir = "." here: it would publish admin/, db/ and functions/).
 name = "ntagz-payments"
 compatibility_date = "2026-10-08"
-pages_build_output_dir = "."
 
 [[routes]]
 pattern = "www.ntagz.com/api/*"

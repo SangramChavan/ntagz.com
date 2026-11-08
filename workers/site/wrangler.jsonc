@@ -1,0 +1,15 @@
+{
+  // ntagz.com static site on Cloudflare (assets only, no code). Built by `npm run build:static` into ../../dist.
+  // Staging: deploys to the workers.dev URL only. Production routes/custom domains are added at cutover, with owner approval.
+  // /api/* stays on the `ntagz-payments` Worker; admin stays on `ntagz-admin`.
+  "name": "ntagz-site",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-08",
+  "workers_dev": true,
+  "assets": {
+    "directory": "../../dist",
+    "binding": "ASSETS",
+    "html_handling": "none",
+    "not_found_handling": "none"
+  }
+}

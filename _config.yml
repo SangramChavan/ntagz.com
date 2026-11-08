@@ -10,4 +10,9 @@ exclude:
   - package.json
   - package-lock.json
   - opencode.jsonc
+  - docs
+  - test
+  - workers
+  - RECOVERY.md
+  - CLAUDE.md
   - .dev.vars.example
