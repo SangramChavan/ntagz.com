@@ -56,8 +56,8 @@ Legend: ☐ not started · ◐ in progress · ✔ done and tested · ⛔ blocked
 | Per-IP limit on OTP *verify* (send is limited; verify is limited per code) | Auth | ☐ |
 | Regional Manager `region` scope for applications (needs a PIN-to-region map) | Backend | ☐ |
 | E-sign for the partner agreement and gateway payment of the joining fee (today HQ records both) | Backend | ☐ owner O5 |
-| Create **private** R2 bucket `ntagz-kyc`; set secrets `PAN_HASH_SECRET`, `RESEND_API_KEY` on `ntagz-partner` | DevOps | ⛔ owner approval |
-| Add the `KYC` R2 binding to `admin/wrangler.jsonc` **in the same change that creates the bucket**. Until then HQ cannot open documents (the API answers 503 with a clear message). Adding the binding earlier would make every admin deploy fail | DevOps | ⛔ owner approval |
+| Create **private** R2 bucket `ntagz-kyc`; set secrets `PAN_HASH_SECRET`, `RESEND_API_KEY` on `ntagz-partner` | DevOps | ✔ bucket created, `PAN_HASH_SECRET` set. ⛔ `RESEND_API_KEY` is the owner's to set (see LIVE.md) |
+| Add the `KYC` R2 binding to `admin/wrangler.jsonc` with the bucket | DevOps | ✔ done and deployed |
 
 ## Portal follow-ups
 
@@ -88,6 +88,9 @@ WhatsApp automation, advanced analytics, training management, regional warehouse
 ## Blockers and owner decisions
 
 O1 hosting confirmation and DNS cutover go · O2 Cloudflare access and staging approval · O3 SMS and WhatsApp providers · O4 storefront restyle approval · O5 commercial and legal decisions · O6 trademark check. Details in `PHASE0-REPORT.md` section 6.
+
+## Live state
+See `LIVE.md`: partner platform deployed 2026-11-08 (migrations 0021-0024, admin redeploy, `partner.ntagz.com`). `ntagz.com` hosting is unchanged.
 
 ## Known limitations
 
