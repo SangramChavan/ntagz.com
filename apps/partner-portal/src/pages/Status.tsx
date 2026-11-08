@@ -23,7 +23,7 @@ export function Status({ mine, onEdit, onNew, onRefresh }: { mine: Mine; onEdit:
       {a.status === 'documents_required' && (
         <Alert kind="warn"><strong>Ntagz needs more from you.</strong><br />{a.decisionNote}</Alert>
       )}
-      {mine.partner && <p class="muted">You are approved. Your dashboard opens once the steps below are complete. Ntagz records the agreement and your joining fee, and will contact you with the details.</p>}
+      {mine.partner && <p class="muted">You are approved. Your dashboard opens once the steps below are complete. Ntagz records the agreement and your opening stock order, and will contact you with the details.</p>}
       {!mine.partner && a.status !== 'documents_required' && <p class="muted">Your application is with Ntagz. Check this page for updates.</p>}
       <ol class="timeline">
         {list.map((s, i) => (
