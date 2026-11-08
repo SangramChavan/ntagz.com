@@ -8,7 +8,7 @@
 .pn-body { padding: 16px 20px 0; overflow: auto; flex: 1; display: grid; gap: 4px; align-content: start; }
 .pn-sec { border-top: 1px solid var(--line); padding: 14px 0 6px; margin-top: 10px; }
 .pn-sec h3 { margin: 0 0 8px; font-size: 14px; }
-.pn-dl { display: grid; gap: 0; margin: 0; }
+.pn-dl { display: grid; grid-template-columns: 1fr; gap: 0; margin: 0; } /* style.css sets dl to 110px 1fr; each row is its own grid, so the list must be one column */
 .pn-dl > div { display: grid; grid-template-columns: 8.5rem 1fr; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); }
 .pn-dl dt { color: var(--ink2); font-size: 13px; }
 .pn-dl dd { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
