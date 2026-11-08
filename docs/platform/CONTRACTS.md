@@ -157,6 +157,15 @@ A staff member needs `settings.manage` or `staff.manage` before MFA is required 
 
 ## Change log
 - v0.1 initial.
+- v0.3 (apply/approval API implemented; migration 0023):
+  - **Approving** an application needs `partners.activate` (HQ only). Operations and Regional can start review, request documents and reject, but cannot approve.
+  - Approval creates the `partners` row (Partner ID `NTZ-<TYPE>-<nnnn>`, status `agreement_pending`) and a pending agreement, and grants **no** access. Order is fixed: `agreement_pending → payment_pending → onboarding → active`.
+  - Joining fees go in their own table `partner_fee_payments` (unique reference). Amount must be at least the type's `fee_paise`. HQ records agreement and payment for now.
+  - Partner role is granted only by `activate`, and revoked access comes from suspending the partner (sessions with `portal='partner'` are revoked at once) or the user.
+  - Partner-portal sessions: cookie `__Host-ntagz_partner`, 12 h, `sessions.id` = SHA-256 of the token, `portal='partner'`. Login: `POST /api/v1/auth/otp/send|verify`, `POST /api/v1/auth/logout`.
+  - Documents are uploaded **through the Worker** (`POST /api/v1/partner/documents`, body = file, header `X-Doc-Type`), max 5 MB, PDF/PNG/JPEG decided by file bytes, stored in a private bucket under random keys. HQ opens them via `/api/v1/admin/partner-documents/:id` (no-store, sandboxed, audited).
+  - Mutating requests need `X-Requested-With: ntagz` **and** a matching `Origin` (missing Origin is rejected).
+  - Admin routes live under `/api/v1/admin/` inside the admin Worker, behind its existing session and CSRF checks; the allowlist maps to `hq_admin` until staff roles move to the unified identity.
 - v0.2 (migrations 0021/0022 implemented):
   - Added permission `territories.read` (HQ, Operations, Regional=region). `territories.manage` stays HQ only. This makes "Regional: view" in the matrix explicit.
   - `audit_log` gains nullable `entity_type`, `entity_id` (order rows keep `order_id`). New code writes through `auditStmt` in `packages/platform-core`.

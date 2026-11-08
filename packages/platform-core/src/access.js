@@ -50,3 +50,14 @@ export function scopeClause(scope, access, { ownColumn, regionColumn }) {
   if (scope === 'region' && regionColumn && access.region) return { sql: `${regionColumn} = ?`, binds: [access.region] };
   return { sql: '1=0', binds: [] };
 }
+
+// Access for staff who authenticate outside the users table (today: the admin Worker's ADMIN_EMAILS allowlist).
+// The allowlist maps to the given roles (default hq_admin) until staff move to the unified identity.
+export async function accessForRoles(db, actor, roleKeys = ['hq_admin']) {
+  const permissions = new Map();
+  for (const role of roleKeys) {
+    const rows = (await db.prepare('SELECT permission_key, scope FROM role_permissions WHERE role_key = ?').bind(role).all()).results;
+    for (const r of rows) { const have = permissions.get(r.permission_key); if (!have || RANK[r.scope] > RANK[have]) permissions.set(r.permission_key, r.scope); }
+  }
+  return { userId: actor, roles: roleKeys, permissions, partnerId: null, region: null, staff: true };
+}
