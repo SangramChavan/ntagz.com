@@ -3,6 +3,7 @@ import { loadAccess, accessForRoles } from './access.js';
 import { requestOtp, verifyOtp, sessionUser, revokeSession } from './auth.js';
 import * as apps from './applications.js';
 import * as review from './review.js';
+import { flushOutbox } from './mail.js';
 
 const COOKIE = '__Host-ntagz_partner';
 const PARTNER_SESSION_TTL = 12 * 3600;
@@ -40,7 +41,15 @@ async function sendOtpEmail(env, email, code) {
 const sessionCookie = (token, maxAge) => `${COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
 
 // ---------------------------------------------------------------- partner.ntagz.com
-export async function partnerRouter(request, env) {
+// Sends queued emails after a successful change. With a Worker `ctx` it runs after the response; the action never waits on, or fails because of, email.
+function flushLater(env, ctx) { const p = flushOutbox(env, { limit: 5 }); if (ctx && ctx.waitUntil) { ctx.waitUntil(p); return undefined; } return p; }
+
+export async function partnerRouter(request, env, ctx) {
+  const res = await partnerRouterInner(request, env);
+  if (request.method !== 'GET' && request.method !== 'HEAD' && res.status < 400) await flushLater(env, ctx);
+  return res;
+}
+async function partnerRouterInner(request, env) {
   const requestId = crypto.randomUUID();
   const url = new URL(request.url); const path = url.pathname; const method = request.method;
   try {
@@ -74,7 +83,7 @@ export async function partnerRouter(request, env) {
       if (method === 'GET') return withHeaders(ok(await apps.getMine(env.DB, access)));
       if (method === 'PUT') return withHeaders(ok(await apps.saveDraft(env.DB, access, await readJson(request), env)));
     }
-    if (method === 'POST' && path === '/api/v1/partner/applications/mine/submit') return withHeaders(ok(await apps.submit(env.DB, access)));
+    if (method === 'POST' && path === '/api/v1/partner/applications/mine/submit') return withHeaders(ok(await apps.submit(env.DB, access, env)));
     if (method === 'POST' && path === '/api/v1/partner/documents') {
       if (!env.KYC) throw new AppError('INTERNAL');
       const len = Number(request.headers.get('content-length') || 0);
@@ -96,7 +105,12 @@ export async function partnerRouter(request, env) {
 
 // ---------------------------------------------------------------- admin.ntagz.com (called after the admin Worker's own auth + CSRF)
 // `actor` is the allowlisted admin email; body is already parsed by the admin Worker.
-export async function adminV1(request, env, actor, body) {
+export async function adminV1(request, env, actor, body, ctx) {
+  const res = await adminV1Inner(request, env, actor, body);
+  if (request.method === 'POST' && res.status < 400) await flushLater(env, ctx);
+  return res;
+}
+async function adminV1Inner(request, env, actor, body) {
   const requestId = crypto.randomUUID();
   const url = new URL(request.url); const path = url.pathname; const method = request.method;
   try {

@@ -12,7 +12,8 @@ import * as INTLADM from "./intl-admin.js"; // international orders: quotations,
 import { membershipRoute, tick as membershipTick } from "./membership.js"; // Rewards Membership admin (/api/points, /api/members)
 import { crmRoute, crmScheduled, crmWebhook } from "./crm/index.js"; // Customers / CRM (all under /api/crm/)
 import { payLinkRoute } from "./paylinks.js"; // payment links: create, track, remind (under /api/paylinks)
-import { adminV1 } from "../../packages/platform-core/src/http.js"; // partner network: applications, approvals, activation (under /api/v1/admin/)
+import { adminV1 } from "../../packages/platform-core/src/http.js";
+import { flushOutbox } from "../../packages/platform-core/src/mail.js"; // partner emails: sent after changes, retried here every 15 min // partner network: applications, approvals, activation (under /api/v1/admin/)
 
 const SESSION_TTL = 12 * 3600;
 const OTP_TTL = 600;
@@ -1262,8 +1263,8 @@ const PUBLIC_ASSETS = { "/style.css": "/style.css", "/login.js": "/login.js", "/
 const CRM_ASSETS = new Set(["/customers.js", "/crm-analytics.js", "/crm-campaigns.js", "/crm.css", "/membership.js", "/paylinks.js", "/partners.js", "/partners.css"]); // served only to signed-in admins
 
 export default {
-  async scheduled(_event, env, ctx) { ctx.waitUntil(Promise.all([crmScheduled(env), membershipTick(env).catch((e) => console.error('membership tick failed:', e && e.message))])); },
-  async fetch(request, env) {
+  async scheduled(_event, env, ctx) { ctx.waitUntil(Promise.all([crmScheduled(env), membershipTick(env).catch((e) => console.error('membership tick failed:', e && e.message)), flushOutbox(env, { limit: 25 })])); },
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
     const method = request.method;
@@ -1311,7 +1312,7 @@ export default {
         return json({ ok: true }, 200, { "Set-Cookie": `${COOKIE}=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0` });
       }
       if (method === "GET" && path === "/api/me") return json({ email: actor });
-      if (path.startsWith("/api/v1/admin/")) return await adminV1(request, env, actor, body); // own envelope; already behind session + CSRF above
+      if (path.startsWith("/api/v1/admin/")) return await adminV1(request, env, actor, body, ctx); // own envelope; already behind session + CSRF above
       if (method === "GET" && path === "/api/orders") return await listOrders(url.searchParams, env);
       if (method === "GET" && path === "/api/orders.csv") return await exportCsv(url.searchParams, env);
 

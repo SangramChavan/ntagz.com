@@ -3,3 +3,4 @@ export { loadAccess, accessForRoles, requirePermission, scopeClause } from './ac
 export { auditStmt } from './audit.js';
 export * as validate from './validate.js';
 export { partnerRouter, adminV1 } from './http.js';
+export { queueEmail, flushOutbox, render as renderEmail, TEMPLATES } from './mail.js';
