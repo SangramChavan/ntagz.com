@@ -157,3 +157,12 @@ A staff member needs `settings.manage` or `staff.manage` before MFA is required 
 
 ## Change log
 - v0.1 initial.
+- v0.2 (migrations 0021/0022 implemented):
+  - Added permission `territories.read` (HQ, Operations, Regional=region). `territories.manage` stays HQ only. This makes "Regional: view" in the matrix explicit.
+  - `audit_log` gains nullable `entity_type`, `entity_id` (order rows keep `order_id`). New code writes through `auditStmt` in `packages/platform-core`.
+  - `users` gains `status` (NULL means active), `phone_verified_at`, `last_login_at`.
+  - Partner applications store **no raw PAN**: `pan_last4` plus `pan_hash` (HMAC with a Worker secret) for duplicate detection. The document image sits in the private R2 bucket.
+  - `partner_types.gst_rate_bp` is NULL until the owner decides GST treatment of joining fees (O5). Nothing is guessed.
+  - One open application per person is enforced by a partial unique index. A rejected one can be followed by a new one.
+  - Partner roles grant nothing until `partners.status = 'active'`. Suspending a user or partner removes access on the next request.
+  - Scope semantics: handlers receive `all`, `region` or `own` from `requirePermission` and must apply it with `scopeClause` in the SQL WHERE.
