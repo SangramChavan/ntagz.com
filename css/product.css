@@ -278,3 +278,25 @@
       text-align: center; padding: 28px; font-family: var(--ff-head); font-size: 14px; font-weight: 600;
       color: var(--ink-3); background: var(--warm); line-height: 1.5;
     }
+
+    /* ── BREADCRUMBS ── */
+    .prod-crumbs { font-size: 13px; color: var(--ink-3); margin: 20px 0 0; }
+    .prod-crumbs a { color: var(--ink-3); text-decoration: none; }
+    .prod-crumbs a:hover { color: var(--ink); text-decoration: underline; }
+    .prod-crumbs [aria-current="page"] { color: var(--ink); font-weight: 600; }
+
+    /* ── SIZE PICKER: keep each option's button reachable on small phones ── */
+    @media (max-width: 480px) {
+      .size-opt .so-right { width: 100%; justify-content: space-between; }
+      .size-opt .so-price { font-size: 17px; }
+    }
+    .size-opt .so-right .btn-sm { min-height: 40px; }
+
+    /* ── CLOSING CTA (replaces inline styles) ── */
+    .prod-closing {
+      text-align: center; background: var(--warm);
+      border-radius: var(--r-lg); padding: 40px 24px;
+    }
+    .prod-closing h2 { margin-bottom: 8px; }
+    .prod-closing p { margin-bottom: 20px; }
+    .prod-cta-center { justify-content: center; }
