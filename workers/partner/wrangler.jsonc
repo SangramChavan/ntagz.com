@@ -1,0 +1,11 @@
+{
+  // NOT DEPLOYED. No routes or custom domain until the owner approves (see docs/platform/CUTOVER-PLAN.md style gating).
+  // Shares the production D1 with the other Workers, so apply migrations 0021-0023 (additive) before any deploy.
+  // Secrets (never committed): PAN_HASH_SECRET, RESEND_API_KEY. Bucket `ntagz-kyc` must be PRIVATE (no public access, no custom domain).
+  "name": "ntagz-partner",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-08",
+  "workers_dev": false,
+  "d1_databases": [{ "binding": "DB", "database_name": "ntagz-db", "database_id": "51216708-c501-49ce-a068-5b8854893e74" }],
+  "r2_buckets": [{ "binding": "KYC", "bucket_name": "ntagz-kyc" }]
+}
