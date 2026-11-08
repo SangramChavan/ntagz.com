@@ -18,8 +18,11 @@
       "migrations_dir": "migrations"
     }
   ],
+  // Private bucket for partner KYC documents (created 2026-11-08, no public URL, no custom domain). HQ opens files through /api/v1/admin/partner-documents/:id only.
+  "r2_buckets": [{ "binding": "KYC", "bucket_name": "ntagz-kyc" }],
   "vars": { "ENVIRONMENT": "production" },
   "triggers": { "crons": ["*/15 * * * *"] }, // CRM: due campaigns, automated journeys, data-retention purge
   "routes": [{ "pattern": "admin.ntagz.com", "custom_domain": true }]
   // Secrets (never committed):  wrangler secret put ADMIN_EMAILS | RESEND_API_KEY
+  // Optional: HQ_NOTIFY_EMAILS (inboxes that get "new partner application"), PARTNER_URL / ADMIN_URL (link bases in emails)
 }

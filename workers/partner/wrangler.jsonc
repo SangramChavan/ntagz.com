@@ -1,12 +1,13 @@
 {
-  // NOT DEPLOYED. No routes or custom domain until the owner approves (see docs/platform/CUTOVER-PLAN.md style gating).
-  // Shares the production D1 with the other Workers, so apply migrations 0021-0023 (additive) before any deploy.
-  // Build the UI first: `npm --prefix apps/partner-portal ci && npm --prefix apps/partner-portal run build`.
-  // Secrets (never committed): PAN_HASH_SECRET, RESEND_API_KEY. Bucket `ntagz-kyc` must be PRIVATE (no public access, no custom domain).
+  // partner.ntagz.com: the partner portal (static build) + /api/v1. Shares the production D1 with the other Workers.
+  // Deploy: `npm --prefix apps/partner-portal ci && npm --prefix apps/partner-portal run build`, then `npx wrangler deploy -c workers/partner/wrangler.jsonc`.
+  // Secrets (never committed): PAN_HASH_SECRET (required), RESEND_API_KEY (sign-in codes + emails). Optional vars: HQ_NOTIFY_EMAILS, PARTNER_URL, ADMIN_URL.
+  // Bucket `ntagz-kyc` is PRIVATE: no r2.dev URL, no custom domain. Never enable either.
   "name": "ntagz-partner",
   "main": "src/index.js",
   "compatibility_date": "2026-10-08",
   "workers_dev": false,
+  "routes": [{ "pattern": "partner.ntagz.com", "custom_domain": true }],
   "assets": {
     "directory": "../../apps/partner-portal/dist",
     "binding": "ASSETS",
