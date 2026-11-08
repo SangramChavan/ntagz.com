@@ -1596,9 +1596,9 @@
     /* The desktop .product-meta rule changes all product cards to a row.
        This card has 4 children, so keep its pricing and actions inside the card. */
     .product-meta.dual-price-meta {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto auto;
-      align-items: center;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
       gap: 12px;
       width: 100%;
     }
@@ -1624,31 +1624,8 @@
     }
 
     .dual-price-meta .add-btn {
-      width: 110px;
-      min-width: 110px;
-      white-space: nowrap;
+      width: 100%;
       margin-right: 0 !important;
-    }
-
-    @media (max-width: 599px) {
-      .product-meta.dual-price-meta {
-        display: flex;
-        flex-direction: column;
-        align-items: stretch;
-      }
-
-      .dual-price-meta .price-options {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-
-      .dual-price-meta .price-gst {
-        white-space: normal;
-      }
-
-      .dual-price-meta .add-btn {
-        width: 100%;
-        min-width: 0;
-      }
     }
 
     /* ── CUSTOM REQUEST / "NOT LISTED" CARD ── */
