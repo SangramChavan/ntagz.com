@@ -573,6 +573,12 @@ async function handleMembership(url, request, env, allowedOrigin) {
 
 // ── Accounts handler ──────────────────────────────────────────────────────────
 
+// A customer's saved addresses, default first. One query for both /accounts/me (checkout prefill) and /accounts/addresses (account page).
+async function listAddresses(env, userId) {
+  const { results } = await env.DB.prepare("SELECT id,label,name,phone,line1,city,state,pincode,is_default FROM addresses WHERE user_id=? ORDER BY is_default DESC, created_at DESC").bind(userId).all();
+  return results || [];
+}
+
 async function handleAccounts(url, request, env, allowedOrigin) {
   if (!env.DB) return new Response(JSON.stringify({ error: "Database not configured" }), { status: 503, headers: { "Content-Type": "application/json" } });
 
@@ -644,11 +650,7 @@ async function handleAccounts(url, request, env, allowedOrigin) {
     const u = await getSession(request, env);
     if (!u) return jsonAuth({ error: "Not authenticated" }, 401, allowedOrigin);
     let addresses = [];
-    try {
-      const result = await env.DB.prepare("SELECT id,label,name,phone,line1,city,state,pincode,is_default FROM addresses WHERE user_id=? ORDER BY is_default DESC, created_at DESC")
-        .bind(u.user_id).all();
-      addresses = result.results || [];
-    } catch { /* legacy account DB before saved-address migration */ }
+    try { addresses = await listAddresses(env, u.user_id); } catch { /* legacy account DB before saved-address migration */ }
     return jsonAuth({ user: { email: u.email, name: u.name, phone: u.phone, gstin: u.gstin }, addresses }, 200, allowedOrigin);
   }
 
@@ -662,6 +664,13 @@ async function handleAccounts(url, request, env, allowedOrigin) {
     await env.DB.prepare("UPDATE users SET name=COALESCE(?,name), phone=COALESCE(?,phone), gstin=COALESCE(?,gstin) WHERE id=?")
       .bind(name, phone, gstin, u.user_id).run();
     return jsonAuth({ ok: true }, 200, allowedOrigin);
+  }
+
+  // GET /api/accounts/addresses: still used by the account page's Saved Addresses panel (account/index.html)
+  if (method === "GET" && path.endsWith("/accounts/addresses")) {
+    const u = await getSession(request, env);
+    if (!u) return jsonAuth({ error: "Not authenticated" }, 401, allowedOrigin);
+    return jsonAuth({ addresses: await listAddresses(env, u.user_id) }, 200, allowedOrigin);
   }
 
   // POST /api/accounts/addresses
