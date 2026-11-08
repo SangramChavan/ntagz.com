@@ -36,6 +36,13 @@
 - Analytics: the seven `partner_*` events are accepted, but first-party tracking is switched **off** in settings (`/api/ev/config` answers `enabled:false`), so nothing is recorded until the owner turns it on and visitors consent.
 - Rollback: partner `npx wrangler rollback 7bb5769e-797c-4e03-9d24-eecb84dc13fe --name ntagz-partner`; admin `cd admin && npx wrangler rollback 08af91ec-461c-4422-9419-b2099f235b9a`; payments `npx wrangler rollback f7d7c68c-0915-4ed8-ba7a-e08e072cb7ea -c wrangler.payment.toml`. Page: revert PR #62.
 
+## Wholesale and stock credit (deployed 2026-11-08, PR #65)
+- Migrations 0029 and 0030 applied to production D1. Restore point taken before: `00001061-00000000-0000511d-9c3a1421a92ceb6b3c981c60b2f9f4f9`.
+- `ntagz-admin` `afa33e18-515e-4b46-aef2-dc5fd2f3bf38`; `ntagz-partner` `91a83274-229b-4196-a822-066a077b1616`; `ntagz-payments` `524c3298-f3ea-4e35-be72-f512658e7e05` (from main `db0198b`).
+- Smoke test signed out: wholesale partner and admin APIs answer 401, admin script 404, portal bundle contains the Wholesale page. Not yet exercised signed in.
+- Nothing is seeded: partners get no wholesale price until HQ sets a band per type, the minimum margin (admin > Wholesale) and product costs (admin > Products).
+- Rollback: admin `cd admin && npx wrangler rollback 1a0c0311-db92-4815-a297-310489961bbf`; partner `npx wrangler rollback f374688e-5819-40b0-834c-3d5c44281f5a --name ntagz-partner`; payments `npx wrangler rollback 9074fef7-64be-4f91-acba-b75e21a26af2 -c wrangler.payment.toml`. New tables/columns stay; older code ignores them.
+
 ## Rollback
 - Admin back one step (without Quotes): `cd admin && npx wrangler rollback c27c23e0-3b0a-4170-898e-e3e5c001ddf6` (the new tables stay; older code ignores them). Further back: `cf775972-bda6-4263-894b-e01eb2425fad` (without Leads), `7cfb6ef2-0fb5-4fe3-a622-7ba45522a04d` (before the partner platform).
 - Partner portal back one step (without Quotes): `npx wrangler rollback 34d91dbe-b1e6-4963-b6ac-a0f038b3c096 --name ntagz-partner`. Further back: `62d2ca15-a8f6-42e9-9c5f-dbd883b2ad25` (without Leads).
