@@ -63,6 +63,7 @@ header .btn { white-space:nowrap; min-height:40px; padding:0 12px; }
 .inl-wrap { display:inline-flex; align-items:center; gap:4px; } .inl-wrap > span { color:var(--ink2); }
 .ptable .inl { width:104px; } .ptable .inl.stock { width:84px; }
 .card .editrow { display:flex; gap:10px; margin:10px 0 2px; } .card .editrow label { flex:1; font-size:12px; color:var(--ink2); display:grid; gap:4px; }
+.card .editrow label.wh-pct { flex:0 0 auto; } .wh-pct input { width:110px; min-height:40px; }
 #toast { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); max-width:min(92vw,420px); padding:12px 18px; border-radius:14px; background:var(--ink); color:var(--bg); font-size:14px; z-index:50; }
 #toast.err { background:var(--bad); }
 

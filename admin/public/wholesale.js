@@ -46,10 +46,11 @@ function whPrices() {
   }
   out.push(el("h2", { class: "h0" }, "Discount band per partner type"));
   for (const t of c.types) {
-    const inp = el("input", { type: "number", min: "0", max: "90", step: "0.01", inputmode: "decimal", value: t.discountBp === null ? "" : String(t.discountBp / 100), "aria-label": `${t.label} discount in percent` });
+    const inp = el("input", { type: "number", min: "0", max: "90", step: "0.01", inputmode: "decimal", placeholder: "e.g. 10", value: t.discountBp === null ? "" : String(t.discountBp / 100), "aria-label": `${t.label} discount in percent` });
+    const pct = el("label", { class: "wh-pct" }, el("span", {}, "Discount %"), inp);
     out.push(el("div", { class: "card" }, el("div", { class: "row" }, el("span", { class: "id" }, t.label), t.canOrder ? el("span", { class: "pill paid" }, "Can order") : el("span", { class: "pill unpaid" }, "Cannot order (no ordering permission)")),
       el("div", { class: "sub" }, `Opening stock order ${whMoney(t.openingPaise)} · discount ${whPct(t.discountBp)}`),
-      el("div", { class: "editrow" }, inp,
+      el("div", { class: "editrow" }, pct,
         el("button", { class: "btn primary", type: "button", onclick: () => { const v = inp.value.trim(); whSave("/api/v1/admin/wholesale/bands", { partnerType: t.key, discountBp: v === "" ? null : Math.round(Number(v) * 100) }, "Band saved"); } }, "Save"),
         el("button", { class: "btn", type: "button", onclick: () => whSave("/api/v1/admin/wholesale/bands", { partnerType: t.key, discountBp: null }, "Band cleared") }, "Clear"))));
   }
