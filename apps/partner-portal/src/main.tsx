@@ -7,6 +7,8 @@ import { SignIn } from './pages/SignIn';
 import { Apply } from './pages/Apply';
 import { Status } from './pages/Status';
 import { Dashboard } from './pages/Dashboard';
+import { Leads } from './pages/Leads';
+import { LeadDetail } from './pages/LeadDetail';
 import type { Me, Mine } from './types';
 
 type Boot = { s: 'loading' } | { s: 'out' } | { s: 'in'; me: Me; mine: Mine | null } | { s: 'error'; msg: string };
@@ -47,6 +49,7 @@ function App() {
       else if (path === '/dashboard' && !active) navigate(h, true);
       else if (path === '/apply' && (active || !editable)) navigate(h, true);
       else if (path === '/status' && (active || !b.mine?.application)) navigate(h, true);
+      else if (path.startsWith('/leads') && !(active && b.me.permissions.includes('leads.manage.own'))) navigate(h, true);
     }
   }, [b, path]);
 
@@ -54,6 +57,12 @@ function App() {
     <>
       <header class="top"><div class="top-in">
         <span class="brand">ntagz <b>Partner</b></span>
+        {b.s === 'in' && b.me.partner?.status === 'active' && (
+          <nav class="subnav" aria-label="Partner sections">
+            <a href="/dashboard" aria-current={path === '/dashboard' ? 'page' : undefined} onClick={(e) => { e.preventDefault(); navigate('/dashboard'); }}>Overview</a>
+            {b.me.permissions.includes('leads.manage.own') && <a href="/leads" aria-current={path.startsWith('/leads') ? 'page' : undefined} onClick={(e) => { e.preventDefault(); navigate('/leads'); }}>Leads</a>}
+          </nav>
+        )}
         {b.s === 'in' && <span class="who"><span>{b.me.email}</span><button class="link-btn" onClick={() => void signOut()}>Sign out</button></span>}
       </div></header>
       <main>
@@ -63,6 +72,8 @@ function App() {
         {b.s === 'in' && path === '/apply' && <Apply initial={b.mine} onSubmitted={async () => { await load(); navigate('/status'); }} />}
         {b.s === 'in' && path === '/status' && b.mine && <Status mine={b.mine} onRefresh={() => void load()} onEdit={() => navigate('/apply')} onNew={async () => { await api.save({}).catch(() => null); navigate('/apply'); }} />}
         {b.s === 'in' && path === '/dashboard' && <Dashboard me={b.me} />}
+        {b.s === 'in' && path === '/leads' && <Leads />}
+        {b.s === 'in' && /^\/leads\/[0-9a-f-]{36}$/.test(path) && <LeadDetail id={path.slice(7)} key={path} />}
       </main>
     </>
   );

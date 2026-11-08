@@ -3,6 +3,7 @@ import { loadAccess, accessForRoles } from './access.js';
 import { requestOtp, verifyOtp, sessionUser, revokeSession } from './auth.js';
 import * as apps from './applications.js';
 import * as review from './review.js';
+import * as leads from './leads.js';
 import { flushOutbox } from './mail.js';
 
 const COOKIE = '__Host-ntagz_partner';
@@ -96,6 +97,16 @@ async function partnerRouterInner(request, env) {
       const p = await env.DB.prepare('SELECT partner_code, type_key, status, business_name, activated_at FROM partners WHERE id = ? AND user_id = ?').bind(access.partnerId, access.userId).first();
       return withHeaders(ok({ partner: p, permissions: [...access.permissions.keys()] }));
     }
+    let m;
+    if (path === '/api/v1/partner/leads') {
+      if (method === 'GET') return withHeaders(ok(await leads.listMine(env.DB, access, { status: url.searchParams.get('status') || undefined, q: url.searchParams.get('q') || undefined })));
+      if (method === 'POST') return withHeaders(ok(await leads.createLead(env.DB, access, await readJson(request)), {}, 201));
+    }
+    if ((m = path.match(/^\/api\/v1\/partner\/leads\/([0-9a-f-]{36})(\/activity|\/status)?$/))) {
+      if (method === 'GET' && !m[2]) return withHeaders(ok(await leads.getMine(env.DB, access, m[1])));
+      if (method === 'POST' && m[2] === '/activity') return withHeaders(ok(await leads.addActivityMine(env.DB, access, m[1], await readJson(request))));
+      if (method === 'POST' && m[2] === '/status') return withHeaders(ok(await leads.setStatusMine(env.DB, access, m[1], await readJson(request))));
+    }
     throw new AppError('NOT_FOUND', 'Not found');
   } catch (e) {
     if (!(e instanceof AppError)) console.error('partner api error', requestId, e && e.message);
@@ -137,6 +148,14 @@ async function adminV1Inner(request, env, actor, body) {
       if (m[2] === 'activate') return ok(await review.activate(env.DB, access, id));
       if (m[2] === 'suspend') return ok(await review.suspend(env.DB, access, id, body.reason));
       return ok(await review.reinstate(env.DB, access, id));
+    }
+    if (method === 'GET' && path === '/api/v1/admin/leads') return ok(await leads.listAll(env.DB, access, { status: url.searchParams.get('status') || undefined, partnerId: url.searchParams.get('partnerId') || undefined, q: url.searchParams.get('q') || undefined }));
+    if (method === 'GET' && path === '/api/v1/admin/active-partners') return ok(await leads.activePartners(env.DB, access));
+    if ((m = path.match(/^\/api\/v1\/admin\/leads\/([0-9a-f-]{36})(\/assign|\/status|\/note)?$/))) {
+      if (method === 'GET' && !m[2]) return ok(await leads.getAny(env.DB, access, m[1]));
+      if (method === 'POST' && m[2] === '/assign') return ok(await leads.assign(env.DB, access, m[1], body.partnerId));
+      if (method === 'POST' && m[2] === '/status') return ok(await leads.setStatusHq(env.DB, access, m[1], { status: body.status, reason: body.reason, orderId: body.orderId }));
+      if (method === 'POST' && m[2] === '/note') return ok(await leads.addNoteHq(env.DB, access, m[1], body.body));
     }
     throw new AppError('NOT_FOUND', 'Not found');
   } catch (e) {

@@ -70,7 +70,14 @@ Legend: ☐ not started · ◐ in progress · ✔ done and tested · ⛔ blocked
 
 ## Stage 3: P1
 
-Leads, quotations, partner price lists, inventory per partner, commission engine, settlements, territories, service jobs, shipment tracking APIs.
+| Item | Owner | Status |
+|---|---|---|
+| **Leads**: partner registers prospects (one open lead per phone network-wide), works them (notes, calls, visits, contacted/qualified/lost), HQ sees all, reassigns, moves to quotation, marks won **with its order** or lost. Migration 0025, API, partner portal screens, admin Leads tab, 54 backend checks + 2 browser tests | Backend + Portal + HQ admin | ✔ built and tested; **not deployed** (needs migration 0025 on the live DB + admin/partner redeploy) |
+| Quotations (the `quotation` lead status is already reserved) | Backend + Portal + HQ admin | ☐ next |
+| Partner price lists and wholesale ordering, inventory per partner | Backend | ☐ |
+| Commission engine, settlements (will attach `partner_id`/`lead_id` to orders; won leads already carry the order) | Backend | ☐ |
+| Territories (PIN-to-region map; also enables Regional Manager scope, which fails closed today) | Backend | ☐ |
+| Service jobs, shipment tracking APIs | Backend | ☐ |
 
 ## Stage 4: P2
 
@@ -87,7 +94,7 @@ WhatsApp automation, advanced analytics, training management, regional warehouse
 
 ## Blockers and owner decisions
 
-O1 hosting confirmation and DNS cutover go · O2 Cloudflare access and staging approval · O3 SMS and WhatsApp providers · O4 storefront restyle approval · O5 commercial and legal decisions · O6 trademark check. Details in `PHASE0-REPORT.md` section 6.
+O1 hosting confirmation and DNS cutover go · O2 Cloudflare access and staging approval · O3 SMS and WhatsApp providers · O4 storefront restyle approval · O5 commercial and legal decisions (**decided 2026-11-08: no refund policy for partner joining fees; no refund flow is built and the portal does not say "non-refundable", since that wording is the owner's/legal's call. Still open: GST on joining fees, commission release window, TDS, KYC retention**) · O6 trademark check. Details in `PHASE0-REPORT.md` section 6.
 
 ## Live state
 See `LIVE.md`: partner platform deployed 2026-11-08 (migrations 0021-0024, admin redeploy, `partner.ntagz.com`). `ntagz.com` hosting is unchanged.
