@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { ADMIN, adminSignIn, activePartner, closePanels } from './helpers.mjs';
 
 // HQ sets the price list through the real Wholesale screen; an Enterprise partner orders at the partner price and the order is paid from the opening stock credit
-// (a gateway payment cannot be driven locally, so the part-payment path is covered by admin/stage2/test-wholesale.cjs). A Smile+ partner has credit but no ordering.
+// (a gateway payment cannot be driven locally, so the part-payment path is covered by admin/stage2/test-wholesale.cjs). A Smile+ partner has credit and can order.
 test('wholesale: HQ price list, partner orders from stock credit, Smile+ cannot order', async ({ browser }) => {
   const hq = await (await browser.newContext()).newPage();
   await adminSignIn(hq);
@@ -27,7 +27,7 @@ test('wholesale: HQ price list, partner orders from stock credit, Smile+ cannot 
   await ent.getByRole('button', { name: 'Save' }).click();
   await expect(hq.locator('#wholesale-root .card', { hasText: 'Ntagz Enterprise Partner' }).first()).toContainText('discount 30%');
   const plusCard = hq.locator('#wholesale-root .card', { hasText: 'Ntagz Smile+ Partner' }).first();
-  await expect(plusCard).toContainText('Cannot order'); // Smile+ has no ordering permission; HQ sees it plainly
+  await expect(plusCard).toContainText('Can order'); // Smile+ has orders.place.own (migration 0031)
 
   // The resulting price: card ₹30 retail, 30% off = ₹21, floor ₹10.80.
   await hq.getByRole('button', { name: 'Ntagz Enterprise Partner', exact: true }).last().click();

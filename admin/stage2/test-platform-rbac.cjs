@@ -61,7 +61,7 @@ const throws = async (fn, code) => { try { await fn(); } catch (e) { assert.equa
   const ent = await loadAccess(D1, "ent1"), sm = await loadAccess(D1, "sm1"), smp = await loadAccess(D1, "smp1");
   assert.equal(requirePermission(ent, "quotes.create"), "own"); await throws(() => requirePermission(sm, "quotes.create"), "FORBIDDEN"); ok("Enterprise can quote, Smile cannot");
   assert.equal(requirePermission(sm, "service_jobs.manage.own"), "own"); await throws(() => requirePermission(ent, "service_jobs.manage.own"), "FORBIDDEN"); ok("Smile has service jobs, Enterprise does not");
-  await throws(() => requirePermission(smp, "orders.place.own"), "FORBIDDEN"); assert.equal(requirePermission(smp, "leads.manage.own"), "own"); ok("Smile+ has leads but no wholesale ordering");
+  assert.equal(requirePermission(smp, "orders.place.own"), "own"); assert.equal(requirePermission(smp, "leads.manage.own"), "own"); ok("Smile+ has leads and wholesale ordering (migration 0031)");
 
   // ---- staff ----
   user("hq"); grant("hq", "hq_admin"); user("fin"); grant("fin", "finance"); user("reg"); grant("reg", "regional");

@@ -104,10 +104,10 @@ global.fetch = async (url, opts) => {
   // ---- isolation and permissions ----
   const flex = await mkPartner("pf", "flex", "partner_flex"); await W.setBand(D1, hq, { partnerType: "flex", discountBp: 1500 });
   assert.equal((await W.listMine(D1, flex)).items.length, 0); ok("another partner's orders are not listed");
-  const plus = await mkPartner("pp", "smile_plus", "partner_smile_plus"); assert.equal((await W.adminPartners(D1, hq)).items.find((p) => p.id === "pp").canOrder, false);
-  await rej(W.catalogue(D1, plus), "FORBIDDEN"); await rej(W.placeOrder(D1, plus, { ...addr, items: cart("black-nfc-card", 10) }), "FORBIDDEN"); assert.equal((await W.balance(D1, "pp")).availablePaise, 1999900); ok("Smile+ has credit but no orders.place.own: refused (HQ list says it cannot order)");
+  const plus = await mkPartner("pp", "smile_plus", "partner_smile_plus"); assert.equal((await W.adminPartners(D1, hq)).items.find((p) => p.id === "pp").canOrder, true);
+  await W.catalogue(D1, plus); assert.equal((await W.balance(D1, "pp")).availablePaise, 1999900); ok("Smile+ has credit and orders.place.own (migration 0031): catalogue opens, HQ list says it can order");
   run("INSERT INTO user_roles (id, user_id, role_key, granted_by) VALUES (?, 'u-pp', 'customer', 'test')", crypto.randomUUID()); const plusC = await loadAccess(D1, "u-pp");
-  assert.ok(plusC.permissions.has("orders.place.own")); await rej(W.catalogue(D1, plusC), "FORBIDDEN"); assert.equal(await W.canOrder(D1, plusC), false); assert.equal(await W.canOrder(D1, ent), true); ok("a Smile+ partner who also holds the generic customer role (which carries orders.place.own) still cannot order");
+  assert.ok(plusC.permissions.has("orders.place.own")); await W.catalogue(D1, plusC); assert.equal(await W.canOrder(D1, plusC), true); assert.equal(await W.canOrder(D1, ent), true); ok("a Smile+ partner who also holds the generic customer role can order");
   await rej(W.catalogue(D1, { ...ent, permissions: new Map() }), "FORBIDDEN"); await rej(W.catalogue(D1, await accessForRoles(D1, "x@example.test", ["customer"])), "FORBIDDEN"); ok("no permission, or a customer without a partner record: refused");
 
   // ---- partial payment: credit reserved on a pay link ----
