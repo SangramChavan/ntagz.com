@@ -23,8 +23,8 @@ Legend: ☐ not started · ◐ in progress · ✔ done and tested · ⛔ blocked
 | Repair `admin/test/products.mjs` (expects 17 products; migration 0017 made it 18) so `admin/test/run-all.sh` passes on main | DevOps | none | ☐ |
 | Widen CI: seo, schema, pricing, links, site, admin suite | DevOps | repair above | ☐ |
 | `packages/platform-core`: errors, validators, audit, `loadAccess`/`requirePermission`/`scopeClause` | Backend + Auth | contracts | ✔ (47 tests, `admin/stage2/test-platform-rbac.cjs`) |
-| Migration 0021: roles, permissions, role_permissions, user_roles, login_attempts, users status columns, audit_log entity columns + seed | Backend | contracts | ✔ applied on local D1 only; **not applied to remote** |
-| Migration 0022: partner_types (5 seeded), partners, partner_applications, partner_documents, partner_agreements | Backend | 0021 | ✔ applied on local D1 only; **not applied to remote** |
+| Migration 0021: roles, permissions, role_permissions, user_roles, login_attempts, users status columns, audit_log entity columns + seed | Backend | contracts | ✔ applied to the live D1 on 2026-11-08 |
+| Migration 0022: partner_types (5 seeded), partners, partner_applications, partner_documents, partner_agreements | Backend | 0021 | ✔ applied to the live D1 on 2026-11-08 |
 | Design tokens + base components in `packages/ui` | Design | contracts | ☐ |
 | `ntagz-site` Worker config and staging deploy | DevOps | owner O2 | ✔ staging live at workers.dev; cutover needs owner go (`CUTOVER-PLAN.md`) |
 | Staging D1 + test keys | DevOps | owner O2 | ⛔ |
@@ -34,10 +34,10 @@ Legend: ☐ not started · ◐ in progress · ✔ done and tested · ⛔ blocked
 | Item | Owner | Depends on | Status |
 |---|---|---|---|
 | Unified sessions and OTP hardening (per-IP limit, hashed session IDs, purge cron) | Auth | platform-core | ☐ |
-| Partner apply API (OTP login, draft, documents, submit) | Backend | 0022 | ✔ API only, tested (`test-partner-flow.cjs`); **no UI yet**, not deployed |
-| Partner apply UI (6-step wizard, document upload, status timeline, dashboard, sign-in) in `apps/partner-portal` | Partner portal | API above | ✔ built and clicked through on local D1 (phone + desktop width); not deployed. See README |
-| HQ approval API (list, review, approve, reject, request docs, agreement, fee, activate, suspend, reinstate) | Backend | 0022, 0023 | ✔ API only, wired into admin Worker under `/api/v1/admin/`, tested on real local D1; not deployed |
-| HQ **Partners** screen in the admin UI: queue with stage chips and counts, search, detail panel (applicant, documents, onboarding, history), start review / request documents / reject / approve / record agreement / record fee / activate / suspend / reinstate | HQ admin | API above | ✔ clicked through on a real local admin Worker + D1 + R2; not deployed |
+| Partner apply API (OTP login, draft, documents, submit) | Backend | 0022 | ✔ live (API + portal at partner.ntagz.com) |
+| Partner apply UI (6-step wizard, document upload, status timeline, dashboard, sign-in) in `apps/partner-portal` | Partner portal | API above | ✔ live at partner.ntagz.com (clicked through locally at phone and desktop width first) |
+| HQ approval API (list, review, approve, reject, request docs, agreement, fee, activate, suspend, reinstate) | Backend | 0022, 0023 | ✔ live in the admin Worker under `/api/v1/admin/` |
+| HQ **Partners** screen in the admin UI: queue with stage chips and counts, search, detail panel (applicant, documents, onboarding, history), start review / request documents / reject / approve / record agreement / record fee / activate / suspend / reinstate | HQ admin | API above | ✔ live in admin.ntagz.com (clicked through locally first) |
 | Partner ID issue, agreement and activation gates | Backend | above | ✔ (agreement and fee are recorded by HQ; e-sign and gateway fee payment are later) |
 | Partner login (email OTP, hashed sessions, per-IP limit) | Auth | platform-core | ✔ API (`/api/v1/auth/*` in `workers/partner`) |
 | Partner dashboard: profile + tier-specific list of what the partnership covers (no dead buttons) | Partner portal | auth, partners | ✔ minimal. Real modules (leads, orders, earnings...) are later tasks |
@@ -94,4 +94,4 @@ See `LIVE.md`: partner platform deployed 2026-11-08 (migrations 0021-0024, admin
 
 ## Known limitations
 
-Nothing in the new platform is built or deployed yet. No production changes have been made.
+Partner login, applications, HQ onboarding, portal and emails are live (see `LIVE.md`). Not yet built: leads, quotations, partner price lists, commissions, territories, service jobs, customer invoices, staff roles/MFA. `ntagz.com` is still on GitHub Pages. Email delivery to a real inbox is unconfirmed until the first real test. Per-step hosts and versions are in `LIVE.md`.
