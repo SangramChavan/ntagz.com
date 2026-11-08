@@ -105,3 +105,20 @@ ul.plain li { margin-bottom: var(--s2); }
 .edit-btn { background: none; border: 0; padding: 0 var(--s2); min-height: 44px; font: inherit; font-size: 0.875rem; color: var(--ink); text-decoration: underline; cursor: pointer; }
 
 .err:empty { display: none; }
+
+.subnav { display: flex; gap: var(--s1); }
+.subnav a { color: #fff; text-decoration: none; padding: 0 var(--s3); min-height: 44px; display: inline-flex; align-items: center; border-bottom: 3px solid transparent; font-size: 0.9375rem; }
+.subnav a[aria-current=page] { border-bottom-color: var(--accent); font-weight: 600; }
+.titlerow { display: flex; justify-content: space-between; align-items: center; gap: var(--s3); flex-wrap: wrap; }
+.titlerow h1 { margin: 0; overflow-wrap: anywhere; }
+.chiprow { display: flex; gap: var(--s2); overflow-x: auto; padding: 2px 0 var(--s3); }
+.chip { flex: none; min-height: 44px; padding: 0 var(--s4); border: 1px solid var(--line); border-radius: 99px; background: #fff; color: var(--ink); font: inherit; font-size: 0.875rem; cursor: pointer; white-space: nowrap; }
+.chip[aria-pressed=true] { background: var(--ink); border-color: var(--ink); color: #fff; }
+.leadlist { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s3); }
+.leadcard { width: 100%; text-align: left; display: grid; gap: 2px; padding: var(--s3) var(--s4); background: #fff; border: 1px solid var(--line); border-radius: var(--radius); font: inherit; color: var(--ink); cursor: pointer; min-height: 44px; }
+.leadtop { display: flex; justify-content: space-between; gap: var(--s3); align-items: flex-start; }
+.pill { display: inline-block; font-size: 0.75rem; font-weight: 700; padding: 2px 10px; border-radius: 99px; background: var(--surface); border: 1px solid var(--line); white-space: nowrap; }
+.pill.accent { border-color: var(--accent); }
+.pill.ok { background: #EEF8F2; border-color: var(--ok); color: var(--ok); }
+.pill.bad { background: #FDF1F0; border-color: var(--bad); color: var(--bad); }
+.backlink { background: none; border: 0; padding: 0; min-height: 44px; font: inherit; color: var(--ink); text-decoration: underline; cursor: pointer; }

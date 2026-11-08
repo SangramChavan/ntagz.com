@@ -1,4 +1,4 @@
-import type { DocType, FormExtras, Me, Mine, PartnerType } from './types';
+import type { DocType, FormExtras, Lead, LeadActivity, LeadCounts, LeadInput, LeadStatus, Me, Mine, PartnerType } from './types';
 
 export class ApiError extends Error {
   constructor(public code: string, message: string, public status: number, public fields: Record<string, string> = {}) { super(message); }
@@ -18,6 +18,7 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
   return body.data as T;
 }
+const qs = (o: Record<string, string | undefined>) => { const p = new URLSearchParams(); for (const [k, v] of Object.entries(o)) if (v) p.set(k, v); const s = p.toString(); return s ? '?' + s : ''; };
 const json = (method: string, body: unknown): RequestInit => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
 export interface DraftInput {
@@ -32,5 +33,10 @@ export const api = {
   mine: () => call<Mine>('/api/v1/partner/applications/mine'),
   save: (input: DraftInput) => call<Mine>('/api/v1/partner/applications/mine', json('PUT', input)),
   submit: () => call<Mine>('/api/v1/partner/applications/mine/submit', { method: 'POST' }),
+  leads: (status?: string, q?: string) => call<{ items: Lead[]; counts: LeadCounts }>('/api/v1/partner/leads' + qs({ status, q })),
+  lead: (id: string) => call<{ lead: Lead; activities: LeadActivity[] }>(`/api/v1/partner/leads/${id}`),
+  createLead: (input: LeadInput) => call<{ lead: Lead; activities: LeadActivity[] }>('/api/v1/partner/leads', json('POST', input)),
+  leadNote: (id: string, kind: 'note' | 'call' | 'visit', body: string) => call<{ lead: Lead; activities: LeadActivity[] }>(`/api/v1/partner/leads/${id}/activity`, json('POST', { kind, body })),
+  leadStatus: (id: string, status: LeadStatus, reason?: string) => call<{ lead: Lead; activities: LeadActivity[] }>(`/api/v1/partner/leads/${id}/status`, json('POST', { status, reason })),
   upload: (docType: DocType, file: File) => call<{ id: string; type: DocType }>('/api/v1/partner/documents', { method: 'POST', headers: { 'X-Doc-Type': docType, 'Content-Type': 'application/octet-stream' }, body: file }),
 };
