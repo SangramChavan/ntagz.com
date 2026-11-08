@@ -55,11 +55,55 @@ async function qtOpen(id) {
     ].filter(Boolean))),
     sec("Lines", el("ul", { class: "pn-docs" }, x.items.map((i) => el("li", {}, el("span", {}, `${i.qty.toLocaleString("en-IN")} × ${i.name}${i.bulkPct > 0 ? ` (${i.bulkPct}% qty discount)` : ""}`), el("b", {}, qtMoney(i.lineNetPaise))))),
       el("dl", { class: "pn-dl" }, [row("List price", qtMoney(x.subtotalPaise)), x.discountPaise > 0 ? row("Quantity discount", "−" + qtMoney(x.discountPaise)) : null, row("GST", qtMoney(x.gstPaise)), row("Shipping", x.shipState ? (x.shippingPaise > 0 ? qtMoney(x.shippingPaise) : "Free") : "Extra"), row("Total", qtMoney(x.totalPaise))].filter(Boolean))),
-    x.status === "accepted" ? sec("Next step", el("p", { class: "sub" }, "The customer accepted. To take the order: create a payment link for them in Pay links, then open the lead and mark it won with the order it produced."), el("a", { class: "btn small", href: "#/paylinks" }, "Open Pay links")) : "");
+    x.status === "accepted" ? sec("Payment", ...qtPay(x)) : "");
   dlg.replaceChildren(
     el("div", { class: "panel-head" }, el("h2", { id: "qttitle", class: "h0" }, x.number), el("button", { class: "btn small", type: "button", onclick: () => dlg.close() }, "Close")),
     body, el("div", { class: "panel-actions", id: "qtactions" }, qtActions(x)));
   if (!dlg.open) dlg.showModal();
+}
+
+// Accepted quotation -> payment link (the existing pay-links tool) -> paid order -> lead won. The payments Worker prices and collects; nothing here sets a price.
+const qtHours = () => (typeof PL_HOURS !== "undefined" ? PL_HOURS : [[24, "24 hours"], [72, "3 days"], [168, "7 days"]]);
+function qtPay(x) {
+  const pl = x.payLink; const kids = [];
+  if (pl && pl.status === "paid") {
+    kids.push(el("p", { class: "sub" }, `Paid. Order ${pl.paidOrderId.slice(0, 8)} · ${qtMoney(pl.paidTotalPaise)}. The lead is not won until you confirm it here.`));
+    const go = el("button", { class: "btn small primary", type: "button" }, "Mark lead won with this order");
+    go.onclick = async () => {
+      if (!(await ask("Mark the lead won?", [`${x.leadBusiness} will be won with order ${pl.paidOrderId.slice(0, 8)} (${qtMoney(pl.paidTotalPaise)}). The partner sees it as won. This cannot be undone.`], "Mark won"))) return;
+      go.disabled = true; try { await qtCall(`/api/v1/admin/leads/${x.leadId}/status`, { status: "won", orderId: pl.paidOrderId }); toast("Lead marked won"); await qtOpen(x.id); } catch (e) { toast(e.message, true); go.disabled = false; }
+    };
+    kids.push(go); return kids;
+  }
+  if (pl && !["cancelled", "expired"].includes(pl.status)) {
+    const state = { new: "Created, not sent yet", sent: "Sent, waiting for the customer", opened: "The customer opened it" }[pl.status] || pl.status;
+    const url = el("input", { id: "qturl", readonly: "readonly", value: pl.url, "aria-label": "Payment link" });
+    kids.push(el("p", { class: "sub" }, `${state}. Valid until ${qtDay(pl.expiresAt)}. The customer's page shows the exact amount and tells them if prices changed since the quotation.`), el("div", { class: "field" }, el("label", { for: "qturl" }, "Payment link"), url));
+    const copy = el("button", { class: "btn small", type: "button" }, "Copy link"); copy.onclick = async () => { try { await navigator.clipboard.writeText(pl.url); toast("Link copied"); } catch { toast("Copy failed. Select the link and copy it by hand.", true); } };
+    kids.push(copy);
+    if (typeof waHref === "function") { const first = String(x.customerName || "").trim().split(/\s+/)[0] || "there"; const href = waHref(x.customerPhone, `Hi ${first}, here is your payment link for Ntagz quotation ${x.number}: ${pl.url}\nThe link is valid until ${qtDay(pl.expiresAt)}.`); if (href) kids.push(el("a", { class: "btn small", href, target: "_blank", rel: "noopener" }, "Open WhatsApp")); }
+    kids.push(el("p", { class: "sub" }, "To cancel or extend this link, use Pay links."), el("a", { class: "btn small", href: "#/paylinks" }, "Open Pay links"));
+    return kids;
+  }
+  if (pl) kids.push(el("p", { class: "sub" }, `The previous payment link ${pl.status === "cancelled" ? "was cancelled" : "expired"}. Make a new one.`));
+  kids.push(el("p", { class: "sub" }, "The customer accepted. Make a payment link for them. Enter the delivery address; the lines and customer details come from the quotation."));
+  const address = el("textarea", { id: "qtaddr", rows: "3", maxlength: "500", "aria-label": "Delivery address" });
+  const pin = el("input", { id: "qtpin", inputmode: "numeric", maxlength: "6", "aria-label": "Pincode" });
+  const st = el("select", { id: "qtstate", "aria-label": "Delivery state" }, [el("option", { value: "" }, "Choose…"), ...(typeof PL_STATES !== "undefined" ? PL_STATES : []).map((s) => el("option", { value: s, ...(s === x.shipState ? { selected: "selected" } : {}) }, s))]);
+  const hrs = el("select", { id: "qthrs", "aria-label": "Link valid for" }, qtHours().map(([h, l]) => el("option", { value: String(h), ...(h === 72 ? { selected: "selected" } : {}) }, l)));
+  const msg = el("div", { class: "err", role: "alert" });
+  const go = el("button", { class: "btn primary", type: "button" }, "Create payment link");
+  go.onclick = async () => {
+    msg.textContent = ""; go.disabled = true;
+    try {
+      const r = await qtCall(`/api/v1/admin/quotes/${x.id}/payment-link`, { address: address.value, pincode: pin.value, state: st.value, expiresInHours: Number(hrs.value) });
+      toast(r.priceMoved ? `Link created. Prices changed since the quotation: ${qtMoney(r.quotedPaise)} quoted, ${qtMoney(r.currentPaise)} now.` : "Payment link created", r.priceMoved); await qtOpen(x.id);
+    } catch (e) { msg.textContent = e.message; go.disabled = false; }
+  };
+  kids.push(el("div", { class: "pn-fee" },
+    el("div", { class: "field" }, el("label", { for: "qtaddr" }, "Delivery address"), address), el("div", { class: "field" }, el("label", { for: "qtpin" }, "Pincode"), pin),
+    el("div", { class: "field" }, el("label", { for: "qtstate" }, "State"), st), el("div", { class: "field" }, el("label", { for: "qthrs" }, "Link valid for"), hrs), msg, go));
+  return kids;
 }
 
 function qtAskNote(title, line, label, okLabel) {

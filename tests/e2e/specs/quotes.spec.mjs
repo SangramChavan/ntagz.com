@@ -98,6 +98,24 @@ test('quotations: draft with a live checkout price, HQ rejects then approves, pa
   await hq.locator('#qtpanel').getByRole('button', { name: 'Close' }).click();
   await hq.goto(ADMIN + '/#/orders'); await hq.goto(ADMIN + '/#/quotes');
   await expect(hq.locator('#view-quotes .pn-card', { hasText: number })).toContainText('Accepted');
+
+  // --- accepted -> payment link (the existing pay-links tool; checkout stays the price authority)
+  await hq.locator('#view-quotes .pn-card', { hasText: number }).getByRole('button', { name: 'Open' }).click();
+  await expect(hq.locator('#qtpanel')).toContainText('The customer accepted. Make a payment link for them.');
+  await expect(hq.locator('#qtstate')).toHaveValue('Maharashtra'); // from the lead
+  await hq.locator('#qtpanel').getByRole('button', { name: 'Create payment link' }).click(); // no address yet
+  await expect(hq.locator('#qtpanel .pn-fee .err')).toContainText(/delivery address/i);
+  await hq.locator('#qtaddr').fill('12 MG Road, Camp, Pune');
+  await hq.locator('#qtpin').fill('411001');
+  await hq.locator('#qtpanel').getByRole('button', { name: 'Create payment link' }).click();
+  await expect(hq.locator('#qturl')).toHaveValue(/^https:\/\/ntagz\.com\/pay\.html\?t=[0-9a-f]{32}$/);
+  await expect(hq.locator('#qtpanel')).toContainText('Created, not sent yet');
+  await expect(hq.locator('#qtpanel')).toContainText('tells them if prices changed');
+  await expect(hq.locator('#qtpanel').getByRole('button', { name: 'Create payment link' })).toHaveCount(0); // one open link at a time
+  await expect(hq.locator('#qtpanel').getByRole('button', { name: 'Mark lead won with this order' })).toHaveCount(0); // not paid, so not won
+  const link = await hq.locator('#qturl').inputValue();
+  await page.reload();
+  expect(await page.content()).not.toContain(link.slice(-32)); // the partner never sees the customer's payment link
 });
 
 test('a Flex partner has no Quotes section and the server refuses', async ({ browser }) => {
