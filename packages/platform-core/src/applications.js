@@ -2,6 +2,7 @@ import { AppError } from './errors.js';
 import { requirePermission } from './access.js';
 import { auditStmt } from './audit.js';
 import * as v from './validate.js';
+import { queueEmail, hqRecipients } from './mail.js';
 
 // Applicant side of partner onboarding. Every query is filtered by the caller's user id in SQL.
 export const OPEN = ['draft', 'submitted', 'under_review', 'documents_required'];
@@ -117,7 +118,7 @@ export async function addDocument(db, bucket, access, { docType, bytes }) {
   return { id, type: docType, mime, size: bytes.byteLength };
 }
 
-export async function submit(db, access) {
+export async function submit(db, access, env = {}) {
   requirePermission(access, 'partners.apply');
   const a = await openApp(db, access.userId);
   if (!a || !EDITABLE.includes(a.status)) throw new AppError('CONFLICT', 'There is no application to submit');
@@ -128,8 +129,17 @@ export async function submit(db, access) {
   const docs = (await db.prepare("SELECT doc_type FROM partner_documents WHERE application_id = ? AND status != 'rejected'").bind(a.id).all()).results.map((d) => d.doc_type);
   for (const d of REQUIRED_DOCS) if (!docs.includes(d)) missing[`document_${d}`] = 'upload required';
   if (Object.keys(missing).length) throw new AppError('VALIDATION_FAILED', 'Complete all required details before submitting', missing);
-  const res = await db.prepare("UPDATE partner_applications SET status = 'submitted', submitted_at = unixepoch(), updated_at = unixepoch(), decision_note = NULL WHERE id = ? AND user_id = ? AND status IN ('draft','documents_required')").bind(a.id, access.userId).run();
-  if (res.meta.changes !== 1) throw new AppError('CONFLICT', 'Already submitted');
-  await auditStmt(db, { actor: access.userId, action: 'partner.application.submit', entityType: 'partner_application', entityId: a.id, before: { status: a.status }, after: { status: 'submitted' } }).run();
+  const u = await db.prepare('SELECT email FROM users WHERE id = ?').bind(access.userId).first();
+  const data = { name: form.name, businessName: a.business_name, typeKey: a.type_key, city: a.city, state: a.state, resubmitted: a.status === 'documents_required' };
+  // Dedupe on the application's audit-log count (a revision number): a double-click or retry reads the same value and cannot queue a second email,
+  // while a genuine later event always sees a higher one (updated_at has only 1-second resolution, so it is not used).
+  const rev = (await db.prepare("SELECT COUNT(*) n FROM audit_log WHERE entity_type = 'partner_application' AND entity_id = ?").bind(a.id).first()).n;
+  const res = await db.batch([
+    db.prepare("UPDATE partner_applications SET status = 'submitted', submitted_at = unixepoch(), updated_at = unixepoch(), decision_note = NULL WHERE id = ? AND user_id = ? AND status IN ('draft','documents_required')").bind(a.id, access.userId),
+    auditStmt(db, { actor: access.userId, action: 'partner.application.submit', entityType: 'partner_application', entityId: a.id, before: { status: a.status }, after: { status: 'submitted' } }),
+    queueEmail(db, { to: u && u.email, template: 'application_received', data, dedupeKey: `application_received:${a.id}:${rev}` }),
+    ...hqRecipients(env).map((to) => queueEmail(db, { to, template: 'hq_new_application', data, dedupeKey: `hq_new_application:${a.id}:${rev}:${to}` })),
+  ]);
+  if (res[0].meta.changes !== 1) throw new AppError('CONFLICT', 'Already submitted');
   return getMine(db, access);
 }

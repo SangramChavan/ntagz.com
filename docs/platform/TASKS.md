@@ -50,7 +50,7 @@ Legend: ☐ not started · ◐ in progress · ✔ done and tested · ⛔ blocked
 
 | Item | Owner | Status |
 |---|---|---|
-| Emails: application received, documents requested, approved, rejected, activated (use existing `notifications` + Resend) | Backend | ☐ |
+| Emails: application received, documents requested, approved, rejected, activated, suspended, reinstated, plus HQ "new application" notice. Outbox table (0024), atomic with each change, deduped, retried by the admin cron. See `ENVIRONMENT.md` | Backend | ✔ tested with a mocked provider and on real local D1 + cron. **Not tested against real Resend**; needs a key and one real send |
 | Customer `getSession` should ignore `portal='partner'` sessions (one-line change on the live checkout path; ship with column feature-check) | Auth | ☐ |
 | Remove orphan R2 objects when a DB insert fails after upload (rare); scheduled cleanup | Backend | ☐ |
 | Per-IP limit on OTP *verify* (send is limited; verify is limited per code) | Auth | ☐ |

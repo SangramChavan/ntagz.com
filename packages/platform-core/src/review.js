@@ -2,6 +2,7 @@ import { AppError } from './errors.js';
 import { requirePermission, scopeClause } from './access.js';
 import { auditStmt } from './audit.js';
 import { revokeUserSessionsStmt } from './auth.js';
+import { queueEmail } from './mail.js';
 
 // HQ side of partner onboarding. Application: submitted -> under_review <-> documents_required -> approved | rejected.
 // Partner after approval: agreement_pending -> payment_pending -> onboarding -> active <-> suspended. Nothing skips a step.
@@ -87,8 +88,12 @@ export async function openDocument(db, bucket, access, docId) {
   return { body: obj.body ?? obj, mime: d.mime };
 }
 
+const nameOf = (row) => { try { return JSON.parse(row.form_json || '{}').name || ''; } catch { return ''; } };
+// The applicant's email and name are needed to tell them what happened. Queued with the change itself (same transaction).
+const mail = (db, row, template, data, key) => queueEmail(db, { to: row.email, template, data: { name: nameOf(row), ...data }, dedupeKey: key });
+
 async function loadApp(db, id) {
-  const a = await db.prepare('SELECT * FROM partner_applications WHERE id = ?').bind(id).first();
+  const a = await db.prepare(`SELECT a.*, u.email, (SELECT COUNT(*) FROM audit_log WHERE entity_type = 'partner_application' AND entity_id = a.id) AS rev FROM partner_applications a JOIN users u ON u.id = a.user_id WHERE a.id = ?`).bind(id).first();
   if (!a) throw new AppError('NOT_FOUND', 'Not found');
   return a;
 }
@@ -117,14 +122,14 @@ export async function requestDocuments(db, access, id, n) {
   requirePermission(access, 'partners.review');
   if (!hasNote(n)) throw new AppError('VALIDATION_FAILED', 'Tell the applicant what is needed', { note: 'required' });
   const a = await loadApp(db, id); move(a, 'documents_required');
-  await setApp(db, access, a, 'documents_required', { decision_note: note(n) });
+  await setApp(db, access, a, 'documents_required', { decision_note: note(n) }, [mail(db, a, 'documents_requested', { note: note(n) }, `documents_requested:${a.id}:${a.rev}`)]);
   return { id, status: 'documents_required' };
 }
 export async function reject(db, access, id, n) {
   requirePermission(access, 'partners.review');
   if (!hasNote(n)) throw new AppError('VALIDATION_FAILED', 'A reason is required', { note: 'required' });
   const a = await loadApp(db, id); move(a, 'rejected');
-  await setApp(db, access, a, 'rejected', { decision_note: note(n) });
+  await setApp(db, access, a, 'rejected', { decision_note: note(n) }, [mail(db, a, 'application_rejected', { note: note(n) }, `application_rejected:${a.id}:${a.rev}`)]);
   return { id, status: 'rejected' };
 }
 
@@ -149,6 +154,7 @@ export async function approve(db, access, id, { agreementVersion } = {}) {
           .bind(pid, code, a.user_id, a.type_key, a.business_name || 'Unnamed', a.city, a.state, a.pincode, a.pan_last4, a.pan_hash, access.userId),
         db.prepare("INSERT INTO partner_agreements (id, partner_id, version, status, sent_at) VALUES (?, ?, ?, 'pending', unixepoch())").bind(crypto.randomUUID(), pid, String(agreementVersion || 'draft-v1').slice(0, 40)),
         auditStmt(db, { actor: access.userId, action: 'partner.create', entityType: 'partner', entityId: pid, after: { partnerCode: code, typeKey: a.type_key } }),
+        mail(db, a, 'application_approved', { businessName: a.business_name, partnerCode: code }, `application_approved:${a.id}:${a.rev}`),
       ]);
       return { id, status: 'approved', partnerId: pid, partnerCode: code };
     } catch (e) { if (!/UNIQUE.*partner_code/i.test(String(e && e.message))) throw e; lastErr = e; }
@@ -157,7 +163,7 @@ export async function approve(db, access, id, { agreementVersion } = {}) {
 }
 
 async function loadPartner(db, id) {
-  const p = await db.prepare('SELECT p.*, t.fee_paise, t.role_key FROM partners p JOIN partner_types t ON t.key = p.type_key WHERE p.id = ?').bind(id).first();
+  const p = await db.prepare(`SELECT p.*, t.fee_paise, t.role_key, u.email, (SELECT form_json FROM partner_applications WHERE partner_id = p.id LIMIT 1) AS form_json, (SELECT COUNT(*) FROM audit_log WHERE entity_type = 'partner' AND entity_id = p.id) AS rev FROM partners p JOIN partner_types t ON t.key = p.type_key JOIN users u ON u.id = p.user_id WHERE p.id = ?`).bind(id).first();
   if (!p) throw new AppError('NOT_FOUND', 'Not found');
   return p;
 }
@@ -211,6 +217,7 @@ export async function activate(db, access, partnerId) {
   await setPartner(db, access, p, 'onboarding', 'active', { activated_at: Math.floor(Date.now() / 1000) }, [
     db.prepare('INSERT INTO user_roles (id, user_id, role_key, granted_by) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, role_key) DO UPDATE SET revoked_at = NULL, granted_by = excluded.granted_by')
       .bind(crypto.randomUUID(), p.user_id, p.role_key, access.userId),
+    mail(db, p, 'partner_activated', { partnerCode: p.partner_code }, `partner_activated:${p.id}:${p.rev}`),
   ]);
   return { id: partnerId, status: 'active', partnerCode: p.partner_code };
 }
@@ -219,12 +226,12 @@ export async function suspend(db, access, partnerId, reason) {
   requirePermission(access, 'partners.suspend');
   if (!hasNote(reason)) throw new AppError('VALIDATION_FAILED', 'A reason is required', { reason: 'required' });
   const p = await loadPartner(db, partnerId); need(p, 'active', 'Suspension');
-  await setPartner(db, access, p, 'active', 'suspended', { suspended_at: Math.floor(Date.now() / 1000), suspend_reason: note(reason) }, [revokeUserSessionsStmt(db, p.user_id, 'partner')]);
+  await setPartner(db, access, p, 'active', 'suspended', { suspended_at: Math.floor(Date.now() / 1000), suspend_reason: note(reason) }, [revokeUserSessionsStmt(db, p.user_id, 'partner'), mail(db, p, 'partner_suspended', { partnerCode: p.partner_code, note: note(reason) }, `partner_suspended:${p.id}:${p.rev}`)]);
   return { id: partnerId, status: 'suspended' };
 }
 export async function reinstate(db, access, partnerId) {
   requirePermission(access, 'partners.activate');
   const p = await loadPartner(db, partnerId); need(p, 'suspended', 'Reinstating');
-  await setPartner(db, access, p, 'suspended', 'active', { suspend_reason: null });
+  await setPartner(db, access, p, 'suspended', 'active', { suspend_reason: null }, [mail(db, p, 'partner_reinstated', { partnerCode: p.partner_code }, `partner_reinstated:${p.id}:${p.rev}`)]);
   return { id: partnerId, status: 'active' };
 }
