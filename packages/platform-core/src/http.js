@@ -70,7 +70,10 @@ async function partnerRouterInner(request, env) {
       const s = await verifyOtp(env.DB, { email: b.email, code: b.code, ip, ua, portal: 'partner', ttlSeconds: PARTNER_SESSION_TTL });
       return withHeaders(ok({ signedIn: true }), { 'set-cookie': sessionCookie(s.token, PARTNER_SESSION_TTL) });
     }
-    if (method === 'GET' && path === '/api/v1/partner/types') return withHeaders(ok(await apps.listTypes(env.DB)));
+    if (method === 'GET' && path === '/api/v1/partner/types') { // public data; the ntagz.com partner page reads it so plan amounts are never hardcoded there
+      const o = request.headers.get('origin'); const site = o === 'https://ntagz.com' || o === 'https://www.ntagz.com';
+      return withHeaders(ok(await apps.listTypes(env.DB)), { 'cache-control': 'public, max-age=300', ...(site ? { 'access-control-allow-origin': o, vary: 'Origin' } : { vary: 'Origin' }) });
+    }
 
     const token = cookieOf(request, COOKIE);
     const who = await sessionUser(env.DB, token, 'partner');

@@ -125,3 +125,10 @@ test('wizard: an empty business step shows field errors and moves focus to the f
   await applicant.getByLabel('PIN code').pressSequentially('41a1x001');
   await expect(applicant.getByLabel('PIN code')).toHaveValue('411001'); // non-digits are dropped as you type
 });
+
+test('a plan chosen on ntagz.com/partner/ is pre-selected in the wizard after sign-in', async ({ page }) => {
+  await page.goto(PARTNER + '/?plan=enterprise');
+  await partnerSignIn(page, `${uniq('plan')}@example.test`);
+  await expect(page.getByRole('heading', { name: 'Choose your partner category' })).toBeVisible();
+  await expect(page.getByRole('radio', { name: /Ntagz Enterprise Partner/ })).toBeChecked();
+});

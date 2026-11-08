@@ -50,6 +50,8 @@ const pdf = () => new TextEncoder().encode("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n");
   assert.equal((await call("/api/v1/auth/otp/send", { method: "POST", body: { email: "a@example.test" }, headers: { origin: "https://evil.test" } })).status, 403); ok("POST from another origin is blocked");
   assert.equal((await call("/other")).status, 404); ok("unknown path -> 404");
   const types = await call("/api/v1/partner/types"); assert.equal(types.json.data.length, 5); assert.equal(types.json.data[2].key, "flex"); ok("public list of the five partner types");
+  { const site = await partnerRouter(new Request("https://partner.test/api/v1/partner/types", { headers: { origin: "https://ntagz.com" } }), env); assert.equal(site.headers.get("access-control-allow-origin"), "https://ntagz.com");
+    const other = await partnerRouter(new Request("https://partner.test/api/v1/partner/types", { headers: { origin: "https://evil.example" } }), env); assert.equal(other.headers.get("access-control-allow-origin"), null); ok("ntagz.com (only) may read the public plan list cross-origin"); }
 
   // ---- login ----
   assert.equal((await call("/api/v1/auth/otp/send", { method: "POST", body: { email: "nope" } })).status, 400); ok("invalid email -> 400");

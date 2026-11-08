@@ -14,11 +14,13 @@ interface D {
 const fromMine = (m: Mine | null): D => {
   const a = m?.application; const f = a?.form ?? {};
   return {
-    typeKey: a?.typeKey ?? '', businessName: a?.businessName ?? '', business_type: f.business_type ?? '', city: a?.city ?? '', state: a?.state ?? '', pincode: a?.pincode ?? '',
+    typeKey: a?.typeKey ?? planHint(), businessName: a?.businessName ?? '', business_type: f.business_type ?? '', city: a?.city ?? '', state: a?.state ?? '', pincode: a?.pincode ?? '',
     shop_details: f.shop_details ?? '', name: f.name ?? '', phone: f.phone ?? '', pan: '', experience: f.experience ?? '', customer_base: f.customer_base ?? '', sales_marketing: f.sales_marketing ?? '',
     investment_capacity: f.investment_capacity ?? '', staff_available: f.staff_available !== undefined ? String(f.staff_available) : '', vehicle_available: f.vehicle_available ?? false,
   };
 };
+
+const planHint = (): string => { try { return sessionStorage.getItem('ntagz_plan') ?? ''; } catch { return ''; } };
 
 export function Apply({ initial, onSubmitted }: { initial: Mine | null; onSubmitted: () => void }) {
   const [mine, setMine] = useState<Mine | null>(initial);

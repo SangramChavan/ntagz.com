@@ -76,7 +76,8 @@
     if (c === 'denied') return;
     enabled(function (on) { if (!on) return; if (c === 'granted') start(); else bar(); });
   }
-  var TRACKABLE = { membership_offer_shown: 1, membership_offer_added: 1, membership_offer_declined: 1 };
-  window.NZ_ANALYTICS = { track: function (name) { if (started && TRACKABLE[name]) ev(name, {}); }, reset: function () { del(CONSENT); try { sessionStorage.removeItem(CFG); } catch (e) { /* ignore */ } location.reload(); } };
+  var TRACKABLE = { membership_offer_shown: 1, membership_offer_added: 1, membership_offer_declined: 1,
+    partner_page_view: 1, partner_cta_click: 1, partner_plan_view: 1, partner_plan_select: 1, partner_calculator_interaction: 1, partner_whatsapp_click: 1, partner_application_start: 1 };
+  window.NZ_ANALYTICS = { track: function (name, x) { if (started && TRACKABLE[name]) ev(name, { category: x && x.category }); }, reset: function () { del(CONSENT); try { sessionStorage.removeItem(CFG); } catch (e) { /* ignore */ } location.reload(); } };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();

@@ -15,6 +15,9 @@ import { QuoteView } from './pages/QuoteView';
 import { Earnings } from './pages/Earnings';
 import type { Me, Mine } from './types';
 
+// A plan chosen on ntagz.com/partner/ (?plan=flex) pre-selects step 1 of the wizard. Kept in sessionStorage so it survives sign-in.
+try { const p = new URLSearchParams(location.search).get('plan'); if (p && /^[a-z0-9_]{2,20}$/.test(p)) sessionStorage.setItem('ntagz_plan', p); } catch { /* storage blocked: no pre-selection */ }
+
 type Boot = { s: 'loading' } | { s: 'out' } | { s: 'in'; me: Me; mine: Mine | null } | { s: 'error'; msg: string };
 
 // Where a signed-in person belongs, from server state only.
