@@ -84,6 +84,24 @@ function memberPctFor({ listPrice, costPaise, allInclusive, bulkPct, requestedPc
   return { pct: Math.max(0, Math.floor(m * 100) / 100), limit }; // round DOWN to 0.01% so a guardrail is never overshot
 }
 
+// Partner (wholesale) unit price, ex-GST, in whole paise. band = {discountBp, minMarginBp}, both set by HQ (nothing is defaulted here).
+//   price = retailExPaise x (1 - discountBp/10000), but never below the floor cost x (1 + minMarginBp/10000) and never above retail.
+// If retail itself is under the floor the partner pays retail (no discount) and limit is "retail" so HQ can see why.
+// Fails closed: no band, no margin or no cost means no partner price. Rounded UP to the paisa so the floor is never undershot.
+const ceilDiv = (a, b) => Math.floor((a + b - 1) / b);
+function partnerUnit({ price, allInclusive, costPaise, band }) {
+  if (!band || !Number.isInteger(band.discountBp) || band.discountBp < 0 || band.discountBp > 9000) return { ok: false, reason: "no_band" };
+  if (!Number.isInteger(band.minMarginBp) || band.minMarginBp < 0 || band.minMarginBp > 10000) return { ok: false, reason: "no_margin" };
+  if (!Number.isInteger(costPaise) || costPaise <= 0) return { ok: false, reason: "no_cost" };
+  const retailExPaise = Math.round((allInclusive ? price / (1 + GST_PCT / 100) : price) * 100); // the band applies to the ex-GST price
+  const floorPaise = ceilDiv(costPaise * (10000 + band.minMarginBp), 10000);
+  const discounted = ceilDiv(retailExPaise * (10000 - band.discountBp), 10000);
+  let unitExPaise = discounted, limit = null;
+  if (floorPaise >= retailExPaise) { unitExPaise = retailExPaise; limit = "retail"; }
+  else if (discounted < floorPaise) { unitExPaise = floorPaise; limit = "floor"; }
+  return { ok: true, retailExPaise, unitExPaise, floorPaise, limit, pct: retailExPaise > 0 ? Math.round((retailExPaise - unitExPaise) / retailExPaise * 10000) / 100 : 0 };
+}
+
 // items: [{id, qty}]. products: static structure table {id: {price, fixed, moq, packSize, allInclusive}}.
 // live: D1 rows by id (price_paise, member_discount_pct, cost_paise) or null. member: true only for a verified active member.
 // Returns null for any invalid cart (unknown product, bad qty, below MOQ, too many lines, absurd total).
@@ -94,10 +112,11 @@ function combinePct(paid, tier, mode) {
 
 // loyalty: null, or {pct, tier} for a customer whose spending tier currently earns a discount. Per product: only if
 // products.loyalty_eligible, and never above that product's loyalty_max_pct when set (0 = excluded).
-function priceCart(items, { products, live, state, member, settings, loyalty, campaigns, redeemPaise }) {
+// partner: {discountBp, minMarginBp} switches to wholesale pricing: the band REPLACES bulk/member/loyalty (nothing stacks), the callers pass no campaigns or points.
+function priceCart(items, { products, live, state, member, settings, loyalty, campaigns, redeemPaise, partner }) {
   if (!Array.isArray(items) || items.length < 1 || items.length > 30) return null;
   const s = settings || settingsFrom({});
-  let regular = 0, inclusive = 0, pieces = 0, list = 0, bulkOff = 0, memberOff = 0, qualifying = 0, pointsElig = 0, memberSaving = 0;
+  let regular = 0, inclusive = 0, pieces = 0, list = 0, bulkOff = 0, memberOff = 0, qualifying = 0, pointsElig = 0, memberSaving = 0, partnerOff = 0;
   const lines = [];
   for (const item of items) {
     const product = products[item && item.id];
@@ -106,6 +125,14 @@ function priceCart(items, { products, live, state, member, settings, loyalty, ca
     if (product.fixed && qty !== 1) return null;
     const row = live && live[item.id];
     const linePieces = qty * (product.packSize || 1);
+    if (partner) {
+      const pu = row ? partnerUnit({ price: row.price_paise / 100, allInclusive: !!product.allInclusive, costPaise: row.cost_paise, band: partner }) : { ok: false };
+      if (!pu.ok) return null;
+      const net = pu.unitExPaise * qty / 100; // GST is added on top for wholesale, so the line is never "all-inclusive"
+      regular += net; qualifying += net; pieces += product.fixed ? 70 : linePieces; list += pu.retailExPaise * qty / 100; partnerOff += (pu.retailExPaise - pu.unitExPaise) * qty / 100;
+      lines.push({ id: item.id, qty, unitPrice: pu.unitExPaise / 100, retailUnit: pu.retailExPaise / 100, bulkPct: 0, memberPct: 0, partnerPct: pu.pct, requestedMemberPct: 0, source: "partner", limit: pu.limit, net, allInclusive: false });
+      continue;
+    }
     const bulk = product.fixed ? 0 : bulkPctFor(linePieces);
     const price = row ? row.price_paise / 100 : product.price;
     const paidReq = member && s.live && !product.fixed && row ? Number(row.member_discount_pct) || 0 : 0;
@@ -174,7 +201,7 @@ function priceCart(items, { products, live, state, member, settings, loyalty, ca
   if (!Number.isSafeInteger(amount) || amount < 1 || amount > 10000000) return null;
   const r2 = (x) => Math.round(x * 100) / 100;
   // qualifyingPaise: what this order is worth to the spending tiers (after discounts, without GST and shipping). Frozen on the order.
-  return { pointsBasisPaise: Math.round(pointsElig * 100), pointsDiscountPaise: Math.round(pointsOff * 100), memberSavingPaise: Math.round(memberSaving * 100), amount, pieces, gst, shipping, shippingPaise: Math.round(shipping * 100), qualifyingPaise: Math.round(qualifying * 100), subtotal: r2(list), bulkDiscount: r2(bulkOff), memberDiscount: r2(memberOff), memberDiscountPaise: Math.round(memberOff * 100), member: memberOff > 0.004,
+  return { pointsBasisPaise: Math.round(pointsElig * 100), pointsDiscountPaise: Math.round(pointsOff * 100), memberSavingPaise: Math.round(memberSaving * 100), amount, pieces, gst, shipping, shippingPaise: Math.round(shipping * 100), qualifyingPaise: Math.round(qualifying * 100), subtotal: r2(list), partnerDiscountPaise: Math.round(partnerOff * 100), bulkDiscount: r2(bulkOff), memberDiscount: r2(memberOff), memberDiscountPaise: Math.round(memberOff * 100), member: memberOff > 0.004,
     campaign: campaign ? { id: campaign.id, name: campaign.name, type: campaign.reward_type, value: Number(campaign.reward_value) || 0 } : null,
     campaignDiscountPaise: Math.round(campaignOff * 100 + shippingWaived * 100), campaignNote,
     nextCampaign: nextCampaign ? { id: nextCampaign.id, name: nextCampaign.name, type: nextCampaign.reward_type, value: Number(nextCampaign.reward_value) || 0, remainingPaise: Math.round(nextCampaign.threshold_paise - cartValue * 100) } : null,
@@ -200,6 +227,30 @@ function memberPriceReport(product, row, settings) {
   if (tiers.some((t) => t.limit === "margin")) warnings.push(`Minimum margin (${settings.minMarginPct}%) reduces the member discount at ${tiers.filter((t) => t.limit === "margin").map((t) => tierLabel(t.bulkPct)).join(", ")}.`);
   return { tiers, warnings };
 }
+
+// HQ view of one product's partner price: what the band gives, whether the floor or retail limits it, and where the PUBLIC bulk tiers
+// (which a retail customer can reach by quantity alone) land at or below it. Partner pricing never stacks with bulk tiers.
+function partnerPriceReport(product, row, band) {
+  const price = row.price_paise / 100;
+  const pu = partnerUnit({ price, allInclusive: !!(product ? product.allInclusive : row.all_inclusive), costPaise: row.cost_paise, band });
+  const retailExPaise = pu.ok ? pu.retailExPaise : Math.round((product && product.allInclusive ? price / (1 + GST_PCT / 100) : price) * 100);
+  const bulk = [...BULK_TIERS].sort((a, b) => a.min - b.min).map((t) => {
+    const unitExPaise = Math.round(retailExPaise * (100 - t.pct) / 100);
+    return { pieces: t.min, pct: t.pct, unitExPaise, atOrBelowPartner: pu.ok && unitExPaise <= pu.unitExPaise, belowFloor: pu.ok && unitExPaise < pu.floorPaise };
+  });
+  const warnings = [];
+  if (!pu.ok) warnings.push({ no_band: "No discount band is set for this partner type.", no_margin: "The minimum Ntagz margin is not set.", no_cost: "No cost price: partner pricing is refused for this product. Enter the cost in Products." }[pu.reason]);
+  else {
+    if (pu.limit === "floor") warnings.push(`The floor (cost + ${band.minMarginBp / 100}%) limits the discount to ${pu.pct}%.`);
+    if (pu.limit === "retail") warnings.push("Retail is already below the floor, so partners pay retail with no discount.");
+    const hit = bulk.filter((b) => b.atOrBelowPartner);
+    if (hit.length) warnings.push(`A retail customer buying ${hit.map((b) => b.pieces.toLocaleString("en-IN") + "+ pcs").join(", ")} pays the same or less than a partner (bulk tiers ${hit.map((b) => b.pct + "%").join(", ")}).`);
+    const under = bulk.filter((b) => b.belowFloor);
+    if (under.length) warnings.push(`The public bulk price at ${under.map((b) => b.pieces.toLocaleString("en-IN") + "+ pcs").join(", ")} is below the partner floor.`);
+  }
+  if (!product) warnings.push("Not sold by the storefront checkout yet, so partners cannot order it.");
+  return { status: pu.ok ? "priced" : pu.reason, retailExPaise, unitExPaise: pu.ok ? pu.unitExPaise : null, pct: pu.ok ? pu.pct : null, limit: pu.ok ? pu.limit : null, floorPaise: pu.ok ? pu.floorPaise : null, bulk, warnings };
+}
 const tierLabel = (pct) => (pct === 0 ? "regular quantities" : `${BULK_TIERS.find((t) => t.pct === pct).min}+ pcs`);
 
-module.exports = { PRODUCTS, GST_PCT, BULK_TIERS, SHIPPING, MAX_MEMBER_PCT, bulkPctFor, settingsFrom, memberPctFor, priceCart, memberPriceReport };
+module.exports = { PRODUCTS, GST_PCT, BULK_TIERS, SHIPPING, MAX_MEMBER_PCT, bulkPctFor, settingsFrom, memberPctFor, priceCart, memberPriceReport, partnerUnit, partnerPriceReport };

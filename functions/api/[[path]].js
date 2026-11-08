@@ -5,6 +5,7 @@ const POINTS = require("../lib/points.js"); // rewards wallet: points earned/red
 const DISPATCH = require("../lib/dispatch.js"); // working-day dispatch promise (one source of truth)
 const DELIVERY = require("../lib/delivery.js"); // Pune-origin courier transit (calendar days; priority = express tier)
 const CRMPUBLIC = require("../lib/crm-public.js"); // tracking / unsubscribe / campaign clicks / marketing opt-in
+const STOCK = require("../lib/stock.js"); // stock deduction for an order (shared with the partner API)
 const PAYLINKS = require("../lib/paylinks.js"); // payment links: token/expiry/status rules and the nudge engine
 const ASSIST = require("../lib/assistant.js"); // shopping assistants: product + quantity from free text, and the reply block
 
@@ -749,48 +750,8 @@ async function handleAccounts(url, request, env, allowedOrigin) {
 // amount or a "paid" flag. Recording is best-effort: a D1 problem must never break a payment, so every call is guarded.
 const OFFLINE_METHODS = ["upi", "bank", "whatsapp"];
 
-// Statements that deduct sold quantities from tracked products, each guarded by "this order row exists" so a repeat or an
-// ignored insert deducts nothing. Deduction is clamped at zero (never negative) and every change gets a movement row.
-function stockStatements(env, orderId, txnId, items) {
-  const out = [];
-  const merged = new Map(); // one stock line per product (order_stock_lines is keyed by order+product)
-  for (const it of items) {
-    if (!it || typeof it.id !== "string" || !Number.isInteger(it.qty) || it.qty < 1) continue;
-    merged.set(it.id, (merged.get(it.id) || 0) + it.qty);
-  }
-  for (const [id, qty] of merged) {
-    // Order matters: allocation reads stock_qty, so it runs before the deduction below.
-    out.push(
-      env.DB.prepare(
-        `INSERT OR IGNORE INTO order_stock_lines (order_id,product_id,ready_qty,pre_qty)
-         SELECT ?1,id,min(stock_qty,?2),CASE WHEN preorder_enabled=1 THEN ?2-min(stock_qty,?2) ELSE 0 END
-         FROM products WHERE id=?3 AND track_stock=1 AND EXISTS (SELECT 1 FROM orders WHERE id=?1)`
-      ).bind(orderId, qty, id),
-      env.DB.prepare( // non-preorder shortfall (concurrent buyers): hold the paid order for the admin instead of silently shipping short
-        `UPDATE orders SET status='on_hold' WHERE id=?1 AND status IN ('placed','confirmed')
-         AND EXISTS (SELECT 1 FROM order_stock_lines WHERE order_id=?1 AND product_id=?3 AND pre_qty=0 AND ready_qty<?2)`
-      ).bind(orderId, qty, id),
-      env.DB.prepare(
-        `UPDATE products SET preordered_qty=preordered_qty+coalesce((SELECT pre_qty FROM order_stock_lines WHERE order_id=?1 AND product_id=?2),0), updated_at=unixepoch()
-         WHERE id=?2 AND preorder_enabled=1 AND track_stock=1 AND EXISTS (SELECT 1 FROM orders WHERE id=?1)`
-      ).bind(orderId, id),
-      env.DB.prepare(
-        `INSERT INTO inventory_movements (id,product_id,type,qty_change,prev_stock,new_stock,reason,reference,admin,idempotency_key)
-         SELECT ?1,id,'out',-min(stock_qty,?2),stock_qty,max(stock_qty-?2,0),'Order sale',?3,'system',?4
-         FROM products WHERE id=?5 AND track_stock=1 AND stock_qty>0 AND EXISTS (SELECT 1 FROM orders WHERE id=?4)`
-      ).bind(crypto.randomUUID(), qty, txnId, orderId, id),
-      env.DB.prepare(
-        `UPDATE products SET stock_qty=max(stock_qty-?1,0), updated_at=unixepoch()
-         WHERE id=?2 AND track_stock=1 AND EXISTS (SELECT 1 FROM orders WHERE id=?3)`
-      ).bind(qty, id, orderId),
-    );
-  }
-  out.push(env.DB.prepare(
-    `UPDATE orders SET is_preorder=1, status='preorder_confirmed' WHERE id=?1 AND status IN ('placed','confirmed')
-     AND EXISTS (SELECT 1 FROM order_stock_lines WHERE order_id=?1 AND pre_qty>0)`
-  ).bind(orderId));
-  return out;
-}
+// Stock deduction lives in lib/stock.js (shared with the partner API); this keeps the call sites below unchanged.
+const stockStatements = (env, orderId, txnId, items) => STOCK.stockStatements(env.DB, orderId, txnId, items);
 
 function cleanDetails(b) {
   const str = (v, max) => (typeof v === "string" ? v.trim().slice(0, max) : "");
@@ -904,14 +865,15 @@ async function pointsIntentStatements(env, txnId, u, total) {
   return out;
 }
 
-async function recordIntent(env, request, txnId, gateway, body, total) {
+async function recordIntent(env, request, txnId, gateway, body, total, partner) {
   if (!env.DB || !txnId) return;
   try {
-    const u = await getSession(request, env);
+    const u = partner ? null : await getSession(request, env); // a wholesale order is never attached to whoever holds the link
+    const credit = partner ? partner.creditPaise : 0;
     const d = cleanDetails(body);
     if (!d.email && u && u.email) d.email = u.email;   // signed in: the order carries the account's email (order emails, invoices)
     const items = (Array.isArray(body.items) ? body.items : []).map((i) => ({ id: String(i.id).slice(0, 64), qty: i.qty }));
-    const amountPaise = total.amount * 100, gstPaise = total.gst * 100;
+    const gstPaise = total.gst * 100, amountPaise = total.amount * 100 - credit, fullPaise = total.amount * 100; // amount = what the gateway charges; stock credit pays the rest
     const rw = await hasRewardsSchema(env);
     await env.DB.batch([
       env.DB.prepare("DELETE FROM checkout_intents WHERE created_at < unixepoch() - 604800"),
@@ -919,12 +881,13 @@ async function recordIntent(env, request, txnId, gateway, body, total) {
         `INSERT OR REPLACE INTO checkout_intents (txn_id,gateway,user_id,items_json,name,phone,email,address,pincode,state,gstin,quote_ref,subtotal_paise,gst_paise,amount_paise,shipping_paise,discount_paise,qualifying_paise,loyalty_tier,campaign_id,campaign_discount_paise)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
       ).bind(txnId, gateway, u ? u.user_id : null, JSON.stringify(items), d.name, d.phone, d.email, d.address, d.pincode, d.state, d.gstin, d.quoteRef,
-             amountPaise - gstPaise, gstPaise, amountPaise, total.shippingPaise, total.memberDiscountPaise, total.qualifyingPaise, total.loyaltyTier || null, total.campaign ? total.campaign.id : null, total.campaignDiscountPaise)
+             fullPaise - gstPaise, gstPaise, amountPaise, total.shippingPaise, total.memberDiscountPaise, total.qualifyingPaise, total.loyaltyTier || null, total.campaign ? total.campaign.id : null, total.campaignDiscountPaise)
       : env.DB.prepare(
         `INSERT OR REPLACE INTO checkout_intents (txn_id,gateway,user_id,items_json,name,phone,email,address,pincode,state,gstin,quote_ref,subtotal_paise,gst_paise,amount_paise)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
       ).bind(txnId, gateway, u ? u.user_id : null, JSON.stringify(items), d.name, d.phone, d.email, d.address, d.pincode, d.state, d.gstin, d.quoteRef,
-             amountPaise - gstPaise, gstPaise, amountPaise),
+             fullPaise - gstPaise, gstPaise, amountPaise),
+      ...(partner ? [env.DB.prepare("UPDATE checkout_intents SET partner_id=?, credit_paise=? WHERE txn_id=?").bind(partner.id, credit, txnId)] : []),
       ...(await pointsIntentStatements(env, txnId, u, total)),
       ...(await hasCheckoutMembershipSchema(env) ? [env.DB.prepare("UPDATE checkout_intents SET membership_fee_paise=?, membership_days=?, rules_json=? WHERE txn_id=?")
         .bind(total.membershipFeePaise || 0, total.membershipDays || 0, JSON.stringify({ v: 1, fee_paise: total.membershipFeePaise || 0, duration_days: total.membershipDays || 0, member_pricing: !!total.member, loyalty_tier: total.loyaltyTier || null,
@@ -969,6 +932,21 @@ function membershipOrderStatements(env, oid, intent, txnId, ref) {
       SELECT ?1, o.user_id, 'active', s.t, s.t + ?2 * 86400, 0, ?3, ?4, ?5
       FROM orders o, (SELECT max(o2.created_at, coalesce((SELECT max(expires_at) FROM memberships WHERE user_id=?6 AND status='active' AND expires_at>unixepoch()), 0)) t FROM orders o2 WHERE o2.id=?7) s WHERE o.id=?7`)
       .bind(crypto.randomUUID(), intent.membership_days || 365, intent.membership_fee_paise, String(ref || txnId).slice(0, 128), txnId, intent.user_id, oid));
+  }
+  return out;
+}
+
+// Wholesale orders (intent.partner_id): same batch as the order. The order is tagged to the partner and its total is the FULL order value (gateway amount +
+// stock credit); the credit is recorded as a payment and as one ledger consume (UNIQUE per order). Every statement is keyed on this attempt's own oid, which exists
+// only if this attempt created the order, so a replay or a race consumes nothing twice.
+function partnerOrderStatements(env, oid, intent) {
+  if (!intent.partner_id) return [];
+  const credit = Number(intent.credit_paise) || 0;
+  const out = [env.DB.prepare("UPDATE orders SET partner_id=?1, stock_credit_paise=?2, total=total+?2, paid_paise=paid_paise+?2 WHERE id=?3").bind(intent.partner_id, credit, oid)];
+  if (credit > 0) {
+    out.push(
+      env.DB.prepare("INSERT INTO payments (id,order_id,method,amount_paise,recorded_by,idempotency_key,reference) SELECT ?,id,'stock_credit',?,'system',?,txn_id FROM orders WHERE id=?").bind(crypto.randomUUID(), credit, `credit:${oid}`, oid),
+      env.DB.prepare("INSERT INTO partner_stock_credit (id,partner_id,kind,delta_paise,order_id,actor) SELECT ?,partner_id,'consume',-stock_credit_paise,id,'system' FROM orders WHERE id=? AND partner_id IS NOT NULL").bind(crypto.randomUUID(), oid));
   }
   return out;
 }
@@ -1023,6 +1001,7 @@ async function finalizeOrder(env, txnId, paymentRef, verifiedPaise, gateway) {
       ...pointsOrderStatements(env, oid, intent),
       ...membershipOrderStatements(env, oid, intent, txnId, ref),
       ...(await processingOrderStatements(env, oid, intent)),
+      ...partnerOrderStatements(env, oid, intent),
     ]);
     if (!await env.DB.prepare("SELECT 1 AS x FROM orders WHERE txn_id=?").bind(txnId).first()) {
       await alertPayment(env, txnId, gateway || intent.gateway, ref, intent.amount_paise, "order row was not created");
@@ -1267,9 +1246,25 @@ async function payLinkPaid(env, row) {
 const parseJson = (s, d) => { try { return JSON.parse(s); } catch { return d; } };
 
 // Prices the link's cart as checkout would for whoever is holding the link now (a signed-in member gets member prices).
+// A PARTNER link (pay_links.partner_id, set only by the partner API) is priced as wholesale by the same engine: the partner type's band and the HQ margin floor,
+// no member/loyalty/campaign/points discounts, and no dependence on who opens the link. Stock credit reserved on the link is a payment, not a discount:
+// the order keeps its full value and GST; only the gateway amount is reduced. Missing band/margin/cost means no price (fail closed).
+async function pricePartnerLink(env, row, items, pricing) {
+  const t = await env.DB.prepare(`SELECT p.status, b.discount_bp, (SELECT value FROM system_settings WHERE key='partner_min_margin_bp') AS margin
+    FROM partners p LEFT JOIN partner_price_bands b ON b.partner_type = p.type_key WHERE p.id=?`).bind(row.partner_id).first();
+  const band = t && t.status === "active" && t.discount_bp !== null ? { discountBp: t.discount_bp, minMarginBp: t.margin === null || t.margin === "" ? null : Number(t.margin) } : null;
+  const total = band ? PRICING.priceCart(items, { products: PRODUCTS, live: pricing, state: row.state, member: false, settings: PRICING.settingsFrom({}), partner: band }) : null;
+  if (!total) return { error: "This wholesale order can no longer be priced. Please start a new order in the partner portal.", status: 409 };
+  const dcfg = (await loadMemberSettings(env)).dispatch || DISPATCH.fromCfg({});
+  total.loyaltyTier = null; total.processingTargetDays = DISPATCH.targetDays(dcfg, false); total.priorityBuild = 0;
+  const full = total.amount * 100, creditPaise = Math.max(0, Math.min(Number(row.credit_paise) || 0, full - 100)); // never leave the gateway under Rs 1
+  const body = { items, state: row.state, pincode: row.pincode, name: row.name, phone: row.phone, email: row.email || "", address: row.address, gstin: row.gstin || "" };
+  return { pc: { total, member: null, base: null, add: null }, body, partner: { id: row.partner_id, creditPaise } };
+}
 async function priceLink(env, request, row, items, pricing) {
   const blocked = unavailableReason(items, pricing);
   if (blocked) return { error: blocked, status: 409, unavailable: true };
+  if (row.partner_id) return pricePartnerLink(env, row, items, pricing);
   const body = { items, state: row.state, pincode: row.pincode, name: row.name, phone: row.phone, email: row.email || "", address: row.address, gstin: row.gstin || "" };
   const pc = await pricedCheckout(env, request, body, pricing);
   if (pc.error) return pc;
@@ -1280,16 +1275,17 @@ async function priceLink(env, request, row, items, pricing) {
 async function payLinkView(env, request, row, items, priced, pricing) {
   const t = priced.pc.total, orig = Object.fromEntries(parseJson(row.orig_items_json, []).map((i) => [i.id, i.qty]));
   const nameOf = (id) => (pricing && pricing[id] && pricing[id].name) || id;
-  const campaigns = await campaignsFor(request, env, priced.pc.member);
-  const nudges = PAYLINKS.nudgesFor(items, (its) => calculateTotal(its, row.state, priced.pc.member, pricing, campaigns), PRODUCTS, { state: row.state })
+  const pr = priced.partner; // wholesale link: no nudges, offers or member pricing; the customer sees the full order and what stock credit pays
+  const campaigns = pr ? [] : await campaignsFor(request, env, priced.pc.member);
+  const nudges = pr ? [] : PAYLINKS.nudgesFor(items, (its) => calculateTotal(its, row.state, priced.pc.member, pricing, campaigns), PRODUCTS, { state: row.state })
     .map((n) => ({ ...n, name: nameOf(n.id) }));
   return {
     status: "active", expiresAt: row.expires_at, name: String(row.name).trim().split(/\s+/)[0], deliverTo: { pincode: row.pincode, state: row.state },
-    lines: t.lines.map((l) => ({ id: l.id, name: nameOf(l.id), qty: l.qty, origQty: orig[l.id] ?? l.qty, listUnit: l.unitPrice, unit: Math.round((l.net / l.qty) * 100) / 100, total: Math.round(l.net * 100) / 100, inclusive: l.allInclusive })),
-    totals: { listTotal: t.subtotal, bulkDiscount: t.bulkDiscount, memberDiscount: t.memberDiscount, offer: t.campaign ? { name: t.campaign.name, discount: (t.campaignDiscountPaise || 0) / 100 } : null, gst: t.gst, shipping: t.shipping, amount: t.amount },
-    memberPricing: !!t.member, dispatchDays: Number.isInteger(t.processingTargetDays) ? t.processingTargetDays : null,
+    lines: t.lines.map((l) => ({ id: l.id, name: nameOf(l.id), qty: l.qty, origQty: orig[l.id] ?? l.qty, listUnit: l.retailUnit || l.unitPrice, unit: Math.round((l.net / l.qty) * 100) / 100, total: Math.round(l.net * 100) / 100, inclusive: l.allInclusive })),
+    totals: { listTotal: t.subtotal, bulkDiscount: t.bulkDiscount, memberDiscount: t.memberDiscount, partnerDiscount: (t.partnerDiscountPaise || 0) / 100, stockCredit: pr ? pr.creditPaise / 100 : 0, orderTotal: t.amount, offer: t.campaign ? { name: t.campaign.name, discount: (t.campaignDiscountPaise || 0) / 100 } : null, gst: t.gst, shipping: t.shipping, amount: pr ? t.amount - pr.creditPaise / 100 : t.amount },
+    memberPricing: !!t.member, wholesale: !!pr, dispatchDays: Number.isInteger(t.processingTargetDays) ? t.processingTargetDays : null,
     priceChanged: row.quoted_paise != null && row.quoted_paise !== t.amount * 100 ? { was: row.quoted_paise / 100, now: t.amount } : null,
-    nudges, adjusted: JSON.stringify(items) !== row.orig_items_json,
+    nudges, adjusted: !pr && JSON.stringify(items) !== row.orig_items_json,
   };
 }
 
@@ -1319,7 +1315,9 @@ async function payLinkApi(url, request, env, origin) {
       return json(await payLinkView(env, request, row, items, priced, pricing), 200, origin);
     }
 
-    if (action === "/adjust") { // the customer took a suggestion: raise one line's quantity (never below what the link was made with)
+    if (action === "/adjust") {
+      if (row.partner_id) return json({ error: "A wholesale order cannot be changed from the payment page. Start a new order in the partner portal." }, 400, origin);
+      // the customer took a suggestion: raise one line's quantity (never below what the link was made with)
       if (quickLimited(request, "paylink-adjust", 40, 60000)) return json({ error: TOO_MANY }, 429, origin);
       let b;
       try { if (Number(request.headers.get("Content-Length")) > 2000) return json({ error: "Request too large" }, 413, origin); b = await request.json(); } catch { return json({ error: "Invalid JSON" }, 400, origin); }
@@ -1336,7 +1334,7 @@ async function payLinkApi(url, request, env, origin) {
     if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) return json({ error: "Online payment is not available right now" }, 503, origin);
     const priced = await priceLink(env, request, row, items, pricing);
     if (priced.error) return json({ error: priced.error }, priced.status || 400, origin);
-    const total = priced.pc.total, amountPaise = total.amount * 100;
+    const total = priced.pc.total, credit = priced.partner ? priced.partner.creditPaise : 0, amountPaise = total.amount * 100 - credit;
     let orderId = row.txn_id;
     const reuse = orderId && row.started_amount_paise === amountPaise && await env.DB.prepare("SELECT 1 x FROM checkout_intents WHERE txn_id=?").bind(orderId).first();
     if (reuse) {
@@ -1347,7 +1345,7 @@ async function payLinkApi(url, request, env, origin) {
         amount: amountPaise, currency: "INR", receipt: `ntagz_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`,
         notes: { pieces: String(total.pieces), membership: "0", source: "paylink", link: token.slice(0, 8) },
       });
-      await recordIntent(env, request, order.id, "razorpay", priced.body, total);
+      await recordIntent(env, request, order.id, "razorpay", priced.body, total, priced.partner);
       if (!(await env.DB.prepare("SELECT 1 x FROM checkout_intents WHERE txn_id=?").bind(order.id).first())) return json({ error: "Could not prepare the order, please try again" }, 503, origin);
       await env.DB.prepare("UPDATE pay_links SET txn_id=?1, txn_ids=json_insert(txn_ids,'$[#]',?1), started_amount_paise=?2, start_count=start_count+1 WHERE id=?3").bind(order.id, amountPaise, token).run();
       orderId = order.id;

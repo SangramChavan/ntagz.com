@@ -6,6 +6,7 @@ import * as review from './review.js';
 import * as leads from './leads.js';
 import * as quotes from './quotes.js';
 import * as comm from './commissions.js';
+import * as wh from './wholesale.js';
 import { flushOutbox } from './mail.js';
 
 const COOKIE = '__Host-ntagz_partner';
@@ -83,7 +84,7 @@ async function partnerRouterInner(request, env) {
     if (method === 'POST' && path === '/api/v1/auth/logout') { await revokeSession(env.DB, token); return withHeaders(ok({ signedOut: true }), { 'set-cookie': sessionCookie('', 0) }); }
     if (method === 'GET' && path === '/api/v1/me') {
       const partner = access.partnerId ? await env.DB.prepare('SELECT partner_code, type_key, status, business_name FROM partners WHERE id = ?').bind(access.partnerId).first() : null;
-      return withHeaders(ok({ email: who.email, roles: access.roles, permissions: [...access.permissions.keys()], partner }));
+      return withHeaders(ok({ email: who.email, roles: access.roles, permissions: [...access.permissions.keys()], partner, wholesale: await wh.canOrder(env.DB, access) }));
     }
     if (path === '/api/v1/partner/applications/mine') {
       if (method === 'GET') return withHeaders(ok(await apps.getMine(env.DB, access)));
@@ -113,6 +114,14 @@ async function partnerRouterInner(request, env) {
       if (method === 'GET' && !m[2]) return withHeaders(ok(await comm.getMine(env.DB, access, m[1])));
       if (method === 'POST' && m[2] === '/dispute') return withHeaders(ok(await comm.disputeMine(env.DB, access, m[1], (await readJson(request)).reason)));
     }
+    if (method === 'GET' && path === '/api/v1/partner/wholesale/catalogue') return withHeaders(ok(await wh.catalogue(env.DB, access)));
+    if (method === 'GET' && path === '/api/v1/partner/wholesale/credit') return withHeaders(ok(await wh.ledgerMine(env.DB, access)));
+    if (method === 'POST' && path === '/api/v1/partner/wholesale/price') return withHeaders(ok(await wh.price(env.DB, access, await readJson(request))));
+    if (path === '/api/v1/partner/wholesale/orders') {
+      if (method === 'GET') return withHeaders(ok(await wh.listMine(env.DB, access)));
+      if (method === 'POST') return withHeaders(ok(await wh.placeOrder(env.DB, access, await readJson(request), env), {}, 201));
+    }
+    if (method === 'POST' && (m = path.match(/^\/api\/v1\/partner\/wholesale\/orders\/([0-9a-f]{32})\/cancel$/))) return withHeaders(ok(await wh.cancelMine(env.DB, access, m[1])));
     if (method === 'GET' && path === '/api/v1/partner/quote-products') return withHeaders(ok(await quotes.catalogue(env.DB, access)));
     if (method === 'POST' && path === '/api/v1/partner/quote-price') return withHeaders(ok(await quotes.price(env.DB, access, await readJson(request))));
     if (path === '/api/v1/partner/quotes') {
@@ -198,6 +207,11 @@ async function adminV1Inner(request, env, actor, body) {
       if (method === 'POST' && m[2] === '/reject') return ok(await quotes.reject(env.DB, access, m[1], body.note));
       if (method === 'POST' && m[2] === '/response') return ok(await quotes.recordResponseHq(env.DB, access, m[1], body.outcome));
     }
+    if (method === 'GET' && path === '/api/v1/admin/wholesale/config') return ok(await wh.adminConfig(env.DB, access));
+    if (method === 'POST' && path === '/api/v1/admin/wholesale/bands') return ok(await wh.setBand(env.DB, access, { partnerType: body.partnerType, discountBp: body.discountBp }));
+    if (method === 'POST' && path === '/api/v1/admin/wholesale/margin') return ok(await wh.setMargin(env.DB, access, { minMarginBp: body.minMarginBp }));
+    if (method === 'GET' && path === '/api/v1/admin/wholesale/partners') return ok(await wh.adminPartners(env.DB, access));
+    if (method === 'GET' && (m = path.match(/^\/api\/v1\/admin\/wholesale\/partners\/([0-9a-f-]{36})\/orders$/))) return ok(await wh.adminOrders(env.DB, access, m[1]));
     if (method === 'GET' && path === '/api/v1/admin/active-partners') return ok(await leads.activePartners(env.DB, access));
     if ((m = path.match(/^\/api\/v1\/admin\/leads\/([0-9a-f-]{36})(\/assign|\/status|\/note)?$/))) {
       if (method === 'GET' && !m[2]) return ok(await leads.getAny(env.DB, access, m[1]));

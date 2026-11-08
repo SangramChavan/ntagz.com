@@ -7,6 +7,7 @@ Nothing here can reach production: the database is rebuilt under `tests/e2e/.wra
 | Spec | Covers |
 |---|---|
 | `journey.spec.mjs` | Workflow B end to end (apply through the wizard with real uploads, HQ approve, agreement, fee, activate, dashboard, sign out/in); documents-requested loop and rejection reason; suspension locks the partner out at once and reinstating restores access; wizard validation moves focus to the first problem |
+| `wholesale.spec.mjs` | HQ sets the margin and a band on the Wholesale screen; an Enterprise partner sees partner prices and credit, orders and pays wholly from stock credit; HQ sees the credit used; a Smile+ partner has no Wholesale section |
 | `mobile.spec.mjs` | 360 px phone: no sideways scroll, controls at least 44 px, header on one row |
 
 Run: `npm --prefix apps/partner-portal ci && npm --prefix apps/partner-portal run build`, then in this folder `npm ci`, `npx playwright install chromium`, `npx playwright test`.
