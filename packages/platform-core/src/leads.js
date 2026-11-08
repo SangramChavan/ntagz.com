@@ -183,8 +183,9 @@ export async function setStatusHq(db, access, id, { status, reason, orderId }) {
   let why = null, ord = null;
   if (status === 'lost') { why = text(reason, 500); if (!why || why.length < 3) throw new AppError('VALIDATION_FAILED', 'Say why the lead was lost', { reason: 'required' }); }
   if (status === 'won') {
-    const o = orderId ? await db.prepare('SELECT id FROM orders WHERE id = ?').bind(String(orderId)).first() : null;
+    const o = orderId ? await db.prepare('SELECT id, partner_id FROM orders WHERE id = ?').bind(String(orderId)).first() : null;
     if (!o) throw new AppError('VALIDATION_FAILED', 'Enter the order this lead produced', { orderId: 'no such order' });
+    if (o.partner_id) throw new AppError('VALIDATION_FAILED', 'A partner\'s own wholesale order cannot win a lead or earn commission', { orderId: 'wholesale order' });
     ord = o.id;
   }
   const closed = status === 'won' || status === 'lost';

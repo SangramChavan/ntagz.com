@@ -53,9 +53,11 @@
     row('Items (before discounts)', inr(t.listTotal));
     if (t.bulkDiscount > 0) row('Quantity discount', '− ' + inr(t.bulkDiscount), 'off');
     if (t.memberDiscount > 0) row('Member discount', '− ' + inr(t.memberDiscount), 'off');
+    if (t.partnerDiscount > 0) row('Partner price', '− ' + inr(t.partnerDiscount), 'off');
     if (t.offer && t.offer.discount > 0) row(t.offer.name, '− ' + inr(t.offer.discount), 'off');
     if (t.gst > 0) row('GST (18%)', '+ ' + inr(t.gst));
     row('Shipping', t.shipping > 0 ? '+ ' + inr(t.shipping) : 'Free');
+    if (t.stockCredit > 0) { row('Order total', inr(t.orderTotal)); row('Paid from your opening stock credit', '− ' + inr(t.stockCredit), 'off'); }
     return wrap;
   }
 
@@ -80,7 +82,7 @@
     if (view.adjusted) { var u = el('button', 'link', 'Undo my changes'); u.type = 'button'; u.addEventListener('click', undo); var uw = el('div'); uw.style.textAlign = 'center'; uw.appendChild(u); root.appendChild(uw); }
 
     var sum = el('div', 'card'); sum.appendChild(totalsRows(t));
-    var tot = el('div', 'total'); tot.appendChild(el('span', null, 'Total')); tot.appendChild(el('span', null, inr(t.amount))); sum.appendChild(tot);
+    var tot = el('div', 'total'); tot.appendChild(el('span', null, t.stockCredit > 0 ? 'To pay now' : 'Total')); tot.appendChild(el('span', null, inr(t.amount))); sum.appendChild(tot);
     sum.appendChild(el('p', 'sub', 'Delivering to ' + view.deliverTo.pincode + ', ' + view.deliverTo.state + '.' + (view.dispatchDays ? ' Made to order: dispatch within ' + view.dispatchDays + ' working days of payment.' : '')));
     root.appendChild(sum);
 

@@ -1,4 +1,4 @@
-import type { Commission, CommissionTotals, LedgerEntry, Settlement, DocType, FormExtras, Lead, LeadActivity, LeadCounts, LeadInput, LeadStatus, Me, Mine, PartnerType, Quote, QuoteInput, QuoteProduct, QuoteStatus, QuoteTotals } from './types';
+import type { Commission, CommissionTotals, LedgerEntry, Settlement, Credit, DocType, FormExtras, Lead, LeadActivity, LeadCounts, LeadInput, LeadStatus, Me, Mine, PartnerType, Quote, QuoteInput, QuoteProduct, QuoteStatus, QuoteTotals, WholesaleAddress, WholesaleCatalogue, WholesaleOrder, WholesalePlaced, WholesalePrice } from './types';
 
 export class ApiError extends Error {
   constructor(public code: string, message: string, public status: number, public fields: Record<string, string> = {}) { super(message); }
@@ -50,5 +50,10 @@ export const api = {
   commission: (id: string) => call<{ commission: Commission; ledger: LedgerEntry[] }>(`/api/v1/partner/commissions/${id}`),
   disputeCommission: (id: string, reason: string) => call<{ commission: Commission; ledger: LedgerEntry[] }>(`/api/v1/partner/commissions/${id}/dispute`, json('POST', { reason })),
   settlements: () => call<{ items: Settlement[] }>('/api/v1/partner/settlements'),
+  wholesaleCatalogue: () => call<WholesaleCatalogue>('/api/v1/partner/wholesale/catalogue'),
+  wholesalePrice: (items: Array<{ productId: string; qty: number }>, state: string | undefined, useCredit: boolean) => call<WholesalePrice>('/api/v1/partner/wholesale/price', json('POST', { items, state, useCredit })),
+  wholesaleOrders: () => call<{ items: WholesaleOrder[]; credit: Credit }>('/api/v1/partner/wholesale/orders'),
+  wholesalePlace: (items: Array<{ productId: string; qty: number }>, a: WholesaleAddress, useCredit: boolean) => call<WholesalePlaced>('/api/v1/partner/wholesale/orders', json('POST', { items, useCredit, ...a })),
+  wholesaleCancel: (linkId: string) => call<{ items: WholesaleOrder[]; credit: Credit }>(`/api/v1/partner/wholesale/orders/${linkId}/cancel`, { method: 'POST' }),
   upload: (docType: DocType, file: File) => call<{ id: string; type: DocType }>('/api/v1/partner/documents', { method: 'POST', headers: { 'X-Doc-Type': docType, 'Content-Type': 'application/octet-stream' }, body: file }),
 };

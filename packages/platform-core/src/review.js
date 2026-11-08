@@ -197,10 +197,14 @@ export async function recordFeePayment(db, access, partnerId, { amountPaise, gst
   if (!['bank_transfer', 'upi', 'razorpay', 'payu', 'cash', 'other'].includes(method)) problems.method = 'invalid';
   if (typeof reference !== 'string' || reference.trim().length < 4) problems.reference = 'required (bank/UPI/gateway reference)';
   if (Object.keys(problems).length) throw new AppError('VALIDATION_FAILED', 'Check the payment details', problems);
+  const feeId = crypto.randomUUID();
   try {
     await setPartner(db, access, p, 'payment_pending', 'onboarding', {}, [
       db.prepare('INSERT INTO partner_fee_payments (id, partner_id, amount_paise, gst_paise, method, reference, recorded_by) VALUES (?, ?, ?, ?, ?, ?, ?)')
-        .bind(crypto.randomUUID(), partnerId, amountPaise, gstPaise, method, reference.trim().slice(0, 80), access.userId),
+        .bind(feeId, partnerId, amountPaise, gstPaise, method, reference.trim().slice(0, 80), access.userId),
+      // The opening stock order becomes stock credit (amount received less any GST recorded with it); nothing is refunded in cash.
+      db.prepare("INSERT INTO partner_stock_credit (id, partner_id, kind, delta_paise, fee_payment_id, actor) SELECT ?, partner_id, 'grant', amount_paise - gst_paise, id, ? FROM partner_fee_payments WHERE id = ? AND amount_paise > gst_paise AND EXISTS (SELECT 1 FROM partners WHERE id = partner_id AND status = 'onboarding')") // only if the status move above won
+        .bind(crypto.randomUUID(), access.userId, feeId),
       auditStmt(db, { actor: access.userId, action: 'partner.fee.record', entityType: 'partner', entityId: partnerId, after: { amountPaise, gstPaise, method, reference: reference.trim().slice(0, 80) } }),
     ]);
   } catch (e) { if (/UNIQUE.*reference/i.test(String(e && e.message))) throw new AppError('CONFLICT', 'That payment reference was already recorded'); throw e; }

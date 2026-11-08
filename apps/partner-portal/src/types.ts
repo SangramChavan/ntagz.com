@@ -16,6 +16,7 @@ export interface Mine { application: Application | null; partner: { partnerCode:
 export interface Me {
   email: string; roles: string[]; permissions: string[];
   partner: { partner_code: string; type_key: string; status: PartnerStatus; business_name: string } | null;
+  wholesale?: boolean; // the partner type may place wholesale orders (the generic customer role also carries orders.place.own, so the permission alone is not enough)
 }
 
 export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'quotation' | 'won' | 'lost';
@@ -43,3 +44,18 @@ export interface Commission { id: string; status: CommissionStatus; basePaise: n
 export interface LedgerEntry { kind: string; deltaPaise: number; reason: string; by: string; at: number }
 export type CommissionTotals = Record<CommissionStatus, { n: number; amountPaise: number }>;
 export interface Settlement { number: string; totalPaise: number; tdsPaise: number; tdsRateBp: number | null; netPaise: number; method: string; reference: string; commissions: number; at: number }
+
+export interface Credit { grantedPaise: number; consumedPaise: number; heldPaise: number; availablePaise: number }
+export interface WholesaleProduct { id: string; name: string; moq: number; fixed: boolean; packSize: number; retailExPaise: number; partnerExPaise: number | null; discountPct: number | null; priced: boolean }
+export interface WholesaleCatalogue { ready: boolean; gstPct: number; products: WholesaleProduct[]; credit: Credit }
+export interface WholesaleLine { productId: string; name: string; qty: number; unitExPaise: number; retailExUnitPaise: number; discountPct: number; lineExPaise: number }
+export interface WholesalePrice {
+  lines: WholesaleLine[]; totals: { pieces: number; retailExPaise: number; discountPaise: number; shippingPaise: number; gstPaise: number; totalPaise: number };
+  creditPaise: number; payablePaise: number; availableCreditPaise: number;
+}
+export interface WholesaleOrder {
+  kind: 'order' | 'link'; id: string; ref: string; at: number; status: string; totalPaise: number; creditPaise: number; payablePaise: number; expiresAt?: number; payUrl?: string | null;
+  items: Array<{ productId: string; name: string; qty: number }>;
+}
+export interface WholesalePlaced { kind: 'order' | 'link'; orderRef?: string; linkId?: string; payUrl?: string; totalPaise: number; creditPaise: number; payablePaise: number }
+export interface WholesaleAddress { address: string; pincode: string; state: string; phone: string; gstin?: string }
