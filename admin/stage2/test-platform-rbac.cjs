@@ -18,7 +18,7 @@ const throws = async (fn, code) => { try { await fn(); } catch (e) { assert.equa
   assert.equal(one("SELECT COUNT(*) c FROM roles").c, 12); ok("12 roles seeded");
   assert.equal(one("SELECT COUNT(*) c FROM partner_types").c, 5); ok("5 partner types seeded");
   assert.deepEqual(q("SELECT key FROM partner_types ORDER BY sort").map((r) => r.key), ["360", "enterprise", "flex", "smile", "smile_plus"]); ok("partner types in order");
-  assert.deepEqual(q("SELECT fee_paise FROM partner_types ORDER BY sort").map((r) => r.fee_paise), [9999900, 4999900, 2499900, 1999900, 999900]); ok("proposed fees stored in paise");
+  assert.deepEqual(q("SELECT fee_paise FROM partner_types ORDER BY sort").map((r) => r.fee_paise), [9999900, 4999900, 2499900, 999900, 1999900]); ok("opening order amounts stored in paise (0029: Smile 9,999 < Smile+ 19,999)");
   assert.equal(one("SELECT COUNT(*) c FROM partner_types WHERE gst_rate_bp IS NOT NULL").c, 0); ok("no GST rate is guessed (owner decision pending)");
   assert.equal(one("SELECT COUNT(*) c FROM role_permissions rp LEFT JOIN roles r ON r.key=rp.role_key LEFT JOIN permissions p ON p.key=rp.permission_key WHERE r.key IS NULL OR p.key IS NULL").c, 0); ok("every role_permission points at a real role and permission");
   assert.equal(one("SELECT COUNT(*) c FROM partner_types pt LEFT JOIN roles r ON r.key=pt.role_key WHERE r.kind != 'partner' OR r.key IS NULL").c, 0); ok("every partner type maps to a partner role");
