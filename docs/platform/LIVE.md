@@ -1,12 +1,12 @@
-# What is live (updated 2026-11-08, leads deployed)
+# What is live (updated 2026-11-08, quotations and quote-to-payment deployed)
 
 | Surface | State | Version / evidence |
 |---|---|---|
 | `ntagz.com` (store) | GitHub Pages, **unchanged** | cutover to Cloudflare not done (see CUTOVER-PLAN.md) |
 | `ntagz.com/api/*` (`ntagz-payments`) | **unchanged** | last deployed 2026-11-02 |
-| `admin.ntagz.com` (`ntagz-admin`) | **redeployed** from main `3e238c7`: Partners screen, **Leads tab**, document access (`KYC` binding), partner emails sender + cron flush. Also shipped the earlier-merged "required shipment email updates" (2026-11-06) in the first redeploy | version `c27c23e0-3b0a-4170-898e-e3e5c001ddf6`; previous `cf775972-bda6-4263-894b-e01eb2425fad` (before that `7cfb6ef2-0fb5-4fe3-a622-7ba45522a04d`) |
-| `partner.ntagz.com` (`ntagz-partner`) | **live**: portal (now with **Leads**) + `/api/v1`. Both secrets set | version `34d91dbe-b1e6-4963-b6ac-a0f038b3c096`; previous `62d2ca15-a8f6-42e9-9c5f-dbd883b2ad25` |
-| D1 `ntagz-db` | migrations **0021-0025 applied** (additive) | restore points taken before: 0021-0024 `00000ffb-00000000-0000511d-9719831917229bc604491415106a07a2`; 0025 `0000102b-0000000a-0000511d-bf00158086e0d399718caa269bbaea0e` |
+| `admin.ntagz.com` (`ntagz-admin`) | **redeployed** from main `703d94b`: Partners screen, Leads tab, **Quotes tab (approval queue, payment link from an accepted quote)**, document access (`KYC` binding), partner emails sender + cron flush. Also shipped the earlier-merged "required shipment email updates" (2026-11-06) in the first redeploy | version `35943468-88b3-41d7-95ce-ed86c6cdeee3`; previous `c27c23e0-3b0a-4170-898e-e3e5c001ddf6`, then `cf775972-bda6-4263-894b-e01eb2425fad`, and before the partner platform `7cfb6ef2-0fb5-4fe3-a622-7ba45522a04d` |
+| `partner.ntagz.com` (`ntagz-partner`) | **live**: portal (now with Leads and **Quotes**) + `/api/v1`. Both secrets set | version `79b1f28d-5c22-46f9-b020-706638abd4e3`; previous `34d91dbe-b1e6-4963-b6ac-a0f038b3c096`, then `62d2ca15-a8f6-42e9-9c5f-dbd883b2ad25` |
+| D1 `ntagz-db` | migrations **0021-0027 applied** (additive) | restore points taken before: 0021-0024 `00000ffb-00000000-0000511d-9719831917229bc604491415106a07a2`; 0025 `0000102b-0000000a-0000511d-bf00158086e0d399718caa269bbaea0e`; 0026-0027 `0000103d-00000000-0000511d-fca29c602c56202edb4a221da6f83c6a` |
 | R2 `ntagz-kyc` | created, **private** (r2.dev disabled, no custom domain) | empty |
 
 ## Secrets on `ntagz-partner`
@@ -17,8 +17,8 @@
 `HQ_NOTIFY_EMAILS` (inboxes for "new partner application"), `PARTNER_URL`, `ADMIN_URL`. Without `HQ_NOTIFY_EMAILS` HQ gets no email; they still see applications in admin > Partners.
 
 ## Rollback
-- Admin: `cd admin && npx wrangler rollback cf775972-bda6-4263-894b-e01eb2425fad` (the new tables stay; older code ignores them). To go back to before the partner platform: `7cfb6ef2-0fb5-4fe3-a622-7ba45522a04d`.
-- Partner portal back one step (without Leads): `npx wrangler rollback 62d2ca15-a8f6-42e9-9c5f-dbd883b2ad25 --name ntagz-partner`.
+- Admin back one step (without Quotes): `cd admin && npx wrangler rollback c27c23e0-3b0a-4170-898e-e3e5c001ddf6` (the new tables stay; older code ignores them). Further back: `cf775972-bda6-4263-894b-e01eb2425fad` (without Leads), `7cfb6ef2-0fb5-4fe3-a622-7ba45522a04d` (before the partner platform).
+- Partner portal back one step (without Quotes): `npx wrangler rollback 34d91dbe-b1e6-4963-b6ac-a0f038b3c096 --name ntagz-partner`. Further back: `62d2ca15-a8f6-42e9-9c5f-dbd883b2ad25` (without Leads).
 - Partner portal: `npx wrangler delete --name ntagz-partner` removes the Worker and its domain. Nothing else depends on it.
 - Data: migrations are additive. Use a D1 restore point only for data loss (it would also discard orders placed after it, so avoid): `npx wrangler d1 time-travel restore ntagz-db --bookmark=<bookmark above>`.
 
