@@ -18,7 +18,7 @@ const T = {
     'Please add it and send your application again.'], cta: ['Update your application', partnerUrl(env) + '/apply'] }),
   application_approved: (d, env) => ({ subject: 'Your Ntagz partner application is approved', lines: [
     `Hi ${d.name || 'there'},`, `Your application for ${d.businessName || 'your business'} has been approved. Your Partner ID is ${d.partnerCode}.`,
-    'Your partner dashboard opens after Ntagz records your signed partner agreement and your joining fee, and then activates your account. The Ntagz team will contact you with the details.'],
+    'Your partner dashboard opens after Ntagz records your signed partner agreement and the payment for your opening stock order, and then activates your account. The Ntagz team will contact you with the details.'],
     cta: ['Follow your progress', partnerUrl(env) + '/status'] }),
   application_rejected: (d, env) => ({ subject: 'Update on your Ntagz partner application', lines: [
     `Hi ${d.name || 'there'},`, 'We could not approve your partner application at this time.', `Reason from the team: “${d.note}”`, 'You are welcome to apply again with updated details.'],

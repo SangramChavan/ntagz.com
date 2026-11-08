@@ -121,7 +121,7 @@ export function Apply({ initial, onSubmitted }: { initial: Mine | null; onSubmit
             <label class="type" key={t.key}>
               <input type="radio" name="type" value={t.key} checked={d.typeKey === t.key} onChange={() => set('typeKey', t.key)} />
               <span class="name">{t.label}</span><br />
-              <span class="fee">Joining fee {rupees(t.feePaise)}{t.gstRateBp === null ? ' (taxes as applicable)' : ''}</span>
+              <span class="fee">Opening stock order {rupees(t.feePaise)}{t.gstRateBp === null ? ' (taxes as applicable)' : ''}, returned to you as stock at partner price</span>
             </label>
           ))}
         </fieldset>

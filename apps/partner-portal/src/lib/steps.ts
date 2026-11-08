@@ -39,7 +39,7 @@ export function stages(appStatus: string, partnerStatus: string | null): Stage[]
     ['under_review', 'Under review', 'The Ntagz team checks your details and documents.'],
     ['approved', 'Approved', 'Your Partner ID has been issued.'],
     ['agreement_pending', 'Partner agreement', 'Ntagz records your signed agreement.'],
-    ['payment_pending', 'Joining fee', 'Ntagz records your joining fee payment.'],
+    ['payment_pending', 'Opening stock order', 'Ntagz records the payment for your opening stock order.'],
     ['onboarding', 'Final checks', 'Last checks before your access opens.'],
     ['active', 'Active partner', 'Your partner dashboard is open.'],
   ];

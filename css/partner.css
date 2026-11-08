@@ -1,0 +1,46 @@
+/* Partner programme page (/partner/). Builds on about.css (ab-*); only what that file lacks lives here. */
+.pt-promise { margin-top: 18px; font-size: .9375rem; color: var(--ink-2); padding-left: 14px; border-left: 2px solid var(--tagz); }
+
+.pt-ways { display: grid; gap: 16px; margin-top: 40px; }
+.pt-way { background: var(--surface); border: 1px solid var(--paper); border-radius: var(--r-lg); padding: 26px 24px; }
+.pt-way h3, .pt-plan h3 { font: 700 1.25rem/1.25 var(--ff-head); letter-spacing: -.02em; color: var(--ink); }
+.pt-way p { margin-top: 10px; font-size: .9688rem; line-height: 1.6; color: var(--ink-2); }
+.pt-flow { list-style: none; margin-top: 18px; display: grid; gap: 8px; counter-reset: s; }
+.pt-flow li { counter-increment: s; display: flex; align-items: center; gap: 12px; font-weight: 600; color: var(--ink); }
+.pt-flow li::before { content: counter(s); flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--tagz-lt); color: var(--tagz-dk); font: 700 .8125rem/1 var(--ff-head); }
+
+.pt-plans { display: grid; gap: 16px; margin-top: 40px; }
+.pt-plan { background: var(--cream); border: 1px solid var(--paper); border-radius: var(--r-lg); padding: 24px; }
+.pt-tier { font: 700 .75rem/1 var(--ff-head); letter-spacing: .14em; text-transform: uppercase; color: var(--tagz-dk); }
+.pt-plan h3 { margin-top: 10px; }
+.pt-plan dl { margin-top: 16px; display: grid; gap: 12px; }
+.pt-plan dt { font: 600 11px/1 var(--ff-head); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.pt-plan dd { margin-top: 5px; font-size: .9375rem; line-height: 1.55; color: var(--ink-2); }
+
+/* The comparison table repeats the cards, so phones get the cards only (no sideways scrolling). */
+.pt-compare { display: none; margin-top: 32px; }
+.pt-compare table { width: 100%; border-collapse: collapse; font-size: .9375rem; }
+.pt-compare caption { text-align: left; font: 700 1.125rem/1.3 var(--ff-head); color: var(--ink); padding-bottom: 12px; }
+.pt-compare th, .pt-compare td { text-align: left; padding: 12px 10px; border-bottom: 1px solid var(--paper); color: var(--ink-2); vertical-align: top; }
+.pt-compare thead th { font: 600 11px/1.2 var(--ff-head); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
+.pt-compare tbody th { color: var(--ink); font-weight: 700; }
+
+.pt-faq { margin-top: 32px; max-width: 760px; }
+.pt-faq details { border-bottom: 1px solid var(--paper); }
+.pt-faq summary { min-height: 44px; padding: 16px 32px 16px 0; cursor: pointer; font: 600 1.0625rem/1.35 var(--ff-head); color: var(--ink); list-style: none; position: relative; }
+.pt-faq summary::-webkit-details-marker { display: none; }
+.pt-faq summary::after { content: "+"; position: absolute; right: 4px; top: 14px; font-size: 1.25rem; color: var(--tagz-dk); }
+.pt-faq details[open] summary::after { content: "−"; }
+.pt-faq summary:focus-visible { outline: 2px solid var(--tagz); outline-offset: 2px; }
+.pt-faq p { padding: 0 0 18px; line-height: 1.65; color: var(--ink-2); max-width: 66ch; }
+
+@media (min-width: 768px) {
+  .pt-ways { grid-template-columns: 1fr 1fr; }
+  .pt-plans { grid-template-columns: 1fr 1fr; }
+  .pt-compare { display: block; }
+  .pt-steps { grid-template-columns: repeat(2, 1fr); }
+}
+@media (min-width: 1100px) {
+  .pt-plans { grid-template-columns: repeat(3, 1fr); }
+  .pt-steps { grid-template-columns: repeat(4, 1fr); }
+}
