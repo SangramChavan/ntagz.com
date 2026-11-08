@@ -73,7 +73,8 @@ Legend: ☐ not started · ◐ in progress · ✔ done and tested · ⛔ blocked
 | Item | Owner | Status |
 |---|---|---|
 | **Leads**: partner registers prospects (one open lead per phone network-wide), works them (notes, calls, visits, contacted/qualified/lost), HQ sees all, reassigns, moves to quotation, marks won **with its order** or lost. Migration 0025, API, partner portal screens, admin Leads tab, 54 backend checks + 2 browser tests | Backend + Portal + HQ admin | ✔ **live** (migration 0025 applied, admin and partner redeployed 2026-11-08; see LIVE.md) |
-| Quotations (the `quotation` lead status is already reserved) | Backend + Portal + HQ admin | ☐ next |
+| **Quotations**: partner (360/Enterprise) drafts a quote for an own open lead, priced by the **checkout engine** (guest pricing, quantity discounts, GST, shipping by state) and frozen as an immutable snapshot; submit; HQ/Operations approve or reject with a reason; approved -> sent -> customer accepted/declined; expiry by date; share text + WhatsApp link; emails to HQ and partner; lead moves to `quotation` on approval. Migration 0026, 54 backend checks, 2 browser tests | Backend + Portal + HQ admin | ✔ built and tested; **not deployed** (needs migration 0026 on the live DB + admin/partner redeploy) |
+| Quotation gaps: no stock/availability check; HQ cannot create quotes (only approve); the customer's answer is recorded by the partner or HQ (no customer-facing page yet); converting an accepted quote to an order is manual (HQ makes a Pay link, then marks the lead won with the order). Next: customer page + Pay-link conversion | Backend | ☐ |
 | Partner price lists and wholesale ordering, inventory per partner | Backend | ☐ |
 | Commission engine, settlements (will attach `partner_id`/`lead_id` to orders; won leads already carry the order) | Backend | ☐ |
 | Territories (PIN-to-region map; also enables Regional Manager scope, which fails closed today) | Backend | ☐ |

@@ -26,3 +26,14 @@ export interface Lead {
 export interface LeadActivity { by: string; kind: 'created' | 'note' | 'call' | 'visit' | 'status' | 'assign'; body: string | null; at: number }
 export type LeadCounts = Record<LeadStatus, number>;
 export interface LeadInput { businessName: string; contactName: string; phone: string; email?: string; city?: string; state?: string; pincode?: string; interest?: string; estQuantity?: number | string; notes?: string }
+
+export type QuoteStatus = 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'sent' | 'accepted' | 'declined' | 'expired' | 'cancelled';
+export interface QuoteItem { productId: string; name: string; qty: number; unitPricePaise: number; bulkPct: number; lineNetPaise: number; allInclusive: boolean }
+export interface Quote {
+  id: string; number: string; leadId: string; leadBusiness: string | null; status: QuoteStatus; customerName: string; customerPhone: string; customerEmail: string | null; shipState: string | null;
+  validUntil: number; notes: string | null; decisionNote: string | null; pieces: number; subtotalPaise: number; discountPaise: number; gstPaise: number; shippingPaise: number; totalPaise: number;
+  sentAt: number | null; respondedAt: number | null; createdAt: number; updatedAt: number; items?: QuoteItem[]; shareText?: string;
+}
+export interface QuoteProduct { id: string; name: string; listPricePaise: number; moq: number; fixed: boolean; allInclusive: boolean; packSize: number }
+export interface QuoteTotals { pieces: number; subtotalPaise: number; discountPaise: number; gstPaise: number; shippingPaise: number; totalPaise: number }
+export interface QuoteInput { leadId?: string; items: Array<{ productId: string; qty: number }>; validDays?: number; notes?: string }

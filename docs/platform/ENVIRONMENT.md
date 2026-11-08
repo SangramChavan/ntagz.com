@@ -32,6 +32,7 @@ Names only. **Values are never committed and never pasted into chat.** Secrets a
 | `RESEND_API_KEY` | secret | Partner login codes, applicant emails |
 | `HQ_NOTIFY_EMAILS`, `PARTNER_URL`, `ADMIN_URL` | var, optional | As above |
 | `DEV_OTP_ECHO` | local only | **Never set in production** |
+| `OTP_IP_LIMIT` | var, optional | Sign-in codes allowed per IP per 15 minutes. Default 10. Raised only on the local browser-test servers (they share one IP). Do not raise it in production |
 | `DB` | D1 binding | `ntagz-db` (shared) |
 | `KYC` | R2 binding | Private bucket `ntagz-kyc` (no public access, no custom domain) |
 | `ASSETS` | binding | Built portal from `apps/partner-portal/dist` |

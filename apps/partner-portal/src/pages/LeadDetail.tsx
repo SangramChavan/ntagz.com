@@ -3,9 +3,11 @@ import { api, ApiError } from '../api';
 import { Alert, Button, Field } from '../components/ui';
 import { ACTIVITY_LABEL, LEAD_STATUS, NEXT, when } from '../lib/leads';
 import { navigate } from '../router';
-import type { Lead, LeadActivity, LeadStatus } from '../types';
+import { rupeesExact } from '../lib/format';
+import { QUOTE_STATUS } from '../lib/quotes';
+import type { Lead, LeadActivity, LeadStatus, Quote } from '../types';
 
-export function LeadDetail({ id }: { id: string }) {
+export function LeadDetail({ id, canQuote }: { id: string; canQuote?: boolean }) {
   const [data, setData] = useState<{ lead: Lead; activities: LeadActivity[] } | null>(null);
   const [error, setError] = useState('');
   const [kind, setKind] = useState<'note' | 'call' | 'visit'>('note');
@@ -14,7 +16,9 @@ export function LeadDetail({ id }: { id: string }) {
   const [losing, setLosing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [bodyErr, setBodyErr] = useState('');
+  const [quotes, setQuotes] = useState<Quote[]>([]);
 
+  useEffect(() => { if (canQuote) api.quotes(undefined, id).then((r) => setQuotes(r.items)).catch(() => setQuotes([])); }, [id, canQuote]);
   useEffect(() => { api.lead(id).then(setData).catch((e) => setError(e instanceof ApiError && e.status === 404 ? 'This lead was not found.' : 'Could not load this lead.')); }, [id]);
   const run = async (fn: () => Promise<{ lead: Lead; activities: LeadActivity[] }>) => {
     setBusy(true); setError('');
@@ -59,6 +63,17 @@ export function LeadDetail({ id }: { id: string }) {
           </div>
         )}
       </div>
+
+      {canQuote && (open || quotes.length > 0) && (
+        <div class="card">
+          <h2 class="mt0">Quotations</h2>
+          {quotes.length === 0 && <p class="muted">No quotation yet for this lead.</p>}
+          <ul class="leadlist">
+            {quotes.map((x) => <li key={x.id}><button class="leadcard" type="button" onClick={() => navigate('/quotes/' + x.id)}><span class="leadtop"><strong>{x.number}</strong><span class={`pill ${QUOTE_STATUS[x.status][1]}`}>{QUOTE_STATUS[x.status][0]}</span></span><span class="muted small">{rupeesExact(x.totalPaise)}</span></button></li>)}
+          </ul>
+          {open && <div class="row"><Button primary onClick={() => navigate('/quotes/new/' + id)}>Prepare quotation</Button></div>}
+        </div>
+      )}
 
       {open && (
         <div class="card">

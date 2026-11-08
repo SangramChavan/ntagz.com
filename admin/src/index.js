@@ -1260,7 +1260,7 @@ async function saveCampaign(body, actor, env) {
 
 // ── Router ────────────────────────────────────────────────────────────
 const PUBLIC_ASSETS = { "/style.css": "/style.css", "/login.js": "/login.js", "/theme.js": "/theme.js" }; // theme.js: the sign-in page needs it too
-const CRM_ASSETS = new Set(["/customers.js", "/crm-analytics.js", "/crm-campaigns.js", "/crm.css", "/membership.js", "/paylinks.js", "/partners.js", "/partners.css", "/leads.js"]); // served only to signed-in admins
+const CRM_ASSETS = new Set(["/customers.js", "/crm-analytics.js", "/crm-campaigns.js", "/crm.css", "/membership.js", "/paylinks.js", "/partners.js", "/partners.css", "/leads.js", "/quotes.js"]); // served only to signed-in admins
 
 export default {
   async scheduled(_event, env, ctx) { ctx.waitUntil(Promise.all([crmScheduled(env), membershipTick(env).catch((e) => console.error('membership tick failed:', e && e.message)), flushOutbox(env, { limit: 25 })])); },
