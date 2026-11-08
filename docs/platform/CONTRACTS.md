@@ -156,6 +156,7 @@ A staff member needs `settings.manage` or `staff.manage` before MFA is required 
 `--ink #1F1C20`, `--accent #FF6A21`, `--paper #FFFFFF`, `--surface #F4F6F8`, plus semantic success, warning and danger colours (to be fixed with contrast checks in the design system). Base 4 px spacing. Radius 6 px. System font stack first. Touch targets 44 px. No gradients.
 
 ## Change log
+- v0.5 (HQ Partners screen): `GET /api/v1/admin/partner-applications` accepts `stage` (`new|review|docs|onboarding|active|suspended|rejected`, fixed map, unknown values ignored) and `q` (business, city, Partner ID, email; LIKE wildcards escaped), and returns `counts` per stage that ignore filters. Rows include `partnerCode`, `partnerStatus`, `email`. Detail returns `partner` (status, fee due, agreement, fee payments), applicant `email`, and `history` (applicant actions are labelled `Applicant`). New error code `UNAVAILABLE` (503) when document storage is not bound. PDFs are served as downloads, images inline, both with a sandbox CSP. Fee errors are written in rupees.
 - v0.4: `GET /api/v1/partner/applications/mine` also returns `partner: { partnerCode, status } | null` (the caller's own partner record from approval on), so the portal can show the onboarding stage before access is active.
 - v0.1 initial.
 - v0.3 (apply/approval API implemented; migration 0023):

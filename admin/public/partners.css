@@ -1,0 +1,24 @@
+/* Partners screen. Uses the admin theme variables only, so light/dark follow the rest of the admin. */
+.pn-bar { margin: 8px 0 10px; }
+.pn-bar input { width: 100%; min-height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--ink); font: inherit; }
+.pn-list { display: grid; gap: 10px; }
+.pn-card { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.pn-main { min-width: 0; }
+.pn-main .sub { overflow-wrap: anywhere; }
+.pn-body { padding: 16px 20px 0; overflow: auto; flex: 1; display: grid; gap: 4px; align-content: start; }
+.pn-sec { border-top: 1px solid var(--line); padding: 14px 0 6px; margin-top: 10px; }
+.pn-sec h3 { margin: 0 0 8px; font-size: 14px; }
+.pn-dl { display: grid; gap: 0; margin: 0; }
+.pn-dl > div { display: grid; grid-template-columns: 8.5rem 1fr; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.pn-dl dt { color: var(--ink2); font-size: 13px; }
+.pn-dl dd { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.pn-docs, .pn-steps, .pn-hist { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.pn-docs li { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.pn-hist li { display: grid; gap: 0; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.pn-fee { display: grid; gap: 10px; margin-top: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card2); }
+.pn-fee .err { color: var(--bad); font-size: 13px; min-height: 1em; }
+.pn-fee .field input, .pn-fee .field select, #pnnote { width: 100%; min-height: 44px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--ink); font: inherit; }
+#pnnote { min-height: 96px; resize: vertical; }
+@media (max-width: 520px) { .pn-card { align-items: flex-start; flex-direction: column; } .pn-dl > div { grid-template-columns: 1fr; gap: 0; } }
+#pnactions { padding: 14px 20px 16px; margin: 0; }
+.panel-head .h0 { overflow-wrap: anywhere; }

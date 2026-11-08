@@ -1,5 +1,5 @@
 // One error shape for every new endpoint (docs/platform/CONTRACTS.md section 4). Never leak SQL, stack traces or secrets.
-const STATUS = { VALIDATION_FAILED: 400, UNAUTHENTICATED: 401, FORBIDDEN: 403, NOT_FOUND: 404, CONFLICT: 409, RATE_LIMITED: 429, INTERNAL: 500 };
+const STATUS = { VALIDATION_FAILED: 400, UNAUTHENTICATED: 401, FORBIDDEN: 403, NOT_FOUND: 404, CONFLICT: 409, RATE_LIMITED: 429, INTERNAL: 500, UNAVAILABLE: 503 };
 
 export class AppError extends Error {
   constructor(code, message, fields) {
