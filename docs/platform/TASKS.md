@@ -18,14 +18,15 @@ Legend: ☐ not started · ◐ in progress · ✔ done and tested · ⛔ blocked
 
 | Item | Owner | Depends on | Status |
 |---|---|---|---|
-| PR #40 merged (test baseline) | Integration/QA | owner | ◐ open |
-| Remove `pages_build_output_dir` from root `wrangler.toml` | DevOps | none | ☐ |
-| Widen CI: seo, schema, pricing, links, admin suite | DevOps | PR #40 | ☐ |
-| `packages/platform-core` skeleton: errors, validation, audit, requirePermission | Backend + Auth | contracts | ☐ |
-| Migration 0021: roles, permissions, role_permissions, user_roles, login_attempts + seed | Backend | contracts | ☐ |
-| Migration 0022: partner_types, partners, partner_applications, partner_documents, partner_agreements | Backend | 0021 | ☐ |
+| PR #40 merged (test baseline) | Integration/QA | owner | ✔ merged |
+| Remove `pages_build_output_dir` from root `wrangler.toml` | DevOps | none | ✔ (PR #42) |
+| Repair `admin/test/products.mjs` (expects 17 products; migration 0017 made it 18) so `admin/test/run-all.sh` passes on main | DevOps | none | ☐ |
+| Widen CI: seo, schema, pricing, links, site, admin suite | DevOps | repair above | ☐ |
+| `packages/platform-core`: errors, validators, audit, `loadAccess`/`requirePermission`/`scopeClause` | Backend + Auth | contracts | ✔ (47 tests, `admin/stage2/test-platform-rbac.cjs`) |
+| Migration 0021: roles, permissions, role_permissions, user_roles, login_attempts, users status columns, audit_log entity columns + seed | Backend | contracts | ✔ applied on local D1 only; **not applied to remote** |
+| Migration 0022: partner_types (5 seeded), partners, partner_applications, partner_documents, partner_agreements | Backend | 0021 | ✔ applied on local D1 only; **not applied to remote** |
 | Design tokens + base components in `packages/ui` | Design | contracts | ☐ |
-| `ntagz-site` Worker config and staging deploy | DevOps | owner O2 | ☐ |
+| `ntagz-site` Worker config and staging deploy | DevOps | owner O2 | ✔ staging live at workers.dev; cutover needs owner go (`CUTOVER-PLAN.md`) |
 | Staging D1 + test keys | DevOps | owner O2 | ⛔ |
 
 ## Stage 2: P0 build
