@@ -2,6 +2,7 @@ import { AppError } from './errors.js';
 import { requirePermission } from './access.js';
 import { auditStmt } from './audit.js';
 import * as v from './validate.js';
+import { accrualStmts } from './commissions.js';
 
 // Leads: prospects a partner registers. Rules enforced here AND in the database:
 //  - a partner sees and changes only their own leads (partner_id in every WHERE, never filtered after fetching);
@@ -187,15 +188,17 @@ export async function setStatusHq(db, access, id, { status, reason, orderId }) {
     ord = o.id;
   }
   const closed = status === 'won' || status === 'lost';
+  const accrual = status === 'won' ? await accrualStmts(db, { lead: r, orderId: ord, actor: access.userId }) : null; // a commission is created only if HQ has defined a matching rule
   try {
     const res = await db.batch([
       db.prepare('UPDATE leads SET status = ?, lost_reason = ?, order_id = ?, closed_at = ?, updated_at = unixepoch() WHERE id = ? AND status = ?').bind(status, why, ord, closed ? Math.floor(Date.now() / 1000) : null, id, r.status),
       actStmt(db, id, access.userId, 'status', 'hq', `${r.status} → ${status}${why ? ': ' + why : ''}${ord ? ' (order ' + ord.slice(0, 8) + ')' : ''}`),
       auditStmt(db, { actor: access.userId, action: 'lead.status', entityType: 'lead', entityId: id, before: { status: r.status }, after: { status, orderId: ord } }),
+      ...(accrual ? accrual.stmts : []),
     ]);
     if (res[0].meta.changes !== 1) throw new AppError('CONFLICT', 'The lead changed. Reload and try again.');
-  } catch (e) { if (/UNIQUE.*leads\.order_id|uq_leads_order/i.test(String(e && e.message))) throw new AppError('CONFLICT', 'That order is already credited to another lead'); throw e; }
-  return getHq(db, id);
+  } catch (e) { if (/UNIQUE.*leads\.order_id|uq_leads_order|UNIQUE.*commissions\.order_id/i.test(String(e && e.message))) throw new AppError('CONFLICT', 'That order is already credited'); throw e; }
+  return { ...(await getHq(db, id)), commission: accrual ? { amountPaise: accrual.amountPaise, status: 'pending' } : null };
 }
 
 export async function activePartners(db, access) {

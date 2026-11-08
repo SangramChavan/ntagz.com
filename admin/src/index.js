@@ -14,7 +14,8 @@ import { crmRoute, crmScheduled, crmWebhook } from "./crm/index.js"; // Customer
 import { payLinkRoute } from "./paylinks.js"; // payment links: create, track, remind (under /api/paylinks)
 import { adminV1 } from "../../packages/platform-core/src/http.js";
 import { quotePaymentLink } from "./quote-order.js"; // accepted quotation -> payment link (reuses the pay-links tool)
-import { flushOutbox } from "../../packages/platform-core/src/mail.js"; // partner emails: sent after changes, retried here every 15 min // partner network: applications, approvals, activation (under /api/v1/admin/)
+import { flushOutbox } from "../../packages/platform-core/src/mail.js"; // partner emails: sent after changes, retried here every 15 min
+import { processDue as commissionsDue } from "../../packages/platform-core/src/commissions.js"; // release approved commissions after their hold, apply refunds // partner network: applications, approvals, activation (under /api/v1/admin/)
 
 const SESSION_TTL = 12 * 3600;
 const OTP_TTL = 600;
@@ -1261,10 +1262,10 @@ async function saveCampaign(body, actor, env) {
 
 // ── Router ────────────────────────────────────────────────────────────
 const PUBLIC_ASSETS = { "/style.css": "/style.css", "/login.js": "/login.js", "/theme.js": "/theme.js" }; // theme.js: the sign-in page needs it too
-const CRM_ASSETS = new Set(["/customers.js", "/crm-analytics.js", "/crm-campaigns.js", "/crm.css", "/membership.js", "/paylinks.js", "/partners.js", "/partners.css", "/leads.js", "/quotes.js"]); // served only to signed-in admins
+const CRM_ASSETS = new Set(["/customers.js", "/crm-analytics.js", "/crm-campaigns.js", "/crm.css", "/membership.js", "/paylinks.js", "/partners.js", "/partners.css", "/leads.js", "/quotes.js", "/commissions.js"]); // served only to signed-in admins
 
 export default {
-  async scheduled(_event, env, ctx) { ctx.waitUntil(Promise.all([crmScheduled(env), membershipTick(env).catch((e) => console.error('membership tick failed:', e && e.message)), flushOutbox(env, { limit: 25 })])); },
+  async scheduled(_event, env, ctx) { ctx.waitUntil(Promise.all([crmScheduled(env), membershipTick(env).catch((e) => console.error('membership tick failed:', e && e.message)), flushOutbox(env, { limit: 25 }), commissionsDue(env.DB)])); },
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;

@@ -1,4 +1,4 @@
-import type { DocType, FormExtras, Lead, LeadActivity, LeadCounts, LeadInput, LeadStatus, Me, Mine, PartnerType, Quote, QuoteInput, QuoteProduct, QuoteStatus, QuoteTotals } from './types';
+import type { Commission, CommissionTotals, LedgerEntry, Settlement, DocType, FormExtras, Lead, LeadActivity, LeadCounts, LeadInput, LeadStatus, Me, Mine, PartnerType, Quote, QuoteInput, QuoteProduct, QuoteStatus, QuoteTotals } from './types';
 
 export class ApiError extends Error {
   constructor(public code: string, message: string, public status: number, public fields: Record<string, string> = {}) { super(message); }
@@ -46,5 +46,9 @@ export const api = {
   editQuote: (id: string, input: Omit<QuoteInput, 'leadId'>) => call<{ quote: Quote }>(`/api/v1/partner/quotes/${id}/items`, json('POST', input)),
   quoteAction: (id: string, action: 'submit' | 'cancel' | 'sent') => call<{ quote: Quote }>(`/api/v1/partner/quotes/${id}/${action}`, { method: 'POST' }),
   quoteAnswer: (id: string, outcome: 'accepted' | 'declined') => call<{ quote: Quote }>(`/api/v1/partner/quotes/${id}/response`, json('POST', { outcome })),
+  commissions: (status?: string) => call<{ items: Commission[]; totals: CommissionTotals }>('/api/v1/partner/commissions' + qs({ status })),
+  commission: (id: string) => call<{ commission: Commission; ledger: LedgerEntry[] }>(`/api/v1/partner/commissions/${id}`),
+  disputeCommission: (id: string, reason: string) => call<{ commission: Commission; ledger: LedgerEntry[] }>(`/api/v1/partner/commissions/${id}/dispute`, json('POST', { reason })),
+  settlements: () => call<{ items: Settlement[] }>('/api/v1/partner/settlements'),
   upload: (docType: DocType, file: File) => call<{ id: string; type: DocType }>('/api/v1/partner/documents', { method: 'POST', headers: { 'X-Doc-Type': docType, 'Content-Type': 'application/octet-stream' }, body: file }),
 };

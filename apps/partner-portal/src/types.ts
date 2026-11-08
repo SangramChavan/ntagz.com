@@ -37,3 +37,9 @@ export interface Quote {
 export interface QuoteProduct { id: string; name: string; listPricePaise: number; moq: number; fixed: boolean; allInclusive: boolean; packSize: number }
 export interface QuoteTotals { pieces: number; subtotalPaise: number; discountPaise: number; gstPaise: number; shippingPaise: number; totalPaise: number }
 export interface QuoteInput { leadId?: string; items: Array<{ productId: string; qty: number }>; validDays?: number; notes?: string }
+
+export type CommissionStatus = 'pending' | 'approved' | 'payable' | 'paid' | 'reversed' | 'disputed';
+export interface Commission { id: string; status: CommissionStatus; basePaise: number; originalAmountPaise: number; amountPaise: number; holdUntil: number | null; disputeReason: string | null; reversedReason: string | null; createdAt: number; orderRef: string; leadBusiness: string | null; settlementNumber: string | null; terms?: { pctBp: number | null; fixedPaise: number | null; maxPaise: number | null; holdDays: number | null; refundPolicy: string | null } }
+export interface LedgerEntry { kind: string; deltaPaise: number; reason: string; by: string; at: number }
+export type CommissionTotals = Record<CommissionStatus, { n: number; amountPaise: number }>;
+export interface Settlement { number: string; totalPaise: number; tdsPaise: number; tdsRateBp: number | null; netPaise: number; method: string; reference: string; commissions: number; at: number }
