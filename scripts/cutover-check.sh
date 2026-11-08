@@ -9,7 +9,7 @@ fail=0; bad() { echo "FAIL $*"; fail=1; }
 for u in $(grep -o '<loc>[^<]*</loc>' sitemap.xml | sed 's/<[^>]*>//g;s|https://ntagz.com||'); do
   c=$(curl -s -o /dev/null -w '%{http_code}' "$BASE$u"); [ "$c" = 200 ] || bad "$c $u"
 done
-for u in /docs/platform/CONTRACTS.md /admin/README.md /wrangler.toml /.dev.vars /db/schema.sql /RECOVERY.md /package.json /test/site-worker.test.js /packages/platform-core/src/auth.js /workers/partner/wrangler.jsonc /admin/migrations/0023_partner_sessions_fees.sql; do
+for u in /docs/platform/CONTRACTS.md /admin/README.md /wrangler.toml /.dev.vars /db/schema.sql /RECOVERY.md /package.json /test/site-worker.test.js /packages/platform-core/src/auth.js /apps/partner-portal/package.json /apps/partner-portal/src/main.tsx /workers/partner/wrangler.jsonc /admin/migrations/0023_partner_sessions_fees.sql; do
   c=$(curl -s -o /dev/null -w '%{http_code}' "$BASE$u"); [ "$c" = 404 ] && continue; bad "private path exposed: $c $u"
 done
 # Always rebuild: a leftover dist/ from another branch gives false failures (or hides real differences).

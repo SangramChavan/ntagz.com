@@ -130,6 +130,7 @@ const pdf = () => new TextEncoder().encode("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n");
   assert.equal(one("SELECT status FROM partners WHERE id = ?", pid).status, "agreement_pending"); assert.equal(one("SELECT COUNT(*) c FROM partner_agreements WHERE partner_id = ? AND status='pending'", pid).c, 1); ok("partner starts at agreement_pending with a pending agreement");
   assert.equal((await admin(`/api/v1/admin/partner-applications/${id}/approve`, "POST")).status, 409); ok("cannot approve twice");
   me = await call("/api/v1/me", { cookie: A }); assert.equal(me.json.data.partner, null); assert.ok(!me.json.data.roles.includes("partner_flex")); ok("approved is not active: no partner access yet");
+  r = await call("/api/v1/partner/applications/mine", { cookie: A }); assert.deepEqual(r.json.data.partner, { partnerCode: "NTZ-FLX-0001", status: "agreement_pending" }); ok("applicant can see their own onboarding stage and Partner ID");
   assert.equal((await call("/api/v1/partner/dashboard", { cookie: A })).status, 403); ok("dashboard is closed until activation");
 
   // ---- onboarding gates ----

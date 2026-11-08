@@ -35,9 +35,12 @@ async function openApp(db, userId) {
 export async function getMine(db, access) {
   requirePermission(access, 'partners.apply');
   const a = await openApp(db, access.userId) || await db.prepare('SELECT * FROM partner_applications WHERE user_id = ? ORDER BY created_at DESC LIMIT 1').bind(access.userId).first();
-  if (!a) return { application: null };
+  if (!a) return { application: null, partner: null };
+  // The applicant's own partner record (exists from approval on) so the portal can show the onboarding stage before access is active.
+  const pr = await db.prepare('SELECT partner_code, status FROM partners WHERE user_id = ?').bind(access.userId).first();
+  const partner = pr ? { partnerCode: pr.partner_code, status: pr.status } : null;
   const docs = (await db.prepare('SELECT id, doc_type, mime, size_bytes, status, note, created_at FROM partner_documents WHERE application_id = ? ORDER BY created_at').bind(a.id).all()).results;
-  return { application: row(a), documents: docs.map((d) => ({ id: d.id, type: d.doc_type, mime: d.mime, size: d.size_bytes, status: d.status, note: d.note })) };
+  return { application: row(a), partner, documents: docs.map((d) => ({ id: d.id, type: d.doc_type, mime: d.mime, size: d.size_bytes, status: d.status, note: d.note })) };
 }
 
 // Creates the draft on first save, then updates it. Unknown keys are dropped; ID numbers are never stored.

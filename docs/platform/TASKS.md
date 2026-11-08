@@ -35,12 +35,12 @@ Legend: ☐ not started · ◐ in progress · ✔ done and tested · ⛔ blocked
 |---|---|---|---|
 | Unified sessions and OTP hardening (per-IP limit, hashed session IDs, purge cron) | Auth | platform-core | ☐ |
 | Partner apply API (OTP login, draft, documents, submit) | Backend | 0022 | ✔ API only, tested (`test-partner-flow.cjs`); **no UI yet**, not deployed |
-| Partner apply UI (multi-step form, document upload, status page) | Partner portal | API above, design tokens | ☐ |
+| Partner apply UI (6-step wizard, document upload, status timeline, dashboard, sign-in) in `apps/partner-portal` | Partner portal | API above | ✔ built and clicked through on local D1 (phone + desktop width); not deployed. See README |
 | HQ approval API (list, review, approve, reject, request docs, agreement, fee, activate, suspend, reinstate) | Backend | 0022, 0023 | ✔ API only, wired into admin Worker under `/api/v1/admin/`, tested on real local D1; not deployed |
 | HQ partner applications screen in admin UI | HQ admin | API above | ☐ |
 | Partner ID issue, agreement and activation gates | Backend | above | ✔ (agreement and fee are recorded by HQ; e-sign and gateway fee payment are later) |
 | Partner login (email OTP, hashed sessions, per-IP limit) | Auth | platform-core | ✔ API (`/api/v1/auth/*` in `workers/partner`) |
-| Partner dashboard (five tier navigations, widgets) | Partner portal | auth, partners | ☐ (API returns profile and permissions only) |
+| Partner dashboard: profile + tier-specific list of what the partnership covers (no dead buttons) | Partner portal | auth, partners | ✔ minimal. Real modules (leads, orders, earnings...) are later tasks |
 | Wholesale catalogue and partner ordering via existing checkout | Backend + Partner portal | price_lists | ☐ |
 | Customer account: invoices, order tracking inside account | Customer portal | invoices table | ☐ |
 | Admin: `payment_alerts` screen | HQ admin | none | ☐ |
@@ -57,6 +57,15 @@ Legend: ☐ not started · ◐ in progress · ✔ done and tested · ⛔ blocked
 | Regional Manager `region` scope for applications (needs a PIN-to-region map) | Backend | ☐ |
 | E-sign for the partner agreement and gateway payment of the joining fee (today HQ records both) | Backend | ☐ owner O5 |
 | Create **private** R2 bucket `ntagz-kyc`; set secrets `PAN_HASH_SECRET`, `RESEND_API_KEY` on `ntagz-partner` | DevOps | ⛔ owner approval |
+
+## Portal follow-ups
+
+| Item | Owner | Status |
+|---|---|---|
+| Public indexable landing page for partner categories and `/apply` (the app is `noindex`; a client-rendered SPA is a poor SEO page) | Partner portal | ☐ |
+| Browser end-to-end test in CI (Playwright) for apply -> approve -> dashboard | QA | ☐ |
+| Accessibility audit with a screen reader and keyboard-only pass | Design | ☐ |
+| Show "Applying as" fee GST wording once owner decides O5 | Partner portal | ⛔ O5 |
 
 ## Stage 3: P1
 
