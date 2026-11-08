@@ -72,7 +72,7 @@ Legend: ☐ not started · ◐ in progress · ✔ done and tested · ⛔ blocked
 
 | Item | Owner | Status |
 |---|---|---|
-| **Leads**: partner registers prospects (one open lead per phone network-wide), works them (notes, calls, visits, contacted/qualified/lost), HQ sees all, reassigns, moves to quotation, marks won **with its order** or lost. Migration 0025, API, partner portal screens, admin Leads tab, 54 backend checks + 2 browser tests | Backend + Portal + HQ admin | ✔ built and tested; **not deployed** (needs migration 0025 on the live DB + admin/partner redeploy) |
+| **Leads**: partner registers prospects (one open lead per phone network-wide), works them (notes, calls, visits, contacted/qualified/lost), HQ sees all, reassigns, moves to quotation, marks won **with its order** or lost. Migration 0025, API, partner portal screens, admin Leads tab, 54 backend checks + 2 browser tests | Backend + Portal + HQ admin | ✔ **live** (migration 0025 applied, admin and partner redeployed 2026-11-08; see LIVE.md) |
 | Quotations (the `quotation` lead status is already reserved) | Backend + Portal + HQ admin | ☐ next |
 | Partner price lists and wholesale ordering, inventory per partner | Backend | ☐ |
 | Commission engine, settlements (will attach `partner_id`/`lead_id` to orders; won leads already carry the order) | Backend | ☐ |
