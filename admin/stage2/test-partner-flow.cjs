@@ -114,7 +114,9 @@ const pdf = () => new TextEncoder().encode("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n");
   const det = await admin(`/api/v1/admin/partner-applications/${id}`); assert.equal(det.json.data.documents.length, 2); assert.ok(!det.text.includes("kyc/")); ok("detail lists documents without exposing storage keys");
   const docId = det.json.data.documents[0].id;
   const dres = await admin(`/api/v1/admin/partner-documents/${docId}`); assert.equal(dres.status, 200); assert.equal(dres.res.headers.get("cache-control"), "no-store"); ok("HQ can open a KYC file (no-store, sandboxed)");
-  assert.equal(one("SELECT COUNT(*) c FROM audit_log WHERE action='partner.document.view' AND entity_id = ?", id).c, 1); ok("every document view is audited");
+  assert.equal(dres.res.headers.get("content-disposition"), "inline");
+  const pdfDoc = det.json.data.documents.find((x) => x.type === "address_proof"); const pres = await admin(`/api/v1/admin/partner-documents/${pdfDoc.id}`); assert.match(pres.res.headers.get("content-disposition"), /^attachment/); ok("images open inline, PDFs download (so the sandbox policy cannot block them)");
+  assert.equal(one("SELECT COUNT(*) c FROM audit_log WHERE action='partner.document.view' AND entity_id = ?", id).c, 2); ok("every document view is audited");
   assert.equal((await admin(`/api/v1/admin/partner-applications/${id}/approve`, "POST")).status, 409); ok("cannot approve before review");
   assert.equal((await admin(`/api/v1/admin/partner-applications/${id}/start-review`, "POST")).status, 200); ok("review started");
   assert.equal((await admin(`/api/v1/admin/partner-applications/${id}/request-documents`, "POST", {})).status, 400); ok("requesting documents needs a message");
@@ -138,7 +140,7 @@ const pdf = () => new TextEncoder().encode("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n");
   assert.equal((await P("activate")).status, 409); ok("cannot activate before agreement and fee");
   assert.equal((await P("fee-payment", { amountPaise: 2499900, method: "upi", reference: "UPI123456" })).status, 409); ok("fee cannot be recorded before the agreement");
   assert.equal((await P("agreement-signed")).status, 200);
-  assert.equal((await P("fee-payment", { amountPaise: 100, method: "upi", reference: "UPI123456" })).status, 400); ok("fee below the joining fee rejected");
+  { const low = await P("fee-payment", { amountPaise: 100, method: "upi", reference: "UPI123456" }); assert.equal(low.status, 400); assert.match(low.json.error.fields.amountPaise, /₹24,999/); assert.ok(!/paise/.test(low.json.error.fields.amountPaise)); } ok("fee below the joining fee rejected, message in rupees");
   assert.equal((await P("fee-payment", { amountPaise: 2499900, method: "cheque", reference: "UPI123456" })).status, 400);
   assert.equal((await P("fee-payment", { amountPaise: 2499900, gstPaise: 381000, method: "upi", reference: "UPI123456" })).status, 200); ok("fee recorded in its own ledger");
   assert.equal(one("SELECT amount_paise, gst_paise FROM partner_fee_payments WHERE partner_id = ?", pid).gst_paise, 381000);
@@ -180,6 +182,7 @@ const pdf = () => new TextEncoder().encode("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n");
   assert.equal(one("SELECT actor FROM audit_log WHERE action='partner.create'").actor, "hq@example.test"); ok("audit rows name the acting admin");
 
   // ---- error hygiene ----
+  { const saved0 = env.KYC; env.KYC = null; const d0 = await admin(`/api/v1/admin/partner-documents/${docId}`); env.KYC = saved0; assert.equal(d0.status, 503); assert.match(d0.json.error.message, /not connected/i); ok("admin without document storage answers 503 with a clear message"); }
   const saved = env.KYC; env.KYC = null; const e500 = await up("pan", png(), (await login("kyc@example.test"))); env.KYC = saved;
   assert.equal(e500.status, 500); assert.ok(!/KYC|stack|SELECT/i.test(e500.text) && e500.json.error.requestId); ok("server errors are generic and carry a request id");
   assert.equal(JSON.parse((await call("/api/v1/me")).text).ok, false); assert.equal((await call("/api/v1/me")).headers.get("cache-control"), "no-store"); ok("responses are no-store");

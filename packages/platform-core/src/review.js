@@ -14,27 +14,66 @@ const CODE = { '360': '360', enterprise: 'ENT', flex: 'FLX', smile: 'SML', smile
 const hasNote = (n) => typeof n === 'string' && n.trim().length >= 3;
 const note = (n) => String(n).trim().slice(0, 1000);
 
-function appOut(a) { return { id: a.id, status: a.status, typeKey: a.type_key, businessName: a.business_name, city: a.city, state: a.state, pincode: a.pincode, panLast4: a.pan_last4, submittedAt: a.submitted_at, reviewedBy: a.reviewed_by, decisionNote: a.decision_note, partnerId: a.partner_id }; }
+function appOut(a) {
+  return { id: a.id, status: a.status, typeKey: a.type_key, businessName: a.business_name, city: a.city, state: a.state, pincode: a.pincode, panLast4: a.pan_last4, submittedAt: a.submitted_at, reviewedBy: a.reviewed_by, decisionNote: a.decision_note, partnerId: a.partner_id, partnerCode: a.partner_code ?? null, partnerStatus: a.partner_status ?? null, email: a.email ?? null };
+}
 
-export async function listApplications(db, access, { status, limit = 50, before } = {}) {
+// What HQ works through. A "stage" is a view over application status + partner status, so nothing is double counted.
+const STAGES = {
+  new: "a.status = 'submitted'",
+  review: "a.status = 'under_review'",
+  docs: "a.status = 'documents_required'",
+  onboarding: "a.status = 'approved' AND p.status IN ('agreement_pending','payment_pending','onboarding')",
+  active: "p.status = 'active'",
+  suspended: "p.status IN ('suspended','terminated')",
+  rejected: "a.status = 'rejected'",
+};
+const FROM = 'FROM partner_applications a LEFT JOIN partners p ON p.id = a.partner_id JOIN users u ON u.id = a.user_id';
+const esc = (t) => t.replace(/[\\%_]/g, (c) => '\\' + c);
+
+export async function listApplications(db, access, { status, stage, q, limit = 50, before } = {}) {
   const scope = requirePermission(access, 'partners.review');
   const where = scopeClause(scope === 'all' ? 'all' : 'none', access, {});
   const conds = [where.sql, "a.status != 'draft'"]; const binds = [...where.binds];
+  if (STAGES[stage]) conds.push(STAGES[stage]); // value comes from the fixed map, never from the request
   if (status) { conds.push('a.status = ?'); binds.push(String(status)); }
+  if (q && String(q).trim()) {
+    const like = `%${esc(String(q).trim().slice(0, 80).toLowerCase())}%`;
+    conds.push("(LOWER(a.business_name) LIKE ? ESCAPE '\\' OR LOWER(a.city) LIKE ? ESCAPE '\\' OR LOWER(p.partner_code) LIKE ? ESCAPE '\\' OR LOWER(u.email) LIKE ? ESCAPE '\\')");
+    binds.push(like, like, like, like);
+  }
   if (before) { conds.push('COALESCE(a.submitted_at, 0) < ?'); binds.push(Number(before) || 0); }
   const lim = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 100);
-  const rows = (await db.prepare(`SELECT a.* FROM partner_applications a WHERE ${conds.join(' AND ')} ORDER BY COALESCE(a.submitted_at, 0) DESC LIMIT ?`).bind(...binds, lim).all()).results;
-  return { items: rows.map(appOut), limit: lim };
+  const rows = (await db.prepare(`SELECT a.*, p.partner_code, p.status AS partner_status, u.email ${FROM} WHERE ${conds.join(' AND ')} ORDER BY COALESCE(a.submitted_at, 0) DESC LIMIT ?`).bind(...binds, lim).all()).results;
+  // Counts ignore the stage/search filters so the chips always show the whole queue.
+  const sums = Object.entries(STAGES).map(([k, c]) => `SUM(CASE WHEN ${c} THEN 1 ELSE 0 END) AS ${k}`).join(', ');
+  const c = await db.prepare(`SELECT ${sums} ${FROM} WHERE a.status != 'draft'`).first();
+  const counts = {}; for (const k of Object.keys(STAGES)) counts[k] = Number(c?.[k] || 0);
+  return { items: rows.map(appOut), counts, limit: lim };
 }
 
 export async function getApplication(db, access, id) {
   const scope = requirePermission(access, 'partners.review');
   if (scope !== 'all') throw new AppError('NOT_FOUND', 'Not found');
-  const a = await db.prepare("SELECT * FROM partner_applications WHERE id = ? AND status != 'draft'").bind(id).first();
+  const a = await db.prepare(`SELECT a.*, p.partner_code, p.status AS partner_status, u.email ${FROM} WHERE a.id = ? AND a.status != 'draft'`).bind(id).first();
   if (!a) throw new AppError('NOT_FOUND', 'Not found');
-  const docs = (await db.prepare('SELECT id, doc_type, mime, size_bytes, status, note FROM partner_documents WHERE application_id = ?').bind(id).all()).results;
+  const docs = (await db.prepare('SELECT id, doc_type, mime, size_bytes, status, note FROM partner_documents WHERE application_id = ? ORDER BY created_at').bind(id).all()).results;
   const form = JSON.parse(a.form_json || '{}');
-  return { ...appOut(a), form, documents: docs.map((d) => ({ id: d.id, type: d.doc_type, mime: d.mime, size: d.size_bytes, status: d.status, note: d.note })) };
+  let partner = null; const entityIds = [id];
+  if (a.partner_id) {
+    const p = await db.prepare('SELECT p.id, p.partner_code, p.status, p.suspend_reason, p.activated_at, t.fee_paise, t.label AS type_label FROM partners p JOIN partner_types t ON t.key = p.type_key WHERE p.id = ?').bind(a.partner_id).first();
+    const ag = await db.prepare('SELECT version, status, sent_at, signed_at FROM partner_agreements WHERE partner_id = ? ORDER BY created_at DESC LIMIT 1').bind(a.partner_id).first();
+    const fees = (await db.prepare('SELECT amount_paise, gst_paise, method, reference, recorded_by, created_at FROM partner_fee_payments WHERE partner_id = ? ORDER BY created_at').bind(a.partner_id).all()).results;
+    partner = {
+      id: p.id, partnerCode: p.partner_code, status: p.status, suspendReason: p.suspend_reason, activatedAt: p.activated_at, feePaise: p.fee_paise, typeLabel: p.type_label,
+      agreement: ag ? { version: ag.version, status: ag.status, sentAt: ag.sent_at, signedAt: ag.signed_at } : null,
+      feePayments: fees.map((f) => ({ amountPaise: f.amount_paise, gstPaise: f.gst_paise, method: f.method, reference: f.reference, recordedBy: f.recorded_by, at: f.created_at })),
+    };
+    entityIds.push(a.partner_id);
+  }
+  const hist = (await db.prepare(`SELECT action, actor, detail, created_at FROM audit_log WHERE entity_type IN ('partner_application','partner') AND entity_id IN (${entityIds.map(() => '?').join(',')}) ORDER BY created_at DESC, rowid DESC LIMIT 60`).bind(...entityIds).all()).results;
+  const history = hist.map((h) => { let d = null; try { d = JSON.parse(h.detail); } catch { /* keep null */ } return { action: h.action, actor: h.actor === a.user_id ? 'Applicant' : h.actor, at: h.created_at, after: d && d.after ? d.after : null }; });
+  return { ...appOut(a), form, documents: docs.map((d) => ({ id: d.id, type: d.doc_type, mime: d.mime, size: d.size_bytes, status: d.status, note: d.note })), partner, history };
 }
 
 // Streams a KYC file. Every view is written to the audit log.
@@ -147,7 +186,7 @@ export async function recordFeePayment(db, access, partnerId, { amountPaise, gst
   requirePermission(access, 'partners.activate');
   const p = await loadPartner(db, partnerId); need(p, 'payment_pending', 'Recording the fee');
   const problems = {};
-  if (!Number.isInteger(amountPaise) || amountPaise < p.fee_paise) problems.amountPaise = `must be at least ${p.fee_paise} paise (the joining fee)`;
+  if (!Number.isInteger(amountPaise) || amountPaise < p.fee_paise) problems.amountPaise = `must be at least ₹${(p.fee_paise / 100).toLocaleString('en-IN')} (the joining fee before tax)`;
   if (!Number.isInteger(gstPaise) || gstPaise < 0 || gstPaise > amountPaise) problems.gstPaise = 'invalid';
   if (!['bank_transfer', 'upi', 'razorpay', 'payu', 'cash', 'other'].includes(method)) problems.method = 'invalid';
   if (typeof reference !== 'string' || reference.trim().length < 4) problems.reference = 'required (bank/UPI/gateway reference)';

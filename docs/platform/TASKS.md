@@ -37,7 +37,7 @@ Legend: ☐ not started · ◐ in progress · ✔ done and tested · ⛔ blocked
 | Partner apply API (OTP login, draft, documents, submit) | Backend | 0022 | ✔ API only, tested (`test-partner-flow.cjs`); **no UI yet**, not deployed |
 | Partner apply UI (6-step wizard, document upload, status timeline, dashboard, sign-in) in `apps/partner-portal` | Partner portal | API above | ✔ built and clicked through on local D1 (phone + desktop width); not deployed. See README |
 | HQ approval API (list, review, approve, reject, request docs, agreement, fee, activate, suspend, reinstate) | Backend | 0022, 0023 | ✔ API only, wired into admin Worker under `/api/v1/admin/`, tested on real local D1; not deployed |
-| HQ partner applications screen in admin UI | HQ admin | API above | ☐ |
+| HQ **Partners** screen in the admin UI: queue with stage chips and counts, search, detail panel (applicant, documents, onboarding, history), start review / request documents / reject / approve / record agreement / record fee / activate / suspend / reinstate | HQ admin | API above | ✔ clicked through on a real local admin Worker + D1 + R2; not deployed |
 | Partner ID issue, agreement and activation gates | Backend | above | ✔ (agreement and fee are recorded by HQ; e-sign and gateway fee payment are later) |
 | Partner login (email OTP, hashed sessions, per-IP limit) | Auth | platform-core | ✔ API (`/api/v1/auth/*` in `workers/partner`) |
 | Partner dashboard: profile + tier-specific list of what the partnership covers (no dead buttons) | Partner portal | auth, partners | ✔ minimal. Real modules (leads, orders, earnings...) are later tasks |
@@ -57,6 +57,7 @@ Legend: ☐ not started · ◐ in progress · ✔ done and tested · ⛔ blocked
 | Regional Manager `region` scope for applications (needs a PIN-to-region map) | Backend | ☐ |
 | E-sign for the partner agreement and gateway payment of the joining fee (today HQ records both) | Backend | ☐ owner O5 |
 | Create **private** R2 bucket `ntagz-kyc`; set secrets `PAN_HASH_SECRET`, `RESEND_API_KEY` on `ntagz-partner` | DevOps | ⛔ owner approval |
+| Add the `KYC` R2 binding to `admin/wrangler.jsonc` **in the same change that creates the bucket**. Until then HQ cannot open documents (the API answers 503 with a clear message). Adding the binding earlier would make every admin deploy fail | DevOps | ⛔ owner approval |
 
 ## Portal follow-ups
 

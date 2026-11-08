@@ -102,12 +102,12 @@ export async function adminV1(request, env, actor, body) {
   try {
     const access = await accessForRoles(env.DB, actor, ['hq_admin']);
     let m;
-    if (method === 'GET' && path === '/api/v1/admin/partner-applications') return ok(await review.listApplications(env.DB, access, { status: url.searchParams.get('status') || undefined, limit: url.searchParams.get('limit'), before: url.searchParams.get('before') }));
+    if (method === 'GET' && path === '/api/v1/admin/partner-applications') return ok(await review.listApplications(env.DB, access, { status: url.searchParams.get('status') || undefined, stage: url.searchParams.get('stage') || undefined, q: url.searchParams.get('q') || undefined, limit: url.searchParams.get('limit'), before: url.searchParams.get('before') }));
     if ((m = path.match(/^\/api\/v1\/admin\/partner-applications\/([0-9a-f-]{36})$/)) && method === 'GET') return ok(await review.getApplication(env.DB, access, m[1]));
     if ((m = path.match(/^\/api\/v1\/admin\/partner-documents\/([0-9a-f-]{36})$/)) && method === 'GET') {
-      if (!env.KYC) throw new AppError('INTERNAL');
+      if (!env.KYC) throw new AppError('UNAVAILABLE', 'Document storage is not connected to the admin yet');
       const d = await review.openDocument(env.DB, env.KYC, access, m[1]);
-      return new Response(d.body, { headers: { 'content-type': d.mime, 'content-disposition': 'inline', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'; sandbox" } });
+      return new Response(d.body, { headers: { 'content-type': d.mime, 'content-disposition': d.mime === 'application/pdf' ? 'attachment; filename="document.pdf"' : 'inline', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'; sandbox" } });
     }
     if ((m = path.match(/^\/api\/v1\/admin\/partner-applications\/([0-9a-f-]{36})\/(start-review|request-documents|reject|approve)$/)) && method === 'POST') {
       const id = m[1];
