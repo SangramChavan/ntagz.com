@@ -13,6 +13,7 @@ exclude:
   - docs
   - test
   - workers
+  - packages
   - RECOVERY.md
   - CLAUDE.md
   - .dev.vars.example
