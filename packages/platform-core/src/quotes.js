@@ -191,6 +191,21 @@ export async function recordResponseMine(db, access, id, outcome) {
   await respond(db, { partnerId }, q, outcome, access.userId, 'partner'); return getMine(db, access, id);
 }
 
+// ---- payment link (the existing pay_links tool collects the money) ----
+export const PAY_BASE = 'https://ntagz.com/pay.html?t='; // must equal BASE in admin/src/paylinks.js (a test checks)
+export async function payLinkState(db, id) {
+  if (!id) return null;
+  try {
+    const r = await db.prepare(`SELECT pl.id, pl.status, pl.expires_at, pl.open_count, pl.sent_at, pl.quoted_paise,
+      (SELECT o.id FROM orders o WHERE o.payment_status = 'paid' AND o.txn_id IN (SELECT value FROM json_each(pl.txn_ids)) LIMIT 1) AS paid_order_id,
+      (SELECT o.total FROM orders o WHERE o.payment_status = 'paid' AND o.txn_id IN (SELECT value FROM json_each(pl.txn_ids)) LIMIT 1) AS paid_total
+      FROM pay_links pl WHERE pl.id = ?`).bind(id).first();
+    if (!r) return null;
+    const status = r.paid_order_id ? 'paid' : r.status === 'cancelled' ? 'cancelled' : r.expires_at <= Math.floor(Date.now() / 1000) ? 'expired' : r.open_count > 0 ? 'opened' : r.sent_at ? 'sent' : 'new';
+    return { id: r.id, url: PAY_BASE + r.id, status, expiresAt: r.expires_at, quotedPaise: r.quoted_paise, paidOrderId: r.paid_order_id || null, paidTotalPaise: r.paid_total ?? null };
+  } catch { return null; } // pay_links missing (older database): no link information
+}
+
 // ---- HQ side ----
 const HQ_SEL = 'SELECT q.*, l.business_name AS lead_business, p.partner_code, p.business_name AS partner_business FROM quotations q JOIN leads l ON l.id = q.lead_id JOIN partners p ON p.id = q.partner_id';
 export async function listAll(db, access, { status, q } = {}) {
@@ -208,7 +223,7 @@ async function loadAny(db, id) {
   if (!q) throw new AppError('NOT_FOUND', 'Not found');
   return q;
 }
-export async function getAny(db, access, id) { hqAll(access); await expire(db); const q = await loadAny(db, id); return { quote: out(q, await itemsOf(db, q.id), true) }; }
+export async function getAny(db, access, id) { hqAll(access); await expire(db); const q = await loadAny(db, id); return { quote: { ...out(q, await itemsOf(db, q.id), true), payLink: await payLinkState(db, q.pay_link_id) } }; }
 
 export async function approve(db, access, id) {
   hqAll(access); const q = await loadAny(db, id);

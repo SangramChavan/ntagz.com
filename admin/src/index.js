@@ -13,6 +13,7 @@ import { membershipRoute, tick as membershipTick } from "./membership.js"; // Re
 import { crmRoute, crmScheduled, crmWebhook } from "./crm/index.js"; // Customers / CRM (all under /api/crm/)
 import { payLinkRoute } from "./paylinks.js"; // payment links: create, track, remind (under /api/paylinks)
 import { adminV1 } from "../../packages/platform-core/src/http.js";
+import { quotePaymentLink } from "./quote-order.js"; // accepted quotation -> payment link (reuses the pay-links tool)
 import { flushOutbox } from "../../packages/platform-core/src/mail.js"; // partner emails: sent after changes, retried here every 15 min // partner network: applications, approvals, activation (under /api/v1/admin/)
 
 const SESSION_TTL = 12 * 3600;
@@ -1312,6 +1313,7 @@ export default {
         return json({ ok: true }, 200, { "Set-Cookie": `${COOKIE}=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0` });
       }
       if (method === "GET" && path === "/api/me") return json({ email: actor });
+      { const ql = method === "POST" && path.match(/^\/api\/v1\/admin\/quotes\/([0-9a-f-]{36})\/payment-link$/); if (ql) return await quotePaymentLink(env, actor, ql[1], body); }
       if (path.startsWith("/api/v1/admin/")) return await adminV1(request, env, actor, body, ctx); // own envelope; already behind session + CSRF above
       if (method === "GET" && path === "/api/orders") return await listOrders(url.searchParams, env);
       if (method === "GET" && path === "/api/orders.csv") return await exportCsv(url.searchParams, env);

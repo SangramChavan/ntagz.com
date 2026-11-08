@@ -111,7 +111,7 @@ async function prefill(ctx) {
   });
 }
 
-async function create(ctx) {
+export async function create(ctx) { // also used by quote-order.js to make a link from an accepted quotation
   const { env, actor, body: b } = ctx, errors = {};
   if (!(await hasPayLinks(env))) return ctx.fail(409, "Payment links need database migration 0020 first");
   const name = sanitiseText(b.name, 100);
