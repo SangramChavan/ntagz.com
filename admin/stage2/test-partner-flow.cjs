@@ -169,9 +169,28 @@ const pdf = () => new TextEncoder().encode("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n");
   assert.equal((await P("suspend", {})).status, 400); ok("suspension needs a reason");
   assert.equal((await P("suspend", { reason: "Policy breach" })).status, 200);
   assert.equal((await call("/api/v1/me", { cookie: A })).status, 401); ok("suspending revokes the partner session at once");
-  const A2 = await login(email);
+  let A2 = await login(email);
   me = await call("/api/v1/me", { cookie: A2 }); assert.deepEqual(me.json.data.roles, ["customer"]); assert.equal((await call("/api/v1/partner/dashboard", { cookie: A2 })).status, 403); ok("suspended partner can still sign in as a customer only");
   assert.equal((await P("reinstate")).status, 200); assert.equal((await call("/api/v1/partner/dashboard", { cookie: A2 })).status, 200); ok("reinstating restores access");
+
+  // ---- refund the joining fee: needs a suspended partner; reverses the credit; the partner stays blocked afterwards ----
+  const feeId = one("SELECT id FROM partner_fee_payments WHERE partner_id = ?", pid).id;
+  assert.equal((await P("fee-refund", { feePaymentId: feeId, reason: "Partner left" })).status, 409); ok("fee refund needs a suspended partner");
+  assert.equal((await P("suspend", { reason: "Leaving" })).status, 200);
+  assert.equal((await P("fee-refund", { feePaymentId: feeId, reason: "x" })).status, 400); ok("fee refund needs a reason");
+  assert.equal((await P("fee-refund", { feePaymentId: "00000000-0000-4000-8000-000000000000", reason: "Partner left" })).status, 404); ok("fee refund only for a fee of this partner");
+  // credit already used by an order: no refund (the partner bought goods with it)
+  sqlite.prepare("INSERT INTO orders (id, txn_id, gateway, payment_status, total, subtotal, paid_paise) VALUES ('ord-used', 'TX-USED', 'razorpay', 'paid', 100, 100, 100)").run();
+  sqlite.prepare("INSERT INTO partner_stock_credit (id, partner_id, kind, delta_paise, order_id, actor) VALUES ('cons-used', ?, 'consume', -100, 'ord-used', 'system')").run(pid);
+  assert.equal((await P("fee-refund", { feePaymentId: feeId, reason: "Partner left" })).status, 409); ok("no refund once any stock credit has been used");
+  sqlite.prepare("DELETE FROM partner_stock_credit WHERE id = 'cons-used'").run(); sqlite.prepare("DELETE FROM orders WHERE id = 'ord-used'").run();
+  const rf = await P("fee-refund", { feePaymentId: feeId, reason: "Partner left" }); assert.equal(rf.status, 200, rf.text);
+  assert.equal(one("SELECT COALESCE(SUM(delta_paise),0) b FROM partner_stock_credit WHERE partner_id = ?", pid).b, 0); ok("refund reverses the fee's stock credit to zero");
+  assert.equal((await P("fee-refund", { feePaymentId: feeId, reason: "Partner left" })).status, 409); ok("the same fee cannot be refunded twice");
+  assert.equal((await P("reinstate")).status, 409); ok("a refunded partner cannot be reinstated");
+  const appRow = one("SELECT id FROM partner_applications WHERE partner_id = ?", pid);
+  const detRf = await admin(`/api/v1/admin/partner-applications/${appRow.id}`); assert.equal(detRf.json.data.partner.feePayments[0].refund.reason, "Partner left"); ok("the refund shows on the partner record");
+  A2 = await login(email); // suspending revoked the earlier session
   sqlite.prepare("UPDATE users SET status='suspended' WHERE email = ?").run(email);
   assert.equal((await call("/api/v1/me", { cookie: A2 })).status, 401); ok("a suspended user account is locked out immediately");
   sqlite.prepare("UPDATE users SET status=NULL WHERE email = ?").run(email);

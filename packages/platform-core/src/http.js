@@ -176,10 +176,11 @@ async function adminV1Inner(request, env, actor, body) {
       if (m[2] === 'reject') return ok(await review.reject(env.DB, access, id, body.note));
       return ok(await review.approve(env.DB, access, id, { agreementVersion: body.agreementVersion }));
     }
-    if ((m = path.match(/^\/api\/v1\/admin\/partners\/([0-9a-f-]{36})\/(agreement-signed|fee-payment|activate|suspend|reinstate)$/)) && method === 'POST') {
+    if ((m = path.match(/^\/api\/v1\/admin\/partners\/([0-9a-f-]{36})\/(agreement-signed|fee-payment|fee-refund|activate|suspend|reinstate)$/)) && method === 'POST') {
       const id = m[1];
       if (m[2] === 'agreement-signed') return ok(await review.recordAgreementSigned(env.DB, access, id));
       if (m[2] === 'fee-payment') return ok(await review.recordFeePayment(env.DB, access, id, { amountPaise: body.amountPaise, gstPaise: body.gstPaise ?? 0, method: body.method, reference: body.reference }));
+      if (m[2] === 'fee-refund') return ok(await review.refundFee(env.DB, access, id, { feePaymentId: body.feePaymentId, reason: body.reason }));
       if (m[2] === 'activate') return ok(await review.activate(env.DB, access, id));
       if (m[2] === 'suspend') return ok(await review.suspend(env.DB, access, id, body.reason));
       return ok(await review.reinstate(env.DB, access, id));

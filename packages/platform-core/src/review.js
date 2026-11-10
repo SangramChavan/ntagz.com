@@ -3,6 +3,7 @@ import { requirePermission, scopeClause } from './access.js';
 import { auditStmt } from './audit.js';
 import { revokeUserSessionsStmt } from './auth.js';
 import { queueEmail } from './mail.js';
+import { balance } from './wholesale.js';
 
 // HQ side of partner onboarding. Application: submitted -> under_review <-> documents_required -> approved | rejected.
 // Partner after approval: agreement_pending -> payment_pending -> onboarding -> active <-> suspended. Nothing skips a step.
@@ -64,11 +65,12 @@ export async function getApplication(db, access, id) {
   if (a.partner_id) {
     const p = await db.prepare('SELECT p.id, p.partner_code, p.status, p.suspend_reason, p.activated_at, t.fee_paise, t.label AS type_label FROM partners p JOIN partner_types t ON t.key = p.type_key WHERE p.id = ?').bind(a.partner_id).first();
     const ag = await db.prepare('SELECT version, status, sent_at, signed_at FROM partner_agreements WHERE partner_id = ? ORDER BY created_at DESC LIMIT 1').bind(a.partner_id).first();
-    const fees = (await db.prepare('SELECT amount_paise, gst_paise, method, reference, recorded_by, created_at FROM partner_fee_payments WHERE partner_id = ? ORDER BY created_at').bind(a.partner_id).all()).results;
+    const fees = (await db.prepare('SELECT f.id, f.amount_paise, f.gst_paise, f.method, f.reference, f.recorded_by, f.created_at, r.amount_paise AS refund_paise, r.reason AS refund_reason, r.created_at AS refunded_at FROM partner_fee_payments f LEFT JOIN partner_fee_refunds r ON r.fee_payment_id = f.id WHERE f.partner_id = ? ORDER BY f.created_at').bind(a.partner_id).all()).results;
     partner = {
       id: p.id, partnerCode: p.partner_code, status: p.status, suspendReason: p.suspend_reason, activatedAt: p.activated_at, feePaise: p.fee_paise, typeLabel: p.type_label,
       agreement: ag ? { version: ag.version, status: ag.status, sentAt: ag.sent_at, signedAt: ag.signed_at } : null,
-      feePayments: fees.map((f) => ({ amountPaise: f.amount_paise, gstPaise: f.gst_paise, method: f.method, reference: f.reference, recordedBy: f.recorded_by, at: f.created_at })),
+      feePayments: fees.map((f) => ({ id: f.id, amountPaise: f.amount_paise, gstPaise: f.gst_paise, method: f.method, reference: f.reference, recordedBy: f.recorded_by, at: f.created_at,
+        refund: f.refund_paise == null ? null : { amountPaise: f.refund_paise, reason: f.refund_reason, at: f.refunded_at } })),
     };
     entityIds.push(a.partner_id);
   }
@@ -211,12 +213,38 @@ export async function recordFeePayment(db, access, partnerId, { amountPaise, gst
   return { id: partnerId, status: 'onboarding' };
 }
 
+// Records a refund of a joining fee paid back outside the system (full amount only). Allowed while onboarding or suspended, and only if none of the
+// partner's stock credit has been used or is held by an open payment link: then no goods were bought with money we return. The fee's credit is reversed
+// in the ledger in the same batch. A refunded partner can never be activated or reinstated.
+const refundedFee = (db, partnerId) => db.prepare('SELECT 1 x FROM partner_fee_refunds WHERE partner_id = ?').bind(partnerId).first();
+export async function refundFee(db, access, partnerId, { feePaymentId, reason }) {
+  requirePermission(access, 'settlements.manage');
+  if (!hasNote(reason)) throw new AppError('VALIDATION_FAILED', 'A reason is required', { reason: 'required' });
+  const p = await loadPartner(db, partnerId);
+  if (!['onboarding', 'suspended'].includes(p.status)) throw new AppError('CONFLICT', `Refunding the fee is not possible while the partner is ${p.status}`);
+  const f = await db.prepare('SELECT id, amount_paise FROM partner_fee_payments WHERE id = ? AND partner_id = ?').bind(String(feePaymentId || ''), partnerId).first();
+  if (!f) throw new AppError('NOT_FOUND', 'Payment not found');
+  const bal = await balance(db, partnerId);
+  if (bal.consumedPaise > 0) throw new AppError('CONFLICT', "Some of this partner's stock credit has already been used, so the fee cannot be refunded");
+  if (bal.heldPaise > 0) throw new AppError('CONFLICT', 'Stock credit is held by an open payment link. Let it expire or cancel it first');
+  const rid = crypto.randomUUID();
+  try {
+    await db.batch([
+      db.prepare('INSERT INTO partner_fee_refunds (id, fee_payment_id, partner_id, amount_paise, reason, actor) VALUES (?, ?, ?, ?, ?, ?)').bind(rid, f.id, partnerId, f.amount_paise, note(reason), access.userId),
+      db.prepare("INSERT INTO partner_stock_credit (id, partner_id, kind, delta_paise, refund_id, actor) SELECT ?, partner_id, 'reversal', -delta_paise, ?, ? FROM partner_stock_credit WHERE fee_payment_id = ? AND kind = 'grant'").bind(crypto.randomUUID(), rid, access.userId, f.id),
+      auditStmt(db, { actor: access.userId, action: 'partner.fee.refund', entityType: 'partner', entityId: partnerId, after: { feePaymentId: f.id, amountPaise: f.amount_paise, reason: note(reason) } }),
+    ]);
+  } catch (e) { if (/UNIQUE/i.test(String(e && e.message))) throw new AppError('CONFLICT', 'This payment was already refunded'); throw e; }
+  return { id: partnerId, feePaymentId: f.id, refundedPaise: f.amount_paise };
+}
+
 // Activation needs: signed agreement + recorded fee payment + onboarding stage. Then (and only then) the partner role is granted.
 export async function activate(db, access, partnerId) {
   requirePermission(access, 'partners.activate');
   const p = await loadPartner(db, partnerId); need(p, 'onboarding', 'Activation');
   const signed = await db.prepare("SELECT 1 x FROM partner_agreements WHERE partner_id = ? AND status = 'signed'").bind(partnerId).first();
   const paid = await db.prepare('SELECT 1 x FROM partner_fee_payments WHERE partner_id = ?').bind(partnerId).first();
+  if (await refundedFee(db, partnerId)) throw new AppError('CONFLICT', 'The joining fee was refunded, so this partner cannot be activated');
   if (!signed || !paid) throw new AppError('CONFLICT', 'Agreement and joining fee must both be recorded first');
   await setPartner(db, access, p, 'onboarding', 'active', { activated_at: Math.floor(Date.now() / 1000) }, [
     db.prepare('INSERT INTO user_roles (id, user_id, role_key, granted_by) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, role_key) DO UPDATE SET revoked_at = NULL, granted_by = excluded.granted_by')
@@ -236,6 +264,7 @@ export async function suspend(db, access, partnerId, reason) {
 export async function reinstate(db, access, partnerId) {
   requirePermission(access, 'partners.activate');
   const p = await loadPartner(db, partnerId); need(p, 'suspended', 'Reinstating');
+  if (await refundedFee(db, partnerId)) throw new AppError('CONFLICT', 'The joining fee was refunded, so this partner cannot be reinstated');
   await setPartner(db, access, p, 'suspended', 'active', { suspend_reason: null }, [mail(db, p, 'partner_reinstated', { partnerCode: p.partner_code }, `partner_reinstated:${p.id}:${p.rev}`)]);
   return { id: partnerId, status: 'active' };
 }

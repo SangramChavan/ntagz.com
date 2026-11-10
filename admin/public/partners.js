@@ -98,10 +98,24 @@ async function pnOpen(id) {
 function pnOnboarding(d) {
   const p = d.partner; const steps = [];
   steps.push(el("li", {}, el("b", {}, "Agreement: "), p.agreement ? (p.agreement.status === "signed" ? "signed " + when(p.agreement.signedAt) : "waiting for the signed agreement (version " + p.agreement.version + ")") : "not created"));
-  steps.push(el("li", {}, el("b", {}, "Joining fee: "), p.feePayments.length ? p.feePayments.map((x) => `${pnMoney(x.amountPaise)} (${x.method.replace("_", " ")}, ref ${x.reference})`).join("; ") : "due " + pnMoney(p.feePaise) + " before tax"));
+  steps.push(el("li", {}, el("b", {}, "Joining fee: "), p.feePayments.length ? p.feePayments.map((x) => pnFeeLine(d, x)) : "due " + pnMoney(p.feePaise) + " before tax"));
   if (p.status === "suspended" && p.suspendReason) steps.push(el("li", {}, el("b", {}, "Suspended: "), p.suspendReason));
   return el("section", { class: "pn-sec" }, el("h3", {}, "Onboarding"), el("ul", { class: "pn-steps" }, steps),
     p.status === "payment_pending" ? pnFeeForm(d) : "");
+}
+
+// One recorded fee payment. A refund is allowed only while onboarding or suspended; the server also refuses it if any stock credit was used or held.
+function pnFeeLine(d, x) {
+  const p = d.partner; const box = el("div", {}, `${pnMoney(x.amountPaise)} (${x.method.replace("_", " ")}, ref ${x.reference})`);
+  if (x.refund) box.append(el("div", { class: "sub" }, `Refunded ${pnMoney(x.refund.amountPaise)} on ${when(x.refund.at)}: ${x.refund.reason}`));
+  else if (["onboarding", "suspended"].includes(p.status)) box.append(el("button", { class: "btn small", type: "button", onclick: () => pnRefundFee(d, x) }, "Record refund"));
+  return box;
+}
+async function pnRefundFee(d, x) {
+  const why = await pnNote("Record refund of the joining fee?", `${pnMoney(x.amountPaise)} (ref ${x.reference}) paid back outside Ntagz. This reverses the stock credit from this payment. The partner cannot be activated or reinstated afterwards. It cannot be undone.`, "Reason (kept in the audit log)", "Record refund", true);
+  if (!why) return;
+  try { await pnCall(`/api/v1/admin/partners/${d.partner.id}/fee-refund`, { feePaymentId: x.id, reason: why }); toast("Refund recorded"); await pnRefresh(d.id); }
+  catch (e) { toast(e.message, true); }
 }
 
 function pnFeeForm(d) {
