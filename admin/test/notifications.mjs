@@ -26,19 +26,19 @@ assert.equal(await notify({}, "x", "nope", "k"), "ignored"); assert.equal(await 
 let r = await call("/api/auth/request", { email: "admin@example.test" }); r = await call("/api/auth/verify", { email: "admin@example.test", otp: (await r.json()).dev_otp }); cookie = r.headers.get("set-cookie").split(";")[0];
 let d = await get(ASHA); assert.deepEqual(d.notifications, []);
 assert.equal((await status(ASHA, "processing")).status, 200); d = await get(ASHA); assert.deepEqual(mails(d), []); ok("processing sends nothing");
-const k = key(); r = await call(`/api/orders/${ASHA}/status`, { to: "packed", idempotency_key: k }); d = await r.json(); assert.deepEqual(mails(d), ["packed:sent"]); assert.match(d.notifications[0].subject, /packed/i);
-await call(`/api/orders/${ASHA}/status`, { to: "packed", idempotency_key: k }); d = await get(ASHA); assert.equal(d.notifications.length, 1); ok("packing emails once; replaying the request sends no second email");
-r = await call(`/api/orders/${ASHA}/ship`, { idempotency_key: key(), courier: "Delhivery", awb: "DL1234567890", tracking_url: "https://www.delhivery.com/t/DL1234567890", shipped_on: "2026-10-11" }); d = await r.json(); assert.deepEqual(mails(d), ["packed:sent", "shipped:sent"]);
+const k = key(); r = await call(`/api/orders/${ASHA}/status`, { to: "packed", idempotency_key: k }); d = await r.json(); assert.equal(d.status, "packed"); assert.deepEqual(mails(d), []);
+await call(`/api/orders/${ASHA}/status`, { to: "packed", idempotency_key: k }); d = await get(ASHA); assert.equal(d.notifications.length, 0); ok("India orders: packing sends no email (only the AWB shipment email); replays change nothing");
+r = await call(`/api/orders/${ASHA}/ship`, { idempotency_key: key(), courier: "Delhivery", awb: "DL1234567890", tracking_url: "https://www.delhivery.com/t/DL1234567890", shipped_on: "2026-10-11" }); d = await r.json(); assert.deepEqual(mails(d), ["shipped:sent"]);
 r = await call(`/api/orders/${ASHA}/ship`, { idempotency_key: key(), courier: "DTDC", awb: "D0011223344", shipped_on: "2026-10-11" }); d = await r.json(); assert.equal(d.notifications.filter((x) => x.event === "shipped").length, 2); ok("shipping emails with the AWB; a second parcel emails its own AWB");
-for (const to of ["out_for_delivery", "delivered"]) assert.equal((await status(ASHA, to)).status, 200); d = await get(ASHA); assert.deepEqual(mails(d).slice(-2), ["out_for_delivery:sent", "delivered:sent"]); ok("out for delivery and delivered each email");
-r = await status(ASHA, "returned", { confirm: true }); d = await r.json(); assert.equal(d.notifications.length, 5); ok("returns send nothing");
+for (const to of ["out_for_delivery", "delivered"]) assert.equal((await status(ASHA, to)).status, 200); d = await get(ASHA); assert.deepEqual(mails(d), ["shipped:sent", "shipped:sent"]); ok("India orders: out for delivery and delivered send no email");
+r = await status(ASHA, "returned", { confirm: true }); d = await r.json(); assert.equal(d.notifications.length, 2); ok("returns send nothing");
 
-// no customer email: action works, notification is recorded as skipped
-r = await status(WALI, "packed"); d = await r.json(); assert.equal(r.status, 200); assert.equal(d.status, "packed"); assert.deepEqual(mails(d), ["packed:skipped"]); assert.equal(d.notifications[0].detail, "no customer email"); ok("order with no email: status change succeeds, notification recorded as skipped");
-// race: 4 concurrent identical transitions -> one email
-const U2 = "22222222-aaaa-bbbb-cccc-000000000002"; await Promise.all(Array.from({ length: 4 }, () => status(U2, "packed"))); d = await get(U2); assert.equal(d.notifications.filter((x) => x.event === "packed").length, 1); ok("4 concurrent packed requests send exactly one email");
-// payment confirmed
-r = await call(`/api/orders/${UMA}/payment-received`, { confirm_amount_paise: 23600, method: "upi", reference: "UTR998877", idempotency_key: key() }); d = await r.json(); assert.deepEqual(mails(d), ["payment_confirmed:sent"]); ok("recording a payment emails the customer");
+// no customer email: status change succeeds, and nothing is queued for an India order
+r = await status(WALI, "packed"); d = await r.json(); assert.equal(r.status, 200); assert.equal(d.status, "packed"); assert.deepEqual(mails(d), []); ok("order with no email: status change succeeds, no email queued (India policy)");
+// race: 4 concurrent identical transitions -> one status change, no email
+const U2 = "22222222-aaaa-bbbb-cccc-000000000002"; await Promise.all(Array.from({ length: 4 }, () => status(U2, "packed"))); d = await get(U2); assert.equal(d.status, "packed"); assert.equal(d.notifications.length, 0); ok("4 concurrent packed requests change the status once and send no email");
+// payment confirmed: India orders are not emailed on payment
+r = await call(`/api/orders/${UMA}/payment-received`, { confirm_amount_paise: 23600, method: "upi", reference: "UTR998877", idempotency_key: key() }); d = await r.json(); assert.deepEqual(mails(d), []); ok("India orders: recording a payment sends no email");
 // cancel silent
-r = await status(U2, "cancelled", { confirm: true }); d = await r.json(); assert.deepEqual(mails(d), ["packed:sent"]); ok("cancelling sends no automatic email");
+r = await status(U2, "cancelled", { confirm: true }); d = await r.json(); assert.deepEqual(mails(d), []); ok("cancelling sends no automatic email");
 console.log(`\nall ${n} notification checks passed`);

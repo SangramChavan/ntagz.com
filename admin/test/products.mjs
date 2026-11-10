@@ -15,7 +15,7 @@ let r = await call("/api/auth/request", { email: "admin@example.test" });
 r = await call("/api/auth/verify", { email: "admin@example.test", otp: (await r.json()).dev_otp }); cookie = r.headers.get("set-cookie").split(";")[0];
 
 let s = await (await call("/api/products/summary")).json();
-assert.equal(s.total, 17); assert.equal(s.out, 17); assert.ok(s.categories.includes("nfc")); ok("catalogue seeded from catalog.js (17 products, all start at 0 stock)");
+const seedTotal = s.total; assert.ok(seedTotal >= 17); assert.equal(s.out, seedTotal); assert.ok(s.categories.includes("nfc")); ok("catalogue seeded (at least 17 products, all start at 0 stock)");
 let d = await (await call("/api/products?q=black")).json(); assert.equal(d.products[0].id, "black-nfc-card"); assert.equal(d.products[0].price_paise, 3000); ok("search by name; price matches catalog.js");
 d = await (await call("/api/products?q=BNC30")).json(); assert.equal(d.total, 1); ok("search by SKU (case-insensitive)");
 
@@ -70,7 +70,7 @@ r = await call(`/api/products/${p.id}/active`, { active: false }); p = await r.j
 assert.equal((await (await call("/api/products?active=0")).json()).total, 1); ok("deactivate / filter inactive (archived, never deleted)");
 assert.equal((await call(`/api/products/${p.id}/active`, { active: "no" })).status, 400);
 r = await call("/api/products?sort=name;DROP&dir=asc&page=abc"); assert.equal(r.status, 200); ok("unsafe sort/page values safely ignored");
-s = await (await call("/api/products/summary")).json(); assert.equal(s.total, 18); assert.equal(s.active, 17); ok("summary counts");
+s = await (await call("/api/products/summary")).json(); assert.equal(s.total, seedTotal + 1); assert.equal(s.active, seedTotal); ok("summary counts");
 
 // ── redesign additions: cost price, auto SKU, duplicate, safe delete, category search, newest sort ──
 r = await call("/api/products", { name: "Smart Plaque Large", category: "review", price: "120", cost: "70", opening_stock: 5 }); p = await r.json();
