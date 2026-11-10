@@ -21,7 +21,10 @@ For a customer request such as "I need 10 NFC coins", do not compute from this f
 - Mini NFC Tag (3D Printing / Jewellery) [id: mini-nfc-tag]: ₹16 per pc + 18% GST, minimum order 10 — https://ntagz.com/product/mini-nfc-tag/
 - Micro Flex NFC Tag (FPC) [id: micro-flex-fpc]: ₹75 per unit + 18% GST, minimum order 10 — https://ntagz.com/product/micro-flex-fpc/
 - NFC Wristband [id: nfc-wristband]: ₹80 per pc + 18% GST, minimum order 10
-- NFC Ring [id: nfc-ring]: ₹399 per pc + 18% GST, minimum order 10
+- NFC Ring — Black, Size 9 [id: nfc-ring-black-9]: ₹399 per pc + 18% GST, minimum order 10
+- NFC Ring — Black, Size 10 [id: nfc-ring-black-10]: ₹399 per pc + 18% GST, minimum order 10
+- NFC Ring — White, Size 9 [id: nfc-ring-white-9]: ₹399 per pc + 18% GST, minimum order 10
+- NFC Ring — White, Size 10 [id: nfc-ring-white-10]: ₹399 per pc + 18% GST, minimum order 10
 - UHF RFID Label Sticker 27×15mm [id: uhf-rfid-label]: ₹249 per pack + 18% GST, minimum order 1 — https://ntagz.com/product/uhf-rfid-label/
 - RFID Card with Custom Printing [id: rfid-card-custom-printing]: ₹75 per card + 18% GST, minimum order 10
 
