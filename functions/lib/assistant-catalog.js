@@ -205,16 +205,56 @@ module.exports = {
       "Events & Access"
     ]
   },
-  "nfc-ring": {
-    "sku": "NR-723",
-    "name": "NFC Ring",
+  "nfc-ring-black-9": {
+    "sku": "NR-B9",
+    "name": "NFC Ring — Black, Size 9",
     "page": null,
     "keywords": [
-      "NR-723",
+      "NR-B9",
       "tag",
       "nfc",
       "NFC",
-      "Sizes 9 & 10"
+      "Black",
+      "Size 9"
+    ]
+  },
+  "nfc-ring-black-10": {
+    "sku": "NR-B10",
+    "name": "NFC Ring — Black, Size 10",
+    "page": null,
+    "keywords": [
+      "NR-B10",
+      "tag",
+      "nfc",
+      "NFC",
+      "Black",
+      "Size 10"
+    ]
+  },
+  "nfc-ring-white-9": {
+    "sku": "NR-W9",
+    "name": "NFC Ring — White, Size 9",
+    "page": null,
+    "keywords": [
+      "NR-W9",
+      "tag",
+      "nfc",
+      "NFC",
+      "White",
+      "Size 9"
+    ]
+  },
+  "nfc-ring-white-10": {
+    "sku": "NR-W10",
+    "name": "NFC Ring — White, Size 10",
+    "page": null,
+    "keywords": [
+      "NR-W10",
+      "tag",
+      "nfc",
+      "NFC",
+      "White",
+      "Size 10"
     ]
   },
   "uhf-rfid-label": {

@@ -27,6 +27,9 @@ const T = {
     `Hi ${d.name || 'there'},`, `Your Ntagz partner account (${d.partnerCode}) is now active. You can sign in to your partner dashboard.`], cta: ['Open your dashboard', partnerUrl(env) + '/dashboard'] }),
   partner_suspended: (d) => ({ subject: 'Your Ntagz partner access is suspended', lines: [
     `Hi ${d.name || 'there'},`, `Your Ntagz partner access (${d.partnerCode}) has been suspended.`, `Reason from the team: “${d.note}”`, 'If you have questions, reply to this email.'] }),
+  stock_out_alert: (d, env) => ({ subject: oneLine(`Out of stock: ${d.count} product(s)`), lines: [
+    'These products are out of stock:', ...(Array.isArray(d.items) ? d.items.map((i) => `${oneLine(i.name)} (${oneLine(i.sku)}): ${Number(i.stock_qty) || 0} left`) : [])],
+    cta: ['Open products in admin', adminUrl(env) + '/#/products'] }),
   partner_reinstated: (d, env) => ({ subject: 'Your Ntagz partner access is restored', lines: [
     `Hi ${d.name || 'there'},`, `Your Ntagz partner access (${d.partnerCode}) has been restored.`], cta: ['Open your dashboard', partnerUrl(env) + '/dashboard'] }),
   quotation_submitted: (d, env) => ({ subject: oneLine(`Quotation to approve: ${d.number} (${d.businessName || 'lead'})`), lines: [
