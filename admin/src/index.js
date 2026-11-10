@@ -8,6 +8,7 @@ import DELIVERY from "../../functions/lib/delivery.js"; // the same Pune-origin 
 import LOYALTY from "../../functions/lib/loyalty.js"; // spending tiers: same derivation as the storefront
 import POINTS from "../../functions/lib/points.js"; // rewards wallet: reconciled from orders after every payment / status / refund change
 import { notify, STATUS_EVENT } from "./notify.js";
+import * as OEDIT from "./order-edit.js"; // edit quantity / unit price on an unpaid, unshipped order (rules + maths; the write is below)
 import * as INTLADM from "./intl-admin.js"; // international orders: quotations, destination review, payments, settings, enquiries
 import { membershipRoute, tick as membershipTick } from "./membership.js"; // Rewards Membership admin (/api/points, /api/members)
 import { crmRoute, crmScheduled, crmWebhook } from "./crm/index.js"; // Customers / CRM (all under /api/crm/)
@@ -248,7 +249,7 @@ async function getOrder(id, env) {
   ].sort((x, y) => x.at - y.at);
   const lines = await env.DB.prepare("SELECT l.product_id,p.name,l.ready_qty,l.pre_qty FROM order_stock_lines l LEFT JOIN products p ON p.id=l.product_id WHERE l.order_id=? ORDER BY l.rowid").bind(id).all();
   const notifications = (await env.DB.prepare("SELECT event,status,detail,subject,created_at FROM notifications WHERE order_id=? ORDER BY created_at, rowid").bind(id).all()).results;
-  return { ...shape(o), transit_days: DELIVERY.transitFor(o.pincode, !!o.priority_build), notifications, stock_lines: lines.results.map((l) => ({ ...l, name: l.name || l.product_id })), ...(await INTLADM.orderExtras(env, o)), ...(tok ? { track_url: `https://ntagz.com/${o.market === "INTL" ? "order/international.html" : "track.html"}?o=${id}&t=${tok}` } : {}), is_preorder: !!o.is_preorder, payments: pays.results, shipments, timeline, actions: allowedActions(o.status, !!o.is_preorder), status_label: STATUS_LABEL[o.status] || o.status };
+  return { ...shape(o), edit: await editInfo(env, id), transit_days: DELIVERY.transitFor(o.pincode, !!o.priority_build), notifications, stock_lines: lines.results.map((l) => ({ ...l, name: l.name || l.product_id })), ...(await INTLADM.orderExtras(env, o)), ...(tok ? { track_url: `https://ntagz.com/${o.market === "INTL" ? "order/international.html" : "track.html"}?o=${id}&t=${tok}` } : {}), is_preorder: !!o.is_preorder, payments: pays.results, shipments, timeline, actions: allowedActions(o.status, !!o.is_preorder), status_label: STATUS_LABEL[o.status] || o.status };
 }
 
 const MANUAL_ORDER_METHODS = ["cash", "cod", "upi", "bank", "whatsapp"];
@@ -1197,6 +1198,78 @@ async function refundOrder(id, body, actor, env) {
   return json({ ok: true, refunded_paise: o.refunded_paise + amount });
 }
 
+// ── Edit quantity / unit price on a placed order ─────────────────────
+// Only an unpaid, unshipped, offline domestic order (see order-edit.js). Each line gets an explicit ex-GST unit price stored as
+// items_json[].unit_paise; the server recomputes subtotal / GST / total the way checkout does and never trusts a client total.
+// Quantity cannot change on a line whose stock is already reserved (that needs the stock movement logic; cancel and re-place instead).
+async function editLoad(env, id) {
+  const o = await env.DB.prepare("SELECT * FROM orders WHERE id=?").bind(id).first();
+  if (!o) return null;
+  const items = parseItems(o.items_json), ids = [...new Set(items.map((i) => String(i && i.id)))];
+  const prods = new Map(ids.length ? (await env.DB.prepare(`SELECT id,name,price_paise,all_inclusive FROM products WHERE id IN (${ids.map(() => "?").join(",")})`).bind(...ids).all()).results.map((p) => [p.id, p]) : []);
+  const held = new Set((await env.DB.prepare("SELECT product_id FROM order_stock_lines WHERE order_id=? AND released=0").bind(id).all()).results.map((r) => r.product_id));
+  return { o, items, prods, held };
+}
+
+async function editInfo(env, id) {
+  const d = await editLoad(env, id);
+  if (!d) return { allowed: false, reason: "Order not found" };
+  const why = OEDIT.whyNotEditable(d.o) || (d.items.length ? null : "This order has no items to edit");
+  if (why) return { allowed: false, reason: why };
+  return { allowed: true, lines: d.items.map((i) => {
+    const p = d.prods.get(i.id) || {}, own = Number.isInteger(i.unit_paise);
+    // Older orders do not store a line price (it came from the catalogue and discounts at checkout), so the catalogue price is only a starting point.
+    return { id: i.id, name: p.name || i.id, qty: i.qty, unit_paise: own ? i.unit_paise : (p.price_paise ?? null), unit_from: own ? "order" : "catalogue",
+      qty_locked: d.held.has(i.id), fixed: !!PRICING.PRODUCTS[i.id]?.fixed, all_inclusive: !!p.all_inclusive };
+  }) };
+}
+
+async function editOrderItems(id, body, actor, env) {
+  const d = await editLoad(env, id);
+  if (!d) return fail(404, "Order not found");
+  const { o, items, prods, held } = d;
+  const why = OEDIT.whyNotEditable(o) || (items.length ? null : "This order has no items to edit");
+  if (why) return fail(409, why);
+  const raw = Array.isArray(body.lines) ? body.lines : [];
+  if (raw.length !== items.length) return fail(400, "Send every line of the order");
+  const fields = {}, lines = items.map((it, i) => {
+    const r = raw[i] && typeof raw[i] === "object" ? raw[i] : {};
+    const qty = intIn(r.qty, 1, 100000), unit = rupeesToPaise(typeof r.unit_rupees === "string" || typeof r.unit_rupees === "number" ? r.unit_rupees : "");
+    if (r.id !== it.id) fields["qty-" + i] = "The order changed. Close this and open it again";
+    else if (qty === null) fields["qty-" + i] = "Enter a whole number, 1 or more";
+    else if (PRICING.PRODUCTS[it.id]?.fixed && qty !== 1) fields["qty-" + i] = "A fixed kit is always quantity 1";
+    else if (qty !== it.qty && held.has(it.id)) fields["qty-" + i] = "Stock is already reserved for this line, so the quantity cannot change. Cancel and place a new order instead";
+    if (unit === null || unit < 1) fields["unit-" + i] = "Enter the price in rupees (at most 2 decimals)";
+    return { qty, unit_paise: unit };
+  });
+  if (Object.keys(fields).length) return json({ error: "Check the highlighted lines", fields }, 400);
+  const inclusive = new Set(items.filter((i) => prods.get(i.id)?.all_inclusive).map((i) => i.id));
+  const calc = OEDIT.recompute(o, items, lines, inclusive, PRICING.GST_PCT);
+  if (calc.error) return fail(400, calc.error);
+  const before = { subtotal: o.subtotal, gst: o.gst, total: o.total, shipping_paise: o.shipping_paise || 0 };
+  const after = { subtotal: calc.subtotal, gst: calc.gst, total: calc.total, shipping_paise: o.shipping_paise || 0 };
+  const nextJson = JSON.stringify(calc.items);
+  // Re-entering today's price on an older order (no stored unit price) would only record a number, not change what the customer pays.
+  if (calc.total === o.total && items.every((it, i) => it.qty === calc.items[i].qty && (!Number.isInteger(it.unit_paise) || it.unit_paise === calc.items[i].unit_paise))) return fail(400, "Nothing was changed");
+  if (body.dry_run === true) return json({ ok: true, preview: true, before, after, lines: calc.items.map((i) => ({ id: i.id, qty: i.qty, unit_paise: i.unit_paise })) });
+  const reason = sanitiseText(body.reason, 200);
+  if (reason.length < 5) return json({ error: "Enter a reason", fields: { reason: "Reason required" } }, 400);
+  if (body.confirm !== true) return fail(400, "Please confirm the change");
+  const eid = crypto.randomUUID();
+  // One atomic batch. The UPDATE only matches the order exactly as it was read (still unpaid, same items and total), so a payment or a
+  // second edit made meanwhile stops this one; the audit and timeline rows are written only if the UPDATE changed a row.
+  const res = await env.DB.batch([
+    env.DB.prepare("UPDATE orders SET items_json=?2, subtotal=?3, gst=?4, total=?5, qualifying_paise=?6, points_basis_paise=?7, updated_at=unixepoch() WHERE id=?1 AND items_json=?8 AND total=?9 AND payment_status='unpaid' AND paid_paise=0")
+      .bind(id, nextJson, calc.subtotal, calc.gst, calc.total, calc.qualifying, calc.pointsBasis, o.items_json, o.total),
+    env.DB.prepare("INSERT INTO audit_log (id,actor,action,order_id,detail) SELECT ?1,?2,'order_edit_items',?3,?4 WHERE changes() = 1")
+      .bind(eid, actor, id, JSON.stringify({ reason, before, after, items_before: items, items_after: calc.items })),
+    env.DB.prepare("INSERT INTO order_events (id,order_id,kind,status,note,customer_visible,actor,idempotency_key) SELECT ?1,?2,'note',NULL,?3,0,?4,?1 WHERE changes() = 1")
+      .bind(eid, id, `Items edited: total ${(before.total / 100).toFixed(2)} → ${(after.total / 100).toFixed(2)}. ${reason}`, actor),
+  ]);
+  if (res[0].meta.changes !== 1) return fail(409, "The order changed while you were working. Refresh and try again.");
+  return json({ ok: true, before, after });
+}
+
 // ── Cart milestones (campaigns) ──────────────────────────────────────
 // A campaign pays an explicit reward (free shipping, or up to 20% off) once the cart's net product value (without GST) reaches the
 // threshold. Never auto-applied beyond what is configured here; saved atomically with an audit row; never deleted (orders reference
@@ -1374,6 +1447,8 @@ export default {
       }
       const rm = path.match(/^\/api\/orders\/([0-9a-fA-F-]{8,64})\/refund$/);
       if (rm && method === "POST") return await refundOrder(rm[1], body, actor, env);
+      const em2 = path.match(/^\/api\/orders\/([0-9a-fA-F-]{8,64})\/items$/);
+      if (em2 && method === "POST") return await editOrderItems(em2[1], body, actor, env);
       if (method === "GET" && path === "/api/pricing") return await getPricing(env);
       if (method === "POST" && path === "/api/pricing/preview") return await previewPricing(body, env);
       if (method === "POST" && path === "/api/pricing/publish") return await publishPricing(body, actor, env);

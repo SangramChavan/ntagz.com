@@ -174,6 +174,32 @@ function paymentDialog(o) {
   });
 }
 
+// ── edit quantity / unit price (unpaid, unshipped orders only; the server decides eligibility and recomputes every total) ──
+function editItemsDialog(o) {
+  const L = o.edit.lines;
+  const preview = el("p", { class: "sub", role: "status" }, "Change a quantity or price to see the new total.");
+  const reason = el("textarea", { id: "reason", maxlength: "200", rows: "2", placeholder: "Why is this changing? Saved in the audit log" });
+  const rows = L.map((l, i) => {
+    const q = el("input", { id: "qty-" + i, type: "number", inputmode: "numeric", min: "1", step: "1", value: String(l.qty), ...(l.qty_locked || l.fixed ? { disabled: "" } : {}) });
+    const u = el("input", { id: "unit-" + i, type: "number", inputmode: "decimal", min: "0.01", step: "0.01", value: l.unit_paise == null ? "" : (l.unit_paise / 100).toFixed(2) });
+    return { q, u, node: el("div", { class: "editline" }, el("b", {}, l.name),
+      labeled("qty-" + i, "Quantity", q, l.qty_locked ? "Stock is reserved, so the quantity is fixed" : l.fixed ? "Fixed kit: always 1" : ""),
+      labeled("unit-" + i, l.all_inclusive ? "Price each (incl. GST)" : "Price each (ex-GST)", u, l.unit_from === "catalogue" ? "Starts at the catalogue price. Enter what this customer pays." : "")) };
+  });
+  const body = (extra) => ({ lines: L.map((l, i) => ({ id: l.id, qty: rows[i].q.value, unit_rupees: rows[i].u.value })), ...extra });
+  let timer = 0, seq = 0;
+  const refresh = () => { clearTimeout(timer); timer = setTimeout(async () => {
+    const mine = ++seq;
+    try { const d = await api(`/api/orders/${o.id}/items`, body({ dry_run: true })); if (mine === seq) preview.textContent = `Total ${inr(d.before.total)} → ${inr(d.after.total)} (GST ${inr(d.after.gst)})`; }
+    catch (e) { if (mine === seq) preview.textContent = e.message; }
+  }, 400); };
+  for (const r of rows) { r.q.addEventListener("input", refresh); r.u.addEventListener("input", refresh); }
+  actionDialog("Edit quantity & price", [el("p", { class: "sub" }, `${o.name || "Order"} · ${orderRef(o)} · currently ${inr(o.total)}`), ...rows.map((r) => r.node), preview,
+    labeled("reason", "Reason (required)", reason), el("p", { class: "sub" }, "The customer is not emailed. The change is saved with your name, and the old values are kept in the audit log.")], "Save changes", {
+    onSubmit: async () => { await postForm(`/api/orders/${o.id}/items`, body({ confirm: true, reason: reason.value })); toast("Order updated"); $("adlg").close(); await openOrder(o.id); load(); },
+  });
+}
+
 // ── order side panel ─────────────────────────────────────────────────
 function copyBtn(text) { return el("button", { class: "btn small", type: "button", onclick: async (e) => { try { await navigator.clipboard.writeText(text); e.target.textContent = "Copied"; setTimeout(() => { e.target.textContent = "Copy"; }, 1500); } catch { toast("Copy failed", true); } } }, "Copy"); }
 const row = (k, v) => [el("dt", {}, k), el("dd", {}, v)];
@@ -195,7 +221,7 @@ async function openOrder(id, preloaded) {
     el("div", { class: "tl-title" }, t.label, t.customer_visible === false ? el("span", { class: "pill off" }, "Internal") : ""),
     el("div", { class: "sub" }, when(t.at) + (t.actor ? ` · ${t.actor}` : "")),
     t.public_note ? el("div", { class: "tl-note" }, "To customer: " + t.public_note) : "", t.note ? el("div", { class: "sub" }, "Note: " + t.note) : ""));
-  const items = o.items.length ? o.items.map((i) => el("tr", {}, el("td", {}, String(i.name || i.id || "Item")), el("td", {}, "× " + (i.qty ?? 1)))) : [el("tr", {}, el("td", {}, "—"))];
+  const items = o.items.length ? o.items.map((i) => el("tr", {}, el("td", {}, String(i.name || i.id || "Item")), el("td", {}, "× " + (i.qty ?? 1) + (Number.isInteger(i.unit_paise) ? " @ " + inr(i.unit_paise) : "")))) : [el("tr", {}, el("td", {}, "—"))];
   $("opanel").replaceChildren(
     el("div", { class: "panel-head" }, el("div", {}, el("h2", { id: "optitle", class: "h0" }, "Order " + orderRef(o)), el("div", {}, payPill(o), fulPill(o), priPill(o), o.is_preorder ? el("span", { class: "pill pre" }, "Pre-order") : "")), el("button", { class: "btn small", type: "button", "aria-label": "Close", onclick: () => $("opanel").close() }, "✕")),
     el("div", { class: "opanel-body" },
@@ -207,6 +233,7 @@ async function openOrder(id, preloaded) {
       ...preorderSection(o),
       el("h3", { class: "sec" }, "Customer"), el("dl", {}, ...row("Name", o.name || "—"), ...row("Phone", o.phone ? phoneLink(o) : "—"), ...row("Email", o.email || "—"), ...row("Ship to", [o.address, o.state, o.pincode].filter(Boolean).join(", ") || "—"), ...row("GSTIN", o.gstin || "—")),
       el("h3", { class: "sec" }, "Items & payment"), el("table", { class: "items" }, el("tbody", {}, items)),
+      o.edit && o.edit.allowed ? el("button", { class: "btn small", type: "button", onclick: () => editItemsDialog(o) }, "Edit quantity & price") : "",
       el("dl", {}, ...row("Subtotal", orderMoney(o, o.subtotal)), ...row(o.market === "INTL" ? "Taxes" : "GST", orderMoney(o, o.gst)), ...row("Total", orderMoney(o, o.total)), ...row("Paid", orderMoney(o, o.paid_paise)), ...row("Outstanding", orderMoney(o, o.outstanding_paise)), ...row("Method", methodTxt(o)), ...row("Order ID", o.id), ...row("Transaction", o.txn_id || "—"), ...row("Placed", when(o.created_at))),
       o.payments.length ? el("p", { class: "sub" }, o.payments.map((p) => `${orderMoney(o, p.amount_paise)} ${p.method}${p.reference ? " (" + p.reference + ")" : ""} · ${p.recorded_by}`).join(" · ")) : "",
       ...buildSection(o),

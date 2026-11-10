@@ -204,3 +204,6 @@ header nav { min-width:0; overflow-x:auto; scrollbar-width:none; } header nav::-
 @media (min-width:900px) { .pl-list { grid-template-columns:1fr 1fr; } }
 
 .oitems { font-size:13px; color:var(--ink); max-width:260px; overflow-wrap:anywhere; margin:2px 0 0; }
+
+.editline { display:grid; gap:8px; padding:10px 0; border-bottom:1px solid var(--line); }
+@media (min-width:520px) { .editline { grid-template-columns:1fr 1fr; } .editline b { grid-column:1/-1; } }
