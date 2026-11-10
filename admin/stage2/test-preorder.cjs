@@ -67,7 +67,7 @@ let pi = 0; const pid = () => "pay_po" + ++pi;
   setP("stock_qty=0, preordered_qty=3"); assert.equal((await cat()).find((x) => x.id === P).available, true);
   setP("preorder_max=NULL"); c = (await cat()).find((x) => x.id === P); assert.equal(c.preorder.max_qty, null);
   setP("preorder_enabled=0, stock_qty=50"); c = (await cat()).find((x) => x.id === P); assert.equal(c.preorder, null); assert.equal(c.left, null);
-  assert.deepEqual(Object.keys(c).sort(), ["active", "available", "id", "left", "low", "preorder", "price"]); assert.ok(!JSON.stringify(c).includes("50")); ok("catalog: preorder object, left only when low, available semantics, no stock leakage");
+  assert.deepEqual(Object.keys(c).sort(), ["active", "available", "category", "id", "left", "low", "name", "preorder", "price", "url"]); assert.ok(!JSON.stringify(c).includes("50")); ok("catalog: preorder object, left only when low, available semantics, no stock leakage");
 
   // concurrency
   setP("track_stock=1, stock_qty=6, preorder_enabled=1, preorder_max=NULL, preordered_qty=0");

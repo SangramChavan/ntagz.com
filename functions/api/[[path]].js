@@ -1447,7 +1447,8 @@ async function onRequest({ request, env }) {
     const pricing = await loadPricing(env);
     if (!pricing) return json({ error: "Catalogue unavailable" }, 503, origin);
     const items = Object.values(pricing).map((r) => ({
-      id: r.id, price: r.price_paise / 100, active: !!r.active,
+      id: r.id, name: r.name, category: r.category, url: `https://ntagz.com/product/${r.id}/`,
+      price: r.price_paise / 100, active: !!r.active,
       available: !r.track_stock || r.stock_qty > 0 || (!!r.preorder_enabled && (r.preorder_max == null || r.preordered_qty < r.preorder_max)),
       low: !!r.track_stock && r.stock_qty > 0 && r.stock_qty <= r.low_stock_threshold,
       left: r.track_stock && r.stock_qty > 0 && r.stock_qty <= r.low_stock_threshold ? r.stock_qty : null,
