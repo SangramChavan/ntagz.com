@@ -27,7 +27,7 @@
         type: "url",
         fields: [
           { id: "wa_phone", label: "Phone Number (with Country Code)", type: "text", placeholder: "919960160016", default: "" },
-          { id: "wa_msg", label: "Pre-filled Message (Optional)", type: "text", placeholder: "Hi ntagz!", default: "" }
+          { id: "wa_msg", label: "Pre-filled Message (Optional)", type: "text", placeholder: "Hi ntagz!", default: "", optional: true }
         ],
         build: (data) => `https://wa.me/${data.wa_phone}?text=${encodeURIComponent(data.wa_msg)}`
       },
@@ -35,7 +35,7 @@
         type: "url",
         fields: [
           { id: "email_address", label: "Email Address", type: "email", placeholder: "hello@ntagz.in", default: "" },
-          { id: "email_sub", label: "Subject Line", type: "text", placeholder: "Inquiry", default: "" }
+          { id: "email_sub", label: "Subject Line", type: "text", placeholder: "Inquiry", default: "", optional: true }
         ],
         build: (data) => `mailto:${data.email_address}?subject=${encodeURIComponent(data.email_sub)}`
       },
@@ -78,6 +78,7 @@
     let currentPayloadData = "";
     let currentRecordType = "url";
     let nfcSupported = false;
+    let nfcAbort = null;
 
     // Bootloader Initialization
     function init() {
@@ -143,6 +144,48 @@
       log.innerText = msg;
     }
 
+    // Each Read or Write gets a fresh controller; starting one aborts the previous one.
+    function startNfcOp() {
+      if (nfcAbort) nfcAbort.abort();
+      nfcAbort = new AbortController();
+      return nfcAbort;
+    }
+
+    // Maps Web NFC error names to advice the user can act on.
+    function describeNfcError(err, prefix) {
+      const name = err && err.name;
+      if (name === 'AbortError') return { text: 'Cancelled.', style: 'wait' };
+      const advice = {
+        NotAllowedError: 'NFC permission was blocked. Allow NFC for this site in Chrome settings and try again.',
+        NotReadableError: 'NFC is turned off. Turn it on in Android Settings > Connected devices, then try again.',
+        NetworkError: 'The tag moved away before writing finished. Hold it still against the back of the phone and try again.',
+        NotSupportedError: "This tag can't store this data (too small, locked, or not NDEF formatted). Try a shorter payload or another tag.",
+        TypeError: "The data isn't valid for this record type.",
+        SyntaxError: "The data isn't valid for this record type."
+      }[name];
+      return { text: `${prefix}: ${advice || name}`, style: 'error' };
+    }
+
+    // Returns a message for the first invalid field, or '' when the form is valid.
+    function validateFields(preset) {
+      for (const field of preset.fields) {
+        const value = document.getElementById(field.id).value.trim();
+        if (!value) {
+          if (field.optional) continue;
+          return `${field.label} is required.`;
+        }
+        if (field.type === 'url') {
+          let ok = false;
+          try {
+            const u = new URL(value);
+            ok = u.protocol === 'http:' || u.protocol === 'https:';
+          } catch (e) { ok = false; }
+          if (!ok) return `${field.label} must be a full link starting with http:// or https://.`;
+        }
+      }
+      return '';
+    }
+
     // Render dynamic contextual inputs based on layout configurations
     function renderInputs(presetKey) {
       const preset = presets[presetKey];
@@ -187,7 +230,7 @@
 
       const dataObj = {};
       preset.fields.forEach(field => {
-        dataObj[field.id] = document.getElementById(field.id).value;
+        dataObj[field.id] = document.getElementById(field.id).value.trim();
       });
 
       currentPayloadData = preset.build(dataObj);
@@ -203,14 +246,15 @@
         return;
       }
 
+      const ctrl = startNfcOp();
       try {
         showLog("Scanning... Bring an NFC tag near your phone's antenna.", "wait");
         const ndef = new NDEFReader();
-        await ndef.scan();
+        await ndef.scan({ signal: ctrl.signal });
 
         ndef.addEventListener("readingerror", () => {
           showLog("Error reading tag. Try repositioning.", "error");
-        });
+        }, { signal: ctrl.signal });
 
         ndef.addEventListener("reading", ({ message, serialNumber }) => {
           let recordsInfo = `Tag ID: ${serialNumber} | Records: ${message.records.length}\n`;
@@ -218,37 +262,45 @@
             recordsInfo += `- Type: ${record.recordType}\n`;
           }
           showLog(`Success! \n${recordsInfo}`, "success");
-        });
+        }, { signal: ctrl.signal });
       } catch (error) {
-        showLog(`Read failed: ${error}`, "error");
+        if (ctrl !== nfcAbort) return; // a newer Read or Write owns the log now
+        const { text, style } = describeNfcError(error, "Read failed");
+        showLog(text, style);
       }
     }
 
     // Execute Transceiver NDEF Write
+    // Validation is synchronous and nothing awaits before ndef.write(): Web NFC needs the click's user activation.
     async function handleWrite() {
-      if (!currentPayloadData) {
-        showLog("Payload is empty. Please enter data first.", "error");
+      const problem = validateFields(presets[selector.value]);
+      if (problem) {
+        showLog(problem, "error");
         return;
       }
 
       if (!nfcSupported) {
-        showLog("Unsupported Device: Simulated Write completed. Record: " + currentRecordType + ". Payload: " + currentPayloadData, "success");
+        showLog("Not written. This browser can't write NFC tags. Open this page in Chrome on Android.", "error");
         return;
       }
 
+      const ctrl = startNfcOp();
       try {
         showLog("Ready to write. Hold the NFC tag to your phone now.", "wait");
         const ndef = new NDEFReader();
 
+        // External types (e.g. "android.com:pkg") require BufferSource data.
         const record = {
           recordType: currentRecordType,
-          data: currentPayloadData
+          data: currentRecordType.includes(':') ? new TextEncoder().encode(currentPayloadData) : currentPayloadData
         };
 
-        await ndef.write({ records: [record] });
+        await ndef.write({ records: [record] }, { signal: ctrl.signal });
         showLog(`Success! Written to tag: ${currentPayloadData}`, "success");
       } catch (error) {
-        showLog(`Write failed: ${error}. (Is the tag locked or unsupported?)`, "error");
+        if (ctrl !== nfcAbort) return; // superseded by a newer Read or Write
+        const { text, style } = describeNfcError(error, "Write failed");
+        showLog(text, style);
       }
     }
 
