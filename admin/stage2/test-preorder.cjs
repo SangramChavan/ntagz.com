@@ -26,6 +26,10 @@ const cat = async () => (await (await call("/api/catalog")).json());
 let pi = 0; const pid = () => "pay_po" + ++pi;
 
 (async () => {
+  sqlite.exec("UPDATE products SET track_stock=1, preorder_enabled=0, preorder_max=5, preorder_dispatch=NULL WHERE id='anti-metal-tag'");
+  sqlite.exec(require("node:fs").readFileSync(path.join(__dirname, "..", "migrations", "0034_preorder_by_default.sql"), "utf8"));
+  const m = prod("anti-metal-tag"); assert.deepEqual([m.preorder_enabled, m.preorder_max], [1, null]); assert.ok(m.preorder_dispatch && /non-refundable/.test(m.preorder_message));
+  sqlite.exec("UPDATE products SET track_stock=0, preorder_enabled=0 WHERE id='anti-metal-tag'"); ok("migration 0034 turns pre-order on, uncapped, with dispatch text and no-refund message");
   // normal order, stock suffices
   setP("track_stock=1, stock_qty=20, low_stock_threshold=5, preorder_enabled=1, preorder_message='Restocking', preorder_dispatch='7-10 days'");
   let o = await buy(10, pid());
@@ -37,6 +41,7 @@ let pi = 0; const pid = () => "pay_po" + ++pi;
   o = await buy(8, pid());
   assert.deepEqual(lines(o.id), [{ product_id: P, ready_qty: 5, pre_qty: 3 }]);
   assert.equal(prod().stock_qty, 0); assert.equal(prod().preordered_qty, 3); assert.equal(o.is_preorder, 1); assert.equal(o.status, "preorder_confirmed");
+  assert.equal(o.expected_dispatch, one("SELECT date('now','+7 days') d").d); // pre-order orders get a 7-day dispatch date automatically
   const mv = one("SELECT * FROM inventory_movements WHERE reference=?", o.txn_id); assert.equal(mv.qty_change, -5); ok("stock 5 + order 8: ready 5 / pre 3, stock 0, preordered 3, order is pre-order");
 
   // disabled + exceeding blocked

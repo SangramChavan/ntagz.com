@@ -36,7 +36,7 @@ function stockStatements(db, orderId, txnId, items) {
     );
   }
   out.push(db.prepare(
-    `UPDATE orders SET is_preorder=1, status='preorder_confirmed' WHERE id=?1 AND status IN ('placed','confirmed')
+    `UPDATE orders SET is_preorder=1, status='preorder_confirmed', expected_dispatch=coalesce(expected_dispatch,date('now','+7 days')) WHERE id=?1 AND status IN ('placed','confirmed')
      AND EXISTS (SELECT 1 FROM order_stock_lines WHERE order_id=?1 AND pre_qty>0)`
   ).bind(orderId));
   return out;

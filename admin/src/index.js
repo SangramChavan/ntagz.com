@@ -499,6 +499,8 @@ async function exportCsv(sp, env) {
 
 // ── Products & inventory ──────────────────────────────────────────────
 const PSORTS = { name: "name", price: "price_paise", stock: "stock_qty", updated: "updated_at", newest: "created_at" };
+// Defaults for new stock-tracked products (migration 0034 does the same for existing ones).
+const PRE_DISPATCH = "Dispatch within 7 days", PRE_MSG = "Out of stock right now. Pre-order and we dispatch within 7 days. Pre-orders are non-refundable.";
 const PCOLS = "id,sku,name,description,category,image_url,price_paise,mrp_paise,gst_rate,all_inclusive,unit,stock_qty,low_stock_threshold,active,track_stock,cost_paise,built_in,preorder_enabled,preorder_message,preorder_dispatch,preorder_max,preordered_qty,created_at,updated_at";
 const GST_RATES = [0, 5, 12, 18, 28];
 const IMAGE_OK = /^(https:\/\/(www\.)?ntagz\.com\/|images\/)[\w\-./]{1,200}$/;
@@ -682,7 +684,7 @@ async function createProduct(body, actor, env) {
   const stmts = [env.DB.prepare(
     `INSERT INTO products (id,sku,name,description,category,image_url,price_paise,mrp_paise,cost_paise,gst_rate,unit,stock_qty,low_stock_threshold,active,track_stock,preorder_enabled,preorder_message,preorder_dispatch,preorder_max)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
-  ).bind(pid, f.sku, f.name, f.description ?? "", f.category, f.image_url ?? null, f.price_paise, f.mrp_paise ?? null, f.cost_paise ?? null, f.gst_rate ?? 18, f.unit ?? "pc", opening, thr, f.active ?? 1, f.track_stock ?? 0, f.preorder_enabled ?? 0, f.preorder_message ?? null, f.preorder_dispatch ?? null, f.preorder_max ?? null)];
+  ).bind(pid, f.sku, f.name, f.description ?? "", f.category, f.image_url ?? null, f.price_paise, f.mrp_paise ?? null, f.cost_paise ?? null, f.gst_rate ?? 18, f.unit ?? "pc", opening, thr, f.active ?? 1, f.track_stock ?? 0, f.preorder_enabled ?? (f.track_stock ? 1 : 0), f.preorder_message ?? (f.track_stock ? PRE_MSG : null), f.preorder_dispatch ?? (f.track_stock ? PRE_DISPATCH : null), f.preorder_max ?? null)];
   if (opening > 0) stmts.push(env.DB.prepare(
     "INSERT INTO inventory_movements (id,product_id,type,qty_change,prev_stock,new_stock,reason,admin,idempotency_key) VALUES (?,?,'opening',?,0,?,'Opening stock',?,?)"
   ).bind(crypto.randomUUID(), pid, opening, opening, actor, "opening"));
