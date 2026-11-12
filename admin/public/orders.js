@@ -180,13 +180,15 @@ function editItemsDialog(o) {
   const preview = el("p", { class: "sub", role: "status" }, "Change a quantity or price to see the new total.");
   const reason = el("textarea", { id: "reason", maxlength: "200", rows: "2", placeholder: "Why is this changing? Saved in the audit log" });
   const rows = L.map((l, i) => {
-    const q = el("input", { id: "qty-" + i, type: "number", inputmode: "numeric", min: "1", step: "1", value: String(l.qty), ...(l.qty_locked || l.fixed ? { disabled: "" } : {}) });
+    const q = el("input", { id: "qty-" + i, type: "number", inputmode: "numeric", min: "1", step: "1", value: String(l.qty), ...(l.fixed ? { disabled: "" } : {}) });
     const u = el("input", { id: "unit-" + i, type: "number", inputmode: "decimal", min: "0.01", step: "0.01", value: l.unit_paise == null ? "" : (l.unit_paise / 100).toFixed(2) });
     return { q, u, node: el("div", { class: "editline" }, el("b", {}, l.name),
-      labeled("qty-" + i, "Quantity", q, l.qty_locked ? "Stock is reserved, so the quantity is fixed" : l.fixed ? "Fixed kit: always 1" : ""),
+      labeled("qty-" + i, "Quantity", q, l.qty_locked ? "Reserved stock is adjusted to the new quantity" : l.fixed ? "Fixed kit: always 1" : ""),
       labeled("unit-" + i, l.all_inclusive ? "Price each (incl. GST)" : "Price each (ex-GST)", u, l.unit_from === "catalogue" ? "Starts at the catalogue price. Enter what this customer pays." : "")) };
   });
-  const body = (extra) => ({ lines: L.map((l, i) => ({ id: l.id, qty: rows[i].q.value, unit_rupees: rows[i].u.value })), ...extra });
+  // Products added to this order: each row is { id, q, u, node }; the server checks stock, price and duplicates.
+  const addable = o.edit.addable || [], added = [], addBox = el("div", {});
+  const body = (extra) => ({ lines: L.map((l, i) => ({ id: l.id, qty: rows[i].q.value, unit_rupees: rows[i].u.value })), add: added.map((a) => ({ id: a.sel.value, qty: a.q.value, unit_rupees: a.u.value })), ...extra });
   let timer = 0, seq = 0;
   const refresh = () => { clearTimeout(timer); timer = setTimeout(async () => {
     const mine = ++seq;
@@ -194,7 +196,28 @@ function editItemsDialog(o) {
     catch (e) { if (mine === seq) preview.textContent = e.message; }
   }, 400); };
   for (const r of rows) { r.q.addEventListener("input", refresh); r.u.addEventListener("input", refresh); }
-  actionDialog("Edit quantity & price", [el("p", { class: "sub" }, `${o.name || "Order"} · ${orderRef(o)} · currently ${inr(o.total)}`), ...rows.map((r) => r.node), preview,
+  const addRow = () => {
+    const j = added.length;
+    const sel = el("select", { id: "add-id-" + j }, [el("option", { value: "" }, "Choose a product…"), ...addable.map((p) => el("option", { value: p.id }, p.name))]);
+    const q = el("input", { id: "add-qty-" + j, type: "number", inputmode: "numeric", min: "1", step: "1", value: "1" });
+    const u = el("input", { id: "add-unit-" + j, type: "number", inputmode: "decimal", min: "0.01", step: "0.01", value: "" });
+    const a = { sel, q, u };
+    const hint = el("div", { class: "hint" });
+    sel.addEventListener("change", () => { // start from the catalogue price; the admin enters what this customer pays
+      const p = addable.find((x) => x.id === sel.value);
+      u.value = p ? (p.unit_paise / 100).toFixed(2) : ""; if (p && p.fixed) q.value = "1";
+      hint.textContent = p ? (p.all_inclusive ? "Price each is incl. GST" : "Price each is ex-GST") : ""; refresh();
+    });
+    q.addEventListener("input", refresh); u.addEventListener("input", refresh);
+    a.node = el("div", { class: "editline" }, el("b", {}, "New product"), labeled("add-id-" + j, "Product", sel), labeled("add-qty-" + j, "Quantity", q), labeled("add-unit-" + j, "Price each", u, ""), hint,
+      el("button", { class: "btn link", type: "button", onclick: () => { const k = added.indexOf(a); added.splice(k, 1); a.node.remove(); renumber(); refresh(); } }, "Remove"));
+    added.push(a); addBox.append(a.node); addBtn.disabled = added.length >= addable.length;
+  };
+  // Field ids must match the server's add-*-<index> error keys after a row is removed.
+  const renumber = () => { added.forEach((a, j) => { for (const [k, n] of [["id", a.sel], ["qty", a.q], ["unit", a.u]]) { n.id = `add-${k}-${j}`; const f = a.node.querySelector(`[id^="f-add-${k}-"]`); if (f) { f.id = `f-add-${k}-${j}`; f.querySelector("label").htmlFor = n.id; f.querySelector(".err").id = `e-add-${k}-${j}`; } } }); addBtn.disabled = added.length >= addable.length; };
+  const addBtn = el("button", { class: "btn small", type: "button", onclick: addRow }, "+ Add another product");
+  if (!addable.length) addBtn.disabled = true;
+  actionDialog("Edit order items", [el("p", { class: "sub" }, `${o.name || "Order"} · ${orderRef(o)} · currently ${inr(o.total)}`), ...rows.map((r) => r.node), addBox, addBtn, preview,
     labeled("reason", "Reason (required)", reason), el("p", { class: "sub" }, "The customer is not emailed. The change is saved with your name, and the old values are kept in the audit log.")], "Save changes", {
     onSubmit: async () => { await postForm(`/api/orders/${o.id}/items`, body({ confirm: true, reason: reason.value })); toast("Order updated"); $("adlg").close(); await openOrder(o.id); load(); },
   });

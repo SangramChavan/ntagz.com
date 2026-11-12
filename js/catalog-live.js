@@ -25,6 +25,7 @@
       var p = catalog.byId && catalog.byId(row.id);
       if (!p || typeof row.price !== 'number' || !isFinite(row.price) || row.price < 0) return;
       if (p.price !== row.price) { p.price = row.price; changed = true; }
+      if (!p.fixed && Number.isInteger(row.moq) && row.moq >= 1 && p.moq !== row.moq) { p.moq = row.moq; changed = true; }
       var pre = row.preorder && typeof row.preorder === 'object' ? {
         message: typeof row.preorder.message === 'string' ? row.preorder.message : '',
         dispatch: typeof row.preorder.dispatch === 'string' ? row.preorder.dispatch : '',

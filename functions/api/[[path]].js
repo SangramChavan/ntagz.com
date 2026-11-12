@@ -38,6 +38,9 @@ async function loadPricing(env) {
     let results;
     // loyalty_eligible/loyalty_max_pct arrive with migration 0012 (before it: every product eligible, no ceiling).
     // points_eligible arrives with migration 0014 (before it: every product earns).
+    // moq arrives with migration 0035: try it first; without that migration the chain below runs unchanged.
+    try { ({ results } = await env.DB.prepare(`SELECT ${cols},moq,member_discount_pct,cost_paise,loyalty_eligible,loyalty_max_pct,points_eligible FROM products`).all()); }
+    catch {
     try { ({ results } = await env.DB.prepare(`SELECT ${cols},member_discount_pct,cost_paise,loyalty_eligible,loyalty_max_pct,points_eligible FROM products`).all()); }
     catch {
      try { ({ results } = await env.DB.prepare(`SELECT ${cols},member_discount_pct,cost_paise,loyalty_eligible,loyalty_max_pct FROM products`).all()); }
@@ -45,6 +48,7 @@ async function loadPricing(env) {
       try { ({ results } = await env.DB.prepare(`SELECT ${cols},member_discount_pct,cost_paise,1 AS loyalty_eligible,NULL AS loyalty_max_pct FROM products`).all()); }
       catch { ({ results } = await env.DB.prepare(`SELECT ${cols},0 AS member_discount_pct,NULL AS cost_paise,1 AS loyalty_eligible,NULL AS loyalty_max_pct FROM products`).all()); }
      }
+    }
     }
     const map = {};
     for (const r of results) map[r.id] = r;
@@ -63,7 +67,7 @@ function suggestFor(items, pricing, remainingPaise) {
     if (st.fixed || inCart.has(id) || !row || !row.active) continue;
     const unitEx = row.price_paise / 100 / (st.allInclusive ? 1.18 : 1);
     if (!(unitEx > 0)) continue;
-    const qty = Math.max(st.moq || 10, Math.ceil(remainingPaise / 100 / unitEx));
+    const qty = Math.max(PRICING.moqFor(st, row), PRICING.GROUP_MOQ[st.moqGroup] || 0, Math.ceil(remainingPaise / 100 / unitEx));
     if (qty > 100000 || (row.track_stock && !row.preorder_enabled && qty > row.stock_qty)) continue;
     out.push({ id, name: row.name, qty, valuePaise: Math.round(qty * unitEx * 100), sameCategory: cats.has(row.category) });
   }
@@ -1365,7 +1369,7 @@ async function assistantOffer(url, request, env, origin) {
   // Only products that are active and sold through checkout can be recommended.
   const live = Object.keys(PRODUCTS).filter((id) => pricing[id] && pricing[id].active).map((id) => ({ id, name: pricing[id].name || id }));
   const read = ASSIST.readQuantity(q), m = ASSIST.matchProducts(read.rest, live);
-  const minOf = (id) => (PRODUCTS[id].fixed ? 1 : PRODUCTS[id].moq || 10);
+  const minOf = (id) => (PRODUCTS[id].fixed ? 1 : Math.max(PRODUCTS[id].moq || 10, PRICING.GROUP_MOQ[PRODUCTS[id].moqGroup] || 0)); // a lone GR* line must meet the group minimum
   const pageOf = (id) => (ASSIST.CAT[id] && ASSIST.CAT[id].page ? SITE + ASSIST.CAT[id].page : null);
   const cand = (p) => ({ name: p.name, unitPrice: round2(pricing[p.id].price_paise / 100), minQty: minOf(p.id), productUrl: pageOf(p.id), offerUrl: `${SITE}/api/assistant/offer?q=${encodeURIComponent(p.name)}` });
 
@@ -1448,7 +1452,7 @@ async function onRequest({ request, env }) {
     if (!pricing) return json({ error: "Catalogue unavailable" }, 503, origin);
     const items = Object.values(pricing).map((r) => ({
       id: r.id, name: r.name, category: r.category, url: `https://ntagz.com/product/${r.id}/`,
-      price: r.price_paise / 100, active: !!r.active,
+      price: r.price_paise / 100, active: !!r.active, moq: PRODUCTS[r.id] ? PRICING.moqFor(PRODUCTS[r.id], r) : null,
       available: !r.track_stock || r.stock_qty > 0 || (!!r.preorder_enabled && (r.preorder_max == null || r.preordered_qty < r.preorder_max)),
       low: !!r.track_stock && r.stock_qty > 0 && r.stock_qty <= r.low_stock_threshold,
       left: r.track_stock && r.stock_qty > 0 && r.stock_qty <= r.low_stock_threshold ? r.stock_qty : null,

@@ -19,10 +19,10 @@ const PRODUCTS = {
   "black-nfc-card":               { price: 30 },
   "white-nfc-card":               { price: 25 },
   "white-inkjet-nfc-card":        { price: 32.8 },
-  "google-review-nfc-card":       { price: 95 },
-  "google-review-nfc-stand-5x5":  { price: 99, allInclusive: true },
-  "google-review-nfc-stand-10x10":{ price: 149, allInclusive: true },
-  "google-review-nfc-stand-12x12":{ price: 199, allInclusive: true },
+  "google-review-nfc-card":       { price: 95, moq: 5, moqGroup: "GR" },
+  "google-review-nfc-stand-5x5":  { price: 99, allInclusive: true, moq: 5, moqGroup: "GR" },
+  "google-review-nfc-stand-10x10":{ price: 149, allInclusive: true, moq: 5, moqGroup: "GR" },
+  "google-review-nfc-stand-12x12":{ price: 199, allInclusive: true, moq: 5, moqGroup: "GR" },
   "google-review-nfc-qr-stand-custom-10x10": { price: 2000, allInclusive: true, moq: 1 }, // custom-made, sold singly (the default minimum is 10)
   "nfc-card-custom-printing":     { price: 75 },
   "anti-metal-tag":               { price: 20 },
@@ -39,6 +39,8 @@ const PRODUCTS = {
   "rfid-card-custom-printing":    { price: 75 },
 };
 
+// Group minimums: items sharing a moqGroup (the Google Review SKUs, GR*) must also reach this combined quantity. Keep in step with js/catalog.js.
+const GROUP_MOQ = { GR: 10 };
 const GST_PCT = 18;
 const BULK_TIERS = [ // pieces threshold -> %
   { min: 5000, pct: 25 }, { min: 1000, pct: 15 }, { min: 500, pct: 10 },
@@ -105,6 +107,9 @@ function partnerUnit({ price, allInclusive, costPaise, band }) {
   return { ok: true, retailExPaise, unitExPaise, floorPaise, limit, pct: retailExPaise > 0 ? Math.round((retailExPaise - unitExPaise) / retailExPaise * 10000) / 100 : 0 };
 }
 
+// Minimum order for one product: fixed kits 1; else the admin value (products.moq) when set; else the static table; else 10.
+const moqFor = (product, row) => (product.fixed ? 1 : row && Number.isInteger(row.moq) && row.moq >= 1 ? row.moq : product.moq || 10);
+
 // items: [{id, qty}]. products: static structure table {id: {price, fixed, moq, packSize, allInclusive}}.
 // live: D1 rows by id (price_paise, member_discount_pct, cost_paise) or null. member: true only for a verified active member.
 // Returns null for any invalid cart (unknown product, bad qty, below MOQ, too many lines, absurd total).
@@ -119,12 +124,15 @@ function combinePct(paid, tier, mode) {
 function priceCart(items, { products, live, state, member, settings, loyalty, campaigns, redeemPaise, partner }) {
   if (!Array.isArray(items) || items.length < 1 || items.length > 30) return null;
   const s = settings || settingsFrom({});
+  const groupQty = {};
+  for (const it of items) { const g = products[it && it.id] && products[it.id].moqGroup; if (g && Number.isSafeInteger(it.qty)) groupQty[g] = (groupQty[g] || 0) + it.qty; }
+  for (const g in groupQty) if (groupQty[g] < GROUP_MOQ[g]) return null;
   let regular = 0, inclusive = 0, pieces = 0, list = 0, bulkOff = 0, memberOff = 0, qualifying = 0, pointsElig = 0, memberSaving = 0, partnerOff = 0;
   const lines = [];
   for (const item of items) {
     const product = products[item && item.id];
     const qty = item && item.qty;
-    if (!product || !Number.isSafeInteger(qty) || qty < (product.fixed ? 1 : product.moq || 10) || qty > 100000) return null;
+    if (!product || !Number.isSafeInteger(qty) || qty < moqFor(product, live && live[item.id]) || qty > 100000) return null;
     if (product.fixed && qty !== 1) return null;
     const row = live && live[item.id];
     const linePieces = qty * (product.packSize || 1);
@@ -256,4 +264,4 @@ function partnerPriceReport(product, row, band) {
 }
 const tierLabel = (pct) => (pct === 0 ? "regular quantities" : `${BULK_TIERS.find((t) => t.pct === pct).min}+ pcs`);
 
-module.exports = { PRODUCTS, GST_PCT, BULK_TIERS, SHIPPING, MAX_MEMBER_PCT, bulkPctFor, settingsFrom, memberPctFor, priceCart, memberPriceReport, partnerUnit, partnerPriceReport };
+module.exports = { PRODUCTS, GROUP_MOQ, GST_PCT, BULK_TIERS, SHIPPING, MAX_MEMBER_PCT, bulkPctFor, settingsFrom, memberPctFor, moqFor, priceCart, memberPriceReport, partnerUnit, partnerPriceReport };

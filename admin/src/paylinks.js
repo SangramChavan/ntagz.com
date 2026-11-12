@@ -75,8 +75,8 @@ async function list(ctx) {
     FROM (${inner}) WHERE created_at >= ?1`).bind(since).first();
   const names = await productNames(env);
   // What can be put on a link: active products the checkout can sell, with the minimum quantity the checkout enforces.
-  const catalog = (await env.DB.prepare("SELECT id,name,price_paise,unit FROM products WHERE active=1 ORDER BY name").all()).results
-    .filter((p) => PRICING.PRODUCTS[p.id]).map((p) => ({ id: p.id, name: p.name, price: p.price_paise / 100, unit: p.unit, fixed: !!PRICING.PRODUCTS[p.id].fixed, min: PRICING.PRODUCTS[p.id].fixed ? 1 : PRICING.PRODUCTS[p.id].moq || 10 }));
+  const catalog = (await env.DB.prepare("SELECT id,name,price_paise,unit,moq FROM products WHERE active=1 ORDER BY name").all()).results
+    .filter((p) => PRICING.PRODUCTS[p.id]).map((p) => ({ id: p.id, name: p.name, price: p.price_paise / 100, unit: p.unit, fixed: !!PRICING.PRODUCTS[p.id].fixed, min: PRICING.moqFor(PRICING.PRODUCTS[p.id], p) }));
   return ctx.json({ available: true, links: results.map((r) => shape(r, names)), page, pages: Math.max(1, Math.ceil(total / PAGE)), total, stats: s, catalog });
 }
 
@@ -135,7 +135,7 @@ export async function create(ctx) { // also used by quote-order.js to make a lin
   let est = null;
   if (!items) errors.items = "Add at least one product with a whole-number quantity";
   else {
-    const { results: prods } = await env.DB.prepare("SELECT id,name,active,price_paise,cost_paise,member_discount_pct FROM products").all();
+    const { results: prods } = await env.DB.prepare("SELECT id,name,active,price_paise,cost_paise,member_discount_pct,moq FROM products").all();
     const live = Object.fromEntries(prods.map((p) => [p.id, p]));
     const bad = items.find((i) => !PRICING.PRODUCTS[i.id] || !live[i.id] || !live[i.id].active);
     if (bad) errors.items = `${(live[bad.id] && live[bad.id].name) || bad.id} cannot be sold through checkout right now`;

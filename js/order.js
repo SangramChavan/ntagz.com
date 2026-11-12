@@ -233,6 +233,24 @@
         'stroke-width="1.6" stroke-linecap="round"/></svg></button>' +
         '</div>';
     }).join('');
+    renderGroupNote();
+  }
+
+  /* Google Review (GR*) lines each need their own MOQ and must also total GROUP_MOQ together. */
+  function groupShortfall() {
+    var q = {};
+    selectedIds.forEach(function (id) { q[id] = quantities[id] || 0; });
+    return CATALOG.groupShortfall(q);
+  }
+  function renderGroupNote() {
+    var old = $('groupMoqNote'), g = groupShortfall();
+    if (old) old.remove();
+    if (!g) return;
+    var note = document.createElement('div');
+    note.id = 'groupMoqNote'; note.setAttribute('role', 'alert');
+    note.style.cssText = 'margin:10px 0;padding:10px 12px;border-radius:8px;background:#FFF4E5;color:#7A4A00;font-size:14px';
+    note.textContent = 'Google Review products: minimum ' + g.min + ' pieces in total across these items (you have ' + g.have + '). Add ' + (g.min - g.have) + ' more to continue.';
+    $('selectedItems').appendChild(note);
   }
 
   /* ── SELECTION ────────────────────────────────────────────── */
@@ -529,6 +547,7 @@
   /* ── MAIN CALCULATION ─────────────────────────────────────── */
   var waBase = '';
   function calculateQuote() {
+    renderGroupNote();
     // GST is mandatory on every order — always applied.
     var includeGst = true;
 
@@ -1057,6 +1076,8 @@
     if (err) { err.textContent = msg || ''; err.hidden = !msg; }
   }
   function requireDetails() {
+    var gShort = groupShortfall();
+    if (gShort) { renderGroupNote(); var gn = $('groupMoqNote'); if (gn) gn.scrollIntoView({ block: 'center', behavior: 'smooth' }); return false; }
     var name = $('customerName').value.trim(), phone = $('customerNumber').value.replace(/\D/g, '').slice(-10), addr = $('customerAddress').value.trim();
     var email = $('customerEmail').value.trim();
     var pin = $('customerPincode').value.trim(), gst = $('customerGST').value.trim().toUpperCase(), bad = [];
@@ -1195,7 +1216,7 @@
       });
       selectedIds.forEach(function (id) {
         var p = CATALOG.byId(id);
-        if (!p.fixed && quantities[id]) quantities[id] = clampQty(p, quantities[id]);
+        if (!p.fixed && quantities[id]) quantities[id] = Math.max(CATALOG.moqFor(p), clampQty(p, quantities[id]));
       });
       renderGrid();
       renderSelectedItems();

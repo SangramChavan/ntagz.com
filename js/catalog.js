@@ -130,6 +130,8 @@
       name: 'Google Review NFC Card',
       price: 95,
       unit: 'card',
+      moq: 5,
+      moqGroup: 'GR',
       image: 'images/google-review-card.jpg',
       detail: 'product/google-review-nfc-card/',
       category: 'nfc',
@@ -151,7 +153,8 @@
       name: 'Google Review NFC Stand — 5×5 cm (NFC only)',
       price: 99,
       unit: 'pc',
-      moq: 10,
+      moq: 5,
+      moqGroup: 'GR',
       allInclusive: true,
       image: 'images/google-review-stand-10x10.jpg',
       detail: 'product/google-review-nfc-stand/',
@@ -167,7 +170,8 @@
       name: 'Google Review NFC Stand — 9×9 cm (NFC only)',
       price: 149,
       unit: 'pc',
-      moq: 10,
+      moq: 5,
+      moqGroup: 'GR',
       allInclusive: true,
       image: 'images/google-review-stand-10x10.jpg',
       detail: 'product/google-review-nfc-stand/',
@@ -183,7 +187,8 @@
       name: 'Google Review NFC + QR Stand — 12×12 cm',
       price: 199,
       unit: 'pc',
-      moq: 10,
+      moq: 5,
+      moqGroup: 'GR',
       allInclusive: true,
       image: 'images/google-review-stand-12x12.jpg',
       detail: 'product/google-review-nfc-stand/',
@@ -424,6 +429,18 @@
     return typeof p.moq === 'number' ? p.moq : 10;
   }
 
+  /* Group minimum: the Google Review SKUs (GR*) each need at least their own MOQ, and the GR lines together must reach GROUP_MOQ.
+     Returns {key, min, have} when a group is short, else null. Keep in step with functions/lib/pricing.js. */
+  var GROUP_MOQ = { GR: 10 };
+  function groupShortfall(qtyById) {
+    var have = {};
+    products.forEach(function (p) {
+      if (p.moqGroup && qtyById[p.id] > 0) have[p.moqGroup] = (have[p.moqGroup] || 0) + qtyById[p.id];
+    });
+    for (var k in have) if (have[k] < GROUP_MOQ[k]) return { key: k, min: GROUP_MOQ[k], have: have[k] };
+    return null;
+  }
+
   /* Singular / plural unit word, e.g. "pc" → "pcs". */
   function unitLabel(p, qty) {
     var u = p.unitLabel || p.unit || 'pc';
@@ -449,6 +466,7 @@
     shipping: SHIPPING,
     byId: byId,
     moqFor: moqFor,
+    groupShortfall: groupShortfall,
     unitLabel: unitLabel,
     discountFor: discountFor
   };

@@ -501,7 +501,7 @@ async function exportCsv(sp, env) {
 const PSORTS = { name: "name", price: "price_paise", stock: "stock_qty", updated: "updated_at", newest: "created_at" };
 // Defaults for new stock-tracked products (migration 0034 does the same for existing ones).
 const PRE_DISPATCH = "Dispatch within 7 days", PRE_MSG = "Out of stock right now. Pre-order and we dispatch within 7 days. Pre-orders are non-refundable.";
-const PCOLS = "id,sku,name,description,category,image_url,price_paise,mrp_paise,gst_rate,all_inclusive,unit,stock_qty,low_stock_threshold,active,track_stock,cost_paise,built_in,preorder_enabled,preorder_message,preorder_dispatch,preorder_max,preordered_qty,created_at,updated_at";
+const PCOLS = "id,sku,name,description,category,image_url,price_paise,mrp_paise,gst_rate,all_inclusive,unit,stock_qty,low_stock_threshold,active,track_stock,cost_paise,built_in,preorder_enabled,preorder_message,preorder_dispatch,preorder_max,preordered_qty,created_at,updated_at,moq";
 const GST_RATES = [0, 5, 12, 18, 28];
 const IMAGE_OK = /^(https:\/\/(www\.)?ntagz\.com\/|images\/)[\w\-./]{1,200}$/;
 
@@ -595,6 +595,10 @@ function validateProduct(b, partial) {
     if (b.preorder_max === null || b.preorder_max === "") f.preorder_max = null;
     else { const v = intIn(b.preorder_max, 0, 1_000_000); if (v === null) errors.preorder_max = "Enter a whole number, 0 or more"; else f.preorder_max = v; }
   }
+  if (b.moq !== undefined) {
+    if (b.moq === null || b.moq === "") f.moq = null;
+    else { const v = intIn(b.moq, 1, 100000); if (v === null) errors.moq = "Enter a whole number from 1 to 100000, or leave blank for the default"; else f.moq = v; }
+  }
   return { f, errors };
 }
 
@@ -682,9 +686,9 @@ async function createProduct(body, actor, env) {
   const pid = await uniqueProductId(env, f.name);
   const thr = f.low_stock_threshold ?? 10;
   const stmts = [env.DB.prepare(
-    `INSERT INTO products (id,sku,name,description,category,image_url,price_paise,mrp_paise,cost_paise,gst_rate,unit,stock_qty,low_stock_threshold,active,track_stock,preorder_enabled,preorder_message,preorder_dispatch,preorder_max)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
-  ).bind(pid, f.sku, f.name, f.description ?? "", f.category, f.image_url ?? null, f.price_paise, f.mrp_paise ?? null, f.cost_paise ?? null, f.gst_rate ?? 18, f.unit ?? "pc", opening, thr, f.active ?? 1, f.track_stock ?? 0, f.preorder_enabled ?? (f.track_stock ? 1 : 0), f.preorder_message ?? (f.track_stock ? PRE_MSG : null), f.preorder_dispatch ?? (f.track_stock ? PRE_DISPATCH : null), f.preorder_max ?? null)];
+    `INSERT INTO products (id,sku,name,description,category,image_url,price_paise,mrp_paise,cost_paise,gst_rate,unit,stock_qty,low_stock_threshold,active,track_stock,preorder_enabled,preorder_message,preorder_dispatch,preorder_max,moq)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+  ).bind(pid, f.sku, f.name, f.description ?? "", f.category, f.image_url ?? null, f.price_paise, f.mrp_paise ?? null, f.cost_paise ?? null, f.gst_rate ?? 18, f.unit ?? "pc", opening, thr, f.active ?? 1, f.track_stock ?? 0, f.preorder_enabled ?? (f.track_stock ? 1 : 0), f.preorder_message ?? (f.track_stock ? PRE_MSG : null), f.preorder_dispatch ?? (f.track_stock ? PRE_DISPATCH : null), f.preorder_max ?? null, f.moq ?? null)];
   if (opening > 0) stmts.push(env.DB.prepare(
     "INSERT INTO inventory_movements (id,product_id,type,qty_change,prev_stock,new_stock,reason,admin,idempotency_key) VALUES (?,?,'opening',?,0,?,'Opening stock',?,?)"
   ).bind(crypto.randomUUID(), pid, opening, opening, actor, "opening"));
@@ -926,7 +930,7 @@ function applyDispatchDraft(cfg, errors, raw) {
 
 async function pricingState(env) {
   const cfg = Object.fromEntries((await env.DB.prepare("SELECT key,value FROM membership_config").all()).results.map((r) => [r.key, r.value]));
-  const { results: rows } = await env.DB.prepare("SELECT id,sku,name,category,price_paise,cost_paise,member_discount_pct,active,all_inclusive FROM products ORDER BY name").all();
+  const { results: rows } = await env.DB.prepare("SELECT id,sku,name,category,price_paise,cost_paise,member_discount_pct,active,all_inclusive,moq FROM products ORDER BY name").all();
   const version = await sha256(JSON.stringify([SETTING_KEYS.map((k) => cfg[k] ?? null), rows.map((r) => [r.id, r.member_discount_pct, r.price_paise, r.cost_paise])]));
   return { cfg, rows, version };
 }
@@ -1203,13 +1207,13 @@ async function refundOrder(id, body, actor, env) {
 // ── Edit quantity / unit price on a placed order ─────────────────────
 // Only an unpaid, unshipped, offline domestic order (see order-edit.js). Each line gets an explicit ex-GST unit price stored as
 // items_json[].unit_paise; the server recomputes subtotal / GST / total the way checkout does and never trusts a client total.
-// Quantity cannot change on a line whose stock is already reserved (that needs the stock movement logic; cancel and re-place instead).
+// A quantity change on a line with reserved stock re-allocates that reservation (ready stock / pre-order) in the same atomic batch, with a movement row.
 async function editLoad(env, id) {
   const o = await env.DB.prepare("SELECT * FROM orders WHERE id=?").bind(id).first();
   if (!o) return null;
   const items = parseItems(o.items_json), ids = [...new Set(items.map((i) => String(i && i.id)))];
   const prods = new Map(ids.length ? (await env.DB.prepare(`SELECT id,name,price_paise,all_inclusive FROM products WHERE id IN (${ids.map(() => "?").join(",")})`).bind(...ids).all()).results.map((p) => [p.id, p]) : []);
-  const held = new Set((await env.DB.prepare("SELECT product_id FROM order_stock_lines WHERE order_id=? AND released=0").bind(id).all()).results.map((r) => r.product_id));
+  const held = new Map((await env.DB.prepare("SELECT l.product_id,l.ready_qty,l.pre_qty,p.stock_qty,p.preorder_enabled,p.preorder_max,p.preordered_qty FROM order_stock_lines l JOIN products p ON p.id=l.product_id WHERE l.order_id=? AND l.released=0").bind(id).all()).results.map((r) => [r.product_id, r]));
   return { o, items, prods, held };
 }
 
@@ -1218,7 +1222,10 @@ async function editInfo(env, id) {
   if (!d) return { allowed: false, reason: "Order not found" };
   const why = OEDIT.whyNotEditable(d.o) || (d.items.length ? null : "This order has no items to edit");
   if (why) return { allowed: false, reason: why };
-  return { allowed: true, lines: d.items.map((i) => {
+  const inOrder = new Set(d.items.map((i) => String(i.id)));
+  const addable = (await env.DB.prepare("SELECT id,name,price_paise,all_inclusive FROM products WHERE active=1 ORDER BY name").all()).results
+    .filter((p) => !inOrder.has(p.id)).map((p) => ({ id: p.id, name: p.name, unit_paise: p.price_paise, all_inclusive: !!p.all_inclusive, fixed: !!PRICING.PRODUCTS[p.id]?.fixed }));
+  return { allowed: true, addable, lines: d.items.map((i) => {
     const p = d.prods.get(i.id) || {}, own = Number.isInteger(i.unit_paise);
     // Older orders do not store a line price (it came from the catalogue and discounts at checkout), so the catalogue price is only a starting point.
     return { id: i.id, name: p.name || i.id, qty: i.qty, unit_paise: own ? i.unit_paise : (p.price_paise ?? null), unit_from: own ? "order" : "catalogue",
@@ -1234,25 +1241,58 @@ async function editOrderItems(id, body, actor, env) {
   if (why) return fail(409, why);
   const raw = Array.isArray(body.lines) ? body.lines : [];
   if (raw.length !== items.length) return fail(400, "Send every line of the order");
-  const fields = {}, lines = items.map((it, i) => {
+  const fields = {}, restock = [], lines = items.map((it, i) => {
     const r = raw[i] && typeof raw[i] === "object" ? raw[i] : {};
     const qty = intIn(r.qty, 1, 100000), unit = rupeesToPaise(typeof r.unit_rupees === "string" || typeof r.unit_rupees === "number" ? r.unit_rupees : "");
     if (r.id !== it.id) fields["qty-" + i] = "The order changed. Close this and open it again";
     else if (qty === null) fields["qty-" + i] = "Enter a whole number, 1 or more";
     else if (PRICING.PRODUCTS[it.id]?.fixed && qty !== 1) fields["qty-" + i] = "A fixed kit is always quantity 1";
-    else if (qty !== it.qty && held.has(it.id)) fields["qty-" + i] = "Stock is already reserved for this line, so the quantity cannot change. Cancel and place a new order instead";
+    else if (qty !== it.qty && held.has(it.id)) {
+      // Take the old reservation back, then allocate the new quantity the way checkout does (ready stock first, the rest as pre-order if enabled).
+      const h = held.get(it.id), avail = h.stock_qty + h.ready_qty, ready = Math.min(avail, qty), pre = h.preorder_enabled ? qty - ready : 0;
+      if (items.filter((x) => x.id === it.id).length > 1) fields["qty-" + i] = "This product is on more than one line, so its quantity cannot be changed here";
+      else if (!pre && ready < qty) fields["qty-" + i] = avail ? `Only ${avail} available` : "Out of stock";
+      else if (pre && h.preorder_max != null && h.preordered_qty - h.pre_qty + pre > h.preorder_max) fields["qty-" + i] = "That is more than the pre-order limit allows";
+      else restock.push({ id: it.id, h, ready, pre });
+    }
     if (unit === null || unit < 1) fields["unit-" + i] = "Enter the price in rupees (at most 2 decimals)";
     return { qty, unit_paise: unit };
   });
+  // New products added to the order (each product once; to change a product already on the order, edit its line).
+  const rawAdd = Array.isArray(body.add) ? body.add.slice(0, 20) : [], adds = [];
+  if (rawAdd.length) {
+    const aids = [...new Set(rawAdd.map((a) => String(a && a.id)))];
+    const ap = new Map((await env.DB.prepare(`SELECT id,name,all_inclusive,active,track_stock,stock_qty,preorder_enabled,preorder_max,preordered_qty FROM products WHERE id IN (${aids.map(() => "?").join(",")})`).bind(...aids).all()).results.map((p) => [p.id, p]));
+    const seen = new Set(items.map((i) => i.id));
+    rawAdd.forEach((a, j) => {
+      const r = a && typeof a === "object" ? a : {}, p = ap.get(String(r.id));
+      const qty = intIn(r.qty, 1, 100000), unit = rupeesToPaise(typeof r.unit_rupees === "string" || typeof r.unit_rupees === "number" ? r.unit_rupees : "");
+      if (!p || !p.active) fields["add-id-" + j] = "Choose an active product";
+      else if (seen.has(p.id)) fields["add-id-" + j] = "This product is already on the order. Edit its line instead";
+      else seen.add(p.id);
+      if (qty === null) fields["add-qty-" + j] = "Enter a whole number, 1 or more";
+      else if (p && PRICING.PRODUCTS[p.id]?.fixed && qty !== 1) fields["add-qty-" + j] = "A fixed kit is always quantity 1";
+      if (unit === null || unit < 1) fields["add-unit-" + j] = "Enter the price in rupees (at most 2 decimals)";
+      if (p && p.active && qty !== null && !fields["add-qty-" + j] && p.track_stock) {
+        const ready = Math.min(p.stock_qty, qty), pre = p.preorder_enabled ? qty - ready : 0;
+        if (!pre && ready < qty) fields["add-qty-" + j] = p.stock_qty ? `Only ${p.stock_qty} available` : "Out of stock";
+        else if (pre && p.preorder_max != null && p.preordered_qty + pre > p.preorder_max) fields["add-qty-" + j] = "That is more than the pre-order limit allows";
+        else adds.push({ p, qty, unit, ready, pre, track: true });
+        return;
+      }
+      if (p && p.active) adds.push({ p, qty, unit, track: false });
+    });
+  }
   if (Object.keys(fields).length) return json({ error: "Check the highlighted lines", fields }, 400);
-  const inclusive = new Set(items.filter((i) => prods.get(i.id)?.all_inclusive).map((i) => i.id));
-  const calc = OEDIT.recompute(o, items, lines, inclusive, PRICING.GST_PCT);
+  const allItems = [...items, ...adds.map((a) => ({ id: a.p.id, qty: a.qty }))], allLines = [...lines, ...adds.map((a) => ({ qty: a.qty, unit_paise: a.unit }))];
+  const inclusive = new Set([...items.filter((i) => prods.get(i.id)?.all_inclusive).map((i) => i.id), ...adds.filter((a) => a.p.all_inclusive).map((a) => a.p.id)]);
+  const calc = OEDIT.recompute(o, allItems, allLines, inclusive, PRICING.GST_PCT);
   if (calc.error) return fail(400, calc.error);
   const before = { subtotal: o.subtotal, gst: o.gst, total: o.total, shipping_paise: o.shipping_paise || 0 };
   const after = { subtotal: calc.subtotal, gst: calc.gst, total: calc.total, shipping_paise: o.shipping_paise || 0 };
   const nextJson = JSON.stringify(calc.items);
   // Re-entering today's price on an older order (no stored unit price) would only record a number, not change what the customer pays.
-  if (calc.total === o.total && items.every((it, i) => it.qty === calc.items[i].qty && (!Number.isInteger(it.unit_paise) || it.unit_paise === calc.items[i].unit_paise))) return fail(400, "Nothing was changed");
+  if (!adds.length && calc.total === o.total && items.every((it, i) => it.qty === calc.items[i].qty && (!Number.isInteger(it.unit_paise) || it.unit_paise === calc.items[i].unit_paise))) return fail(400, "Nothing was changed");
   if (body.dry_run === true) return json({ ok: true, preview: true, before, after, lines: calc.items.map((i) => ({ id: i.id, qty: i.qty, unit_paise: i.unit_paise })) });
   const reason = sanitiseText(body.reason, 200);
   if (reason.length < 5) return json({ error: "Enter a reason", fields: { reason: "Reason required" } }, 400);
@@ -1261,12 +1301,35 @@ async function editOrderItems(id, body, actor, env) {
   // One atomic batch. The UPDATE only matches the order exactly as it was read (still unpaid, same items and total), so a payment or a
   // second edit made meanwhile stops this one; the audit and timeline rows are written only if the UPDATE changed a row.
   const res = await env.DB.batch([
-    env.DB.prepare("UPDATE orders SET items_json=?2, subtotal=?3, gst=?4, total=?5, qualifying_paise=?6, points_basis_paise=?7, updated_at=unixepoch() WHERE id=?1 AND items_json=?8 AND total=?9 AND payment_status='unpaid' AND paid_paise=0")
-      .bind(id, nextJson, calc.subtotal, calc.gst, calc.total, calc.qualifying, calc.pointsBasis, o.items_json, o.total),
+    env.DB.prepare("UPDATE orders SET items_json=?2, subtotal=?3, gst=?4, total=?5, qualifying_paise=?6, points_basis_paise=?7, updated_at=unixepoch() WHERE id=?1 AND items_json=?8 AND total=?9 AND status=?10 AND payment_status='unpaid' AND paid_paise=0")
+      .bind(id, nextJson, calc.subtotal, calc.gst, calc.total, calc.qualifying, calc.pointsBasis, o.items_json, o.total, o.status),
     env.DB.prepare("INSERT INTO audit_log (id,actor,action,order_id,detail) SELECT ?1,?2,'order_edit_items',?3,?4 WHERE changes() = 1")
-      .bind(eid, actor, id, JSON.stringify({ reason, before, after, items_before: items, items_after: calc.items })),
+      .bind(eid, actor, id, JSON.stringify({ reason, before, after, items_before: items, items_after: calc.items, added: adds.map((a) => a.p.id) })),
     env.DB.prepare("INSERT INTO order_events (id,order_id,kind,status,note,customer_visible,actor,idempotency_key) SELECT ?1,?2,'note',NULL,?3,0,?4,?1 WHERE changes() = 1")
       .bind(eid, id, `Items edited: total ${(before.total / 100).toFixed(2)} → ${(after.total / 100).toFixed(2)}. ${reason}`, actor),
+    // Stock follows the new quantity. Each statement needs this request's timeline row, so it runs only if the order UPDATE won.
+    // Order matters: the movement row reads stock before the product update.
+    ...restock.flatMap(({ id: pid, h, ready, pre }) => {
+      const delta = h.ready_qty - ready, ev = "EXISTS (SELECT 1 FROM order_events WHERE id=?1)";
+      return [
+        ...(delta ? [env.DB.prepare(`INSERT INTO inventory_movements (id,product_id,type,qty_change,prev_stock,new_stock,reason,reference,admin,idempotency_key)
+                      SELECT lower(hex(randomblob(16))),id,?5,?4,stock_qty,max(stock_qty+?4,0),'Order quantity edited',?2,?3,'edit-'||?1 FROM products WHERE id=?6 AND ${ev}`)
+          .bind(eid, id, actor, delta, delta > 0 ? "in" : "out", pid)] : []),
+        env.DB.prepare(`UPDATE products SET stock_qty=max(stock_qty+?2,0), preordered_qty=max(preordered_qty+?3,0), updated_at=unixepoch() WHERE id=?4 AND ${ev}`).bind(eid, delta, pre - h.pre_qty, pid),
+        env.DB.prepare(`UPDATE order_stock_lines SET ready_qty=?2, pre_qty=?3 WHERE order_id=?4 AND product_id=?5 AND released=0 AND ready_qty=?6 AND pre_qty=?7 AND ${ev}`).bind(eid, ready, pre, id, pid, h.ready_qty, h.pre_qty),
+      ];
+    }),
+    // Reserve stock for each new tracked product the way checkout does (ready stock first, the rest as pre-order), same guard as above.
+    ...adds.filter((a) => a.track).flatMap(({ p, ready, pre }) => {
+      const ev = "EXISTS (SELECT 1 FROM order_events WHERE id=?1)";
+      return [
+        env.DB.prepare(`INSERT INTO order_stock_lines (order_id,product_id,ready_qty,pre_qty) SELECT ?2,?3,?4,?5 WHERE ${ev}`).bind(eid, id, p.id, ready, pre),
+        ...(ready ? [env.DB.prepare(`INSERT INTO inventory_movements (id,product_id,type,qty_change,prev_stock,new_stock,reason,reference,admin,idempotency_key)
+                      SELECT lower(hex(randomblob(16))),id,'out',?4,stock_qty,max(stock_qty+?4,0),'Product added to order',?2,?3,'add-'||?1||'-'||id FROM products WHERE id=?5 AND ${ev}`)
+          .bind(eid, id, actor, -ready, p.id)] : []),
+        env.DB.prepare(`UPDATE products SET stock_qty=max(stock_qty-?2,0), preordered_qty=preordered_qty+?3, updated_at=unixepoch() WHERE id=?4 AND ${ev}`).bind(eid, ready, pre, p.id),
+      ];
+    }),
   ]);
   if (res[0].meta.changes !== 1) return fail(409, "The order changed while you were working. Refresh and try again.");
   return json({ ok: true, before, after });

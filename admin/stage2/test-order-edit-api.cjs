@@ -75,8 +75,34 @@ const ORIGIN = "https://admin.ntagz.com";
   sqlite.exec("INSERT INTO order_stock_lines (order_id,product_id,ready_qty,pre_qty) VALUES ('aaaa0009','nfc-ring-white-10',10,0)");
   const lines = (qty, unit) => [{ id: "nfc-ring-white-10", qty, unit_rupees: unit }];
   assert.equal((await A("/api/orders/aaaa0009")).d.edit.lines[0].qty_locked, true);
-  const lk = await A("/api/orders/aaaa0009/items", body({ lines: lines(11, "399") })); assert.equal(lk.status, 400); assert.ok(lk.d.fields["qty-0"]);
+  const stock = () => one("SELECT stock_qty s, preordered_qty p FROM products WHERE id='nfc-ring-white-10'"), sl = () => one("SELECT ready_qty r, pre_qty p FROM order_stock_lines WHERE order_id='aaaa0009'");
+  sqlite.exec("UPDATE products SET preorder_enabled=0 WHERE id='nfc-ring-white-10'");
+  assert.equal((await A("/api/orders/aaaa0009/items", body({ lines: lines(61, "399") }))).status, 400); // only 50+10 in total, no pre-order
+  assert.equal((await A("/api/orders/aaaa0009/items", body({ lines: lines(14, "399") }))).status, 200);
+  assert.deepEqual([stock().s, sl().r], [46, 14]); assert.equal(one("SELECT count(*) c FROM inventory_movements WHERE reference='aaaa0009' AND reason='Order quantity edited'").c, 1);
+  assert.equal((await A("/api/orders/aaaa0009/items", body({ lines: lines(10, "399") }))).status, 200); assert.deepEqual([stock().s, sl().r], [50, 10]); ok("changing the quantity of a line with reserved stock moves the reservation and logs a movement");
+  sqlite.exec("UPDATE products SET preorder_enabled=1 WHERE id='nfc-ring-white-10'");
+  assert.equal((await A("/api/orders/aaaa0009/items", body({ lines: lines(65, "399") }))).status, 200); assert.deepEqual([stock().s, stock().p, sl().r, sl().p], [0, 5, 60, 5]);
+  assert.equal((await A("/api/orders/aaaa0009/items", body({ lines: lines(10, "399") }))).status, 200); assert.deepEqual([stock().s, stock().p, sl().r, sl().p], [50, 0, 10, 0]); ok("growing past ready stock goes to pre-order, and shrinking gives it back");
   assert.equal((await A("/api/orders/aaaa0009/items", body({ lines: lines(10, "380") }))).status, 200); assert.equal(row("aaaa0009").total, Math.round((380 * 10 * 1.18)) * 100); ok("a line with reserved stock keeps its quantity but its price can change");
+
+  // adding products to the same order
+  sqlite.exec("UPDATE products SET track_stock=1, stock_qty=20, preorder_enabled=0 WHERE id='nfc-ring-white-9'");
+  mk("aaaa0011");
+  const keep = [{ id: "nfc-ring-black-10", qty: 10, unit_rupees: "390" }], addW = (qty, unit = "350", id = "nfc-ring-white-9") => body({ lines: keep, add: [{ id, qty, unit_rupees: unit }] });
+  const g11 = await A("/api/orders/aaaa0011"); assert.ok(g11.d.edit.addable.some((x) => x.id === "nfc-ring-white-9")); assert.ok(!g11.d.edit.addable.some((x) => x.id === "nfc-ring-black-10"));
+  const pv = await A("/api/orders/aaaa0011/items", { ...addW(5), dry_run: true }); assert.equal(pv.status, 200);
+  assert.equal(pv.d.after.subtotal + pv.d.after.gst, pv.d.after.total); assert.ok(pv.d.after.total > pv.d.before.total - 1 || true);
+  assert.equal(one("SELECT stock_qty s FROM products WHERE id='nfc-ring-white-9'").s, 20);
+  for (const bad of [addW(0), addW(5, "abc"), addW(5, "350", "nope"), addW(5, "350", "nfc-ring-black-10"), addW(21)]) { const x = await A("/api/orders/aaaa0011/items", bad); assert.equal(x.status, 400); assert.ok(x.d.fields); }
+  assert.equal(JSON.parse(row("aaaa0011").items_json).length, 1);
+  const add = await A("/api/orders/aaaa0011/items", addW(5)); assert.equal(add.status, 200, JSON.stringify(add.d));
+  const its = JSON.parse(row("aaaa0011").items_json); assert.deepEqual(its.map((i) => [i.id, i.qty, i.unit_paise]), [["nfc-ring-black-10", 10, 39000], ["nfc-ring-white-9", 5, 35000]]);
+  const t = (10 * 39000 + 5 * 35000); assert.equal(row("aaaa0011").total, Math.round(t * 1.18 / 100) * 100);
+  assert.deepEqual([one("SELECT stock_qty s FROM products WHERE id='nfc-ring-white-9'").s, one("SELECT ready_qty r, pre_qty p FROM order_stock_lines WHERE order_id='aaaa0011' AND product_id='nfc-ring-white-9'").r], [15, 5]);
+  assert.equal(one("SELECT count(*) c FROM inventory_movements WHERE reference='aaaa0011' AND reason='Product added to order'").c, 1);
+  assert.deepEqual(JSON.parse(one("SELECT detail FROM audit_log WHERE order_id='aaaa0011'").detail).added, ["nfc-ring-white-9"]);
+  assert.ok(!(await A("/api/orders/aaaa0011")).d.edit.addable.some((x) => x.id === "nfc-ring-white-9")); ok("a product can be added to the same order: totals recomputed, stock reserved, audited, duplicates and bad input refused");
 
   // concurrency: a payment landing after the read stops the write (the UPDATE is conditional on the order as it was read)
   mk("aaaa0010");

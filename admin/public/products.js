@@ -167,7 +167,7 @@ async function deleteProduct(p, fromPanel) {
 // ── add / edit side panel ────────────────────────────────────────────
 const PANEL = { id: null, snapshot: "", dirty: false, saving: false };
 const fval = (id) => { const n = $(id); return n ? (n.type === "checkbox" ? String(n.checked) : n.value) : ""; };
-const FORM_IDS = ["name", "price", "opening_stock", "sku", "description", "category", "image_url", "cost", "low_stock_threshold", "mrp", "gst_rate", "active", "track_stock", "preorder_enabled", "preorder_message", "preorder_dispatch", "preorder_max"];
+const FORM_IDS = ["name", "price", "opening_stock", "sku", "description", "category", "image_url", "cost", "low_stock_threshold", "moq", "mrp", "gst_rate", "active", "track_stock", "preorder_enabled", "preorder_message", "preorder_dispatch", "preorder_max"];
 const snapshot = () => JSON.stringify(FORM_IDS.map(fval));
 const markDirty = () => { PANEL.dirty = snapshot() !== PANEL.snapshot; };
 
@@ -196,6 +196,7 @@ async function openPanel(id) {
   const img = el("input", { id: "image_url", value: v("image_url"), placeholder: "images/product.jpg" });
   const cost = el("input", { id: "cost", value: p && p.cost_paise != null ? rupees(p.cost_paise) : "", inputmode: "decimal", placeholder: "Optional" });
   const thr = el("input", { id: "low_stock_threshold", value: v("low_stock_threshold", "10"), inputmode: "numeric" });
+  const moq = el("input", { id: "moq", value: v("moq"), inputmode: "numeric", placeholder: "Default" });
   const mrp = el("input", { id: "mrp", value: p && p.mrp_paise != null ? rupees(p.mrp_paise) : "", inputmode: "decimal", placeholder: "Optional" });
   const gst = el("select", { id: "gst_rate" }, [0, 5, 12, 18, 28].map((r) => { const o = el("option", { value: String(r) }, r + "%"); if (r === (p ? p.gst_rate : 18)) o.selected = true; return o; }));
   const active = el("input", { id: "active", type: "checkbox" }); active.checked = p ? p.active : true;
@@ -209,7 +210,11 @@ async function openPanel(id) {
     if (!track.checked) pre.checked = false;
     pre.disabled = !track.checked; [preMsg, preDisp, preMax].forEach((x) => { x.disabled = !pre.checked; });
   };
-  track.addEventListener("change", syncPre); pre.addEventListener("change", syncPre); syncPre();
+  track.addEventListener("change", () => { // user ticks Track stock: pre-orders on with the standard text, so stock running out is a pre-order, not a dead end
+    if (track.checked) { pre.checked = true; if (!preDisp.value.trim()) preDisp.value = "Dispatch within 7 days"; if (!preMsg.value.trim()) preMsg.value = "Out of stock right now. Pre-order and we dispatch within 7 days. Pre-orders are non-refundable."; }
+    syncPre();
+  });
+  pre.addEventListener("change", syncPre); syncPre();
 
   const save = el("button", { class: "btn primary", id: "psave", type: "submit" }, "Save Product");
   const again = p ? "" : el("button", { class: "btn", id: "psaveagain", type: "button" }, "Save & Add Another");
@@ -219,6 +224,7 @@ async function openPanel(id) {
     el("div", { class: "two" }, field("price", "Selling Price (₹)", price, { required: true, hint: "Excluding GST" }), field("opening_stock", p ? "Stock Quantity" : "Stock Quantity", stock, { required: true })),
     field("sku", "SKU", sku), field("category", "Category", cat), field("description", "Description", desc),
     el("div", { class: "two" }, field("cost", "Cost Price (₹)", cost), field("low_stock_threshold", "Low Stock Alert", thr, { hint: "Warn at or below this" })),
+    field("moq", "Minimum order qty (MOQ)", moq, { hint: "Smallest quantity a customer can buy. Blank = default (10 for most products)" }),
     field("image_url", "Product Image", img, { hint: "Path in the site's images folder or an ntagz.com image URL" }),
     el("div", { class: "field" }, el("label", { class: "check" }, active, " Active (available to customers)")),
     el("details", { class: "more" }, el("summary", {}, "More options"),
@@ -239,7 +245,7 @@ async function openPanel(id) {
   const submit = async (another) => {
     if (PANEL.saving) return; // duplicate-submit guard
     showErrors({}); $("pmsg").textContent = "";
-    const body = { name: name.value, sku: sku.value, description: desc.value, category: cat.value, image_url: img.value, price: price.value, mrp: mrp.value, cost: cost.value, gst_rate: Number(gst.value), low_stock_threshold: thr.value, active: active.checked, track_stock: track.checked, preorder_enabled: pre.checked, preorder_message: preMsg.value, preorder_dispatch: preDisp.value, preorder_max: preMax.value };
+    const body = { name: name.value, sku: sku.value, description: desc.value, category: cat.value, image_url: img.value, price: price.value, mrp: mrp.value, cost: cost.value, gst_rate: Number(gst.value), low_stock_threshold: thr.value, moq: moq.value, active: active.checked, track_stock: track.checked, preorder_enabled: pre.checked, preorder_message: preMsg.value, preorder_dispatch: preDisp.value, preorder_max: preMax.value };
     if (!p) body.opening_stock = stock.value;
     const notes = [];
     if (body.preorder_enabled && !(p && p.preorder_enabled)) notes.push("Pre-orders turn on: customers can order beyond ready stock and the extra units are tracked as pre-orders.");
@@ -248,7 +254,8 @@ async function openPanel(id) {
       if (price.value.trim() !== "" && Number.isFinite(np) && np >= 0 && Math.round(np * 100) !== p.price_paise) notes.push(`Price: ${inr(p.price_paise)} → ${inr(Math.round(np * 100))}. Applies to future purchases only; past orders keep their prices.`);
       if (sku.value.trim() && sku.value.trim().toUpperCase() !== p.sku) notes.push(`SKU: ${p.sku} → ${sku.value.trim().toUpperCase()}.`);
       if (!body.active && p.active) notes.push("The product will become inactive and disappear from the storefront and checkout.");
-      if (body.track_stock && !p.track_stock) notes.push(`Stock tracking turns on: customers can't order more than the current stock (${p.stock_qty}).`);
+      if (body.track_stock && !p.track_stock) notes.push(body.preorder_enabled ? `Stock tracking turns on: ${p.stock_qty} ready to ship; beyond that, orders become pre-orders.` : `Stock tracking turns on: customers can't order more than the current stock (${p.stock_qty}).`);
+      if (moq.value.trim() !== String(p.moq ?? "")) notes.push(`MOQ: ${p.moq ?? "default"} → ${moq.value.trim() || "default"}. Checkout enforces it within a minute.`);
     }
     if (notes.length && !(await ask("Confirm changes", notes, "Save changes"))) return;
     PANEL.saving = true; save.disabled = true; if (again) again.disabled = true; save.textContent = "Saving…";
