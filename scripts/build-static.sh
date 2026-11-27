@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 rm -rf dist && mkdir dist
-cp *.html robots.txt pricing.md sitemap.xml site.webmanifest browserconfig.xml llms.txt dist/
+cp *.html robots.txt pricing.md sitemap.xml site.webmanifest browserconfig.xml llms.txt 323f73ae86e5a9124de8ba5f6ea4bf10.txt dist/
 cp -R css js images assets components account order membership partner product tools dist/
 cp workers/site/_headers dist/_headers
 if find dist \( -name '.dev.vars*' -o -name '*.sql' -o -name 'wrangler*' -o -path '*/admin/*' \) | grep -q .; then

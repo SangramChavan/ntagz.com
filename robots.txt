@@ -1,6 +1,9 @@
 # ─────────────────────────────────────────────
 #  robots.txt — ntagz.com
-#  Updated: 2026-06-03
+#  Updated: 2026-11-13
+#  AI search crawlers (OAI-SearchBot, ChatGPT-User, PerplexityBot,
+#  Perplexity-User, ClaudeBot, Claude-SearchBot, Bingbot, Googlebot)
+#  are intentionally allowed: they fall under the "*" group below.
 # ─────────────────────────────────────────────
 
 User-agent: *
@@ -12,9 +15,6 @@ Disallow: /private/
 Disallow: /api/
 Disallow: /*.json$
 Disallow: /cdn-cgi/
-
-# Crawl rate hint (optional, respected by some bots)
-Crawl-delay: 1
 
 # Sitemap location
 Sitemap: https://ntagz.com/sitemap.xml
